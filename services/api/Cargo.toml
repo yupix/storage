@@ -10,3 +10,6 @@ serde_json = "1.0.149"
 tokio = { version = "1.52.1", features = ["macros", "rt-multi-thread"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
+utoipa = "5.3.1"
+utoipa-axum = "0.2.0"
+utoipa-scalar = { version = "0.3.0", features = ["axum"] }
