@@ -1,28 +1,28 @@
-import { defineConfig } from 'vitepress'
+import { defineConfig } from "vitepress";
+import { withSidebar } from "vitepress-sidebar";
 
-// https://vitepress.dev/reference/site-config
-export default defineConfig({
+const vitePressOptions = {
   title: "Storage Docs",
   description: "Google Driveもどきのドキュメント",
   themeConfig: {
     // https://vitepress.dev/reference/default-theme-config
     nav: [
-      { text: 'Home', link: '/' },
-      { text: 'Examples', link: '/markdown-examples' }
+      { text: "Home", link: "/" },
+      { text: "概要", link: "/overview" },
     ],
-
-    sidebar: [
-      {
-        text: 'Examples',
-        items: [
-          { text: 'Markdown Examples', link: '/markdown-examples' },
-          { text: 'Runtime API Examples', link: '/api-examples' }
-        ]
-      }
-    ],
-
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/vuejs/vitepress' }
-    ]
-  }
-})
+      { icon: "github", link: "https://github.com/vuejs/vitepress" },
+    ],
+  },
+};
+
+const vitePressSidebarOptions = {
+  // VitePress Sidebar's options here...
+  documentRootPath: "docs/",
+  collapsed: false,
+  capitalizeFirst: true,
+};
+// https://vitepress.dev/reference/site-config
+export default defineConfig(
+  withSidebar(vitePressOptions, vitePressSidebarOptions),
+);
