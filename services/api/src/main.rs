@@ -4,24 +4,15 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
+use serde_json::json;
+use utoipa_axum::routes;
+use utoipa_scalar::{Scalar, Servable};
 
-#[tokio::main]
-async fn main() {
-    // トレーサーの初期化
-    tracing_subscriber::fmt::init();
-
-    // ルートを構築する
-    let app = Router::new()
-        .route("/", get(root))
-        .route("/users", post(create_user));
-
-    // hyperを用いてアプリを3000ポートで実行する
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
-    println!("Listening on http://0.0.0.0:3000");
-    axum::serve(listener, app).await;
-}
-
-async fn root() -> &'static str {
+#[utoipa::path(
+    get, path = "/",
+    operation_id = "index"
+)]
+pub async fn root() -> &'static str {
     "Hello, World!"
 }
 
@@ -38,6 +29,34 @@ async fn create_user(
     // JSONレスポンスに変換する。`
     (StatusCode::CREATED, Json(user))
 }
+
+
+#[tokio::main]
+async fn main() {
+    // トレーサーの初期化
+    tracing_subscriber::fmt::init();
+
+    // ルートを構築する
+    let (mut router, openapi) = utoipa_axum::router::OpenApiRouter::new()
+        .routes(routes!(root))
+        .route("/users", post(create_user))
+        .split_for_parts();
+
+    router = router.merge(
+        Scalar::with_url(
+            "/scalar",
+            openapi.clone()
+        )
+    );
+
+    println!("{}", openapi.to_json().unwrap());
+
+    // hyperを用いてアプリを3000ポートで実行する
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+    println!("Listening on http://0.0.0.0:3000");
+    axum::serve(listener, router).await;
+}
+
 
 // the input to our `create_user` handler
 #[derive(Deserialize)]
