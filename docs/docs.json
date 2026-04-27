@@ -1,0 +1,45 @@
+{
+    "theme": {
+        "name": "picasso",
+        "logo": {
+            "light": "/public/assets/logo.svg",
+            "dark": "/public/assets/logo-dark.svg"
+        },
+        "favicon": "/public/assets/logo.svg",
+        "banner": {
+            "content": "**xyd 0.1.0** - Docs platform for future dev.",
+            "label": "Coming Soon",
+            "icon": "sparkles"
+        }
+    },
+    "navigation": {
+        "tabs": [
+            {
+                "title": "Guides",
+                "page": "",
+                "href": "introduction"
+            }
+        ],
+        "sidebar": [
+            {
+                "group": "Database",
+                "pages": [
+                    "database/overview",
+                    "database/migration"
+                ]
+            }
+        ]
+    },
+    "api": {
+        "openapi": {
+            "source": "openapi.json",
+            "route": "api-reference"
+        }
+    },
+    "redirects": [
+        {
+            "source": "index",
+            "destination": "introduction"
+        }
+    ]
+}

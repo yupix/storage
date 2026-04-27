@@ -1,3 +1,8 @@
+---
+title: 仕様
+icon: rocket
+---
+
 # 仕様
 
 データベースにはPostgreSQLを使用する。
