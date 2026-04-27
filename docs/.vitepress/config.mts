@@ -1,7 +1,7 @@
-import { defineConfig } from "vitepress";
+import { defineConfig, UserConfig } from "vitepress";
 import { withSidebar } from "vitepress-sidebar";
 
-const vitePressOptions = {
+const vitePressOptions:UserConfig<any> = {
   title: "Storage Docs",
   description: "Google Driveもどきのドキュメント",
   themeConfig: {
@@ -14,6 +14,11 @@ const vitePressOptions = {
       { icon: "github", link: "https://github.com/vuejs/vitepress" },
     ],
   },
+    vite: {
+      server: {
+        allowedHosts: ["*"]
+      }
+    }
 };
 
 const vitePressSidebarOptions = {
