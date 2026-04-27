@@ -22,6 +22,12 @@
         ],
         "sidebar": [
             {
+                "group": "introduction",
+                "pages": [
+                    "introduction"
+                ]
+            },
+            {
                 "group": "Database",
                 "pages": [
                     "database/overview",

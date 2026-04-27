@@ -1,28 +1,70 @@
 ---
-title: Quickstart
+title: 概要
 icon: rocket
 ---
 
-# Quickstart {subtitle="Start building modern documentation in record time"}
+# プロジェクト概要
 
-Welcome to `xyd`, **modern**, and **batteries included** docs engine.
-We're redefining the documentation experience by making it intuitive, flexible and enjoyable.
+本プロジェクトは、Google Driveの利便性をベースに、**P2P技術によるプライバシー保護**と、**AIによる高度なセマンティック検索**を統合した、セルフホスト可能な個人用ナレッジ・管理システムです。
 
-## CLI [toc]
-```bash [descHead="CLI" desc="Command line tool to build and run your docs."] 
-npm i -g xyd-js
-```
+## 対象ユーザー
+* **一般ユーザー**: 直感的なファイル共有と高度な検索機能を求める層
+* **パワーユーザー**: 自分のデータを自分で管理（セルフホスト）し、プライバシーを重視するエンジニア層
 
-## Dev Server [toc]
-&nbsp;
-```bash [descHead="Dev Server" desc="Runs dev server with hot reloads."] 
-xyd
-```
+---
 
-## Build [toc]
-&nbsp;
-```bash [descHead="Build" desc="Produces static files within <code>.xyd/build/client</code> which you an deploy easily."] 
-xyd build
-```
+## 主要機能と技術スタック
 
+### 1. P2Pを用いたインシデント共有
 
+同一ネットワーク内のユーザー同士が「合言葉」を介して、サーバーを介さずブラウザ間で直接ファイルを転送する機能です。
+
+* **解決する問題**: 共有リンクの発行や権限設定の手間を省き、口頭で「合言葉」を伝えるだけでセキュアな受け渡しを可能にします。
+* **プライバシー**: 機密ファイルはデバイス間（Peer-to-Peer）で完結するため、サーバーに実体やログが残りません。
+
+| カテゴリ | 技術名 | 用途 |
+| :--- | :--- | :--- |
+| **シグナリング** | **Rust (Axum) + Valkey** | 同一IPベースのルーム管理、合言葉のマッチング、サーバー間Pub/Sub通知。 |
+| **リアルタイム通信** | **WebSockets** | 待機状態の同期、マッチング成立の通知、WebRTCのハンドシェイク。 |
+| **データ転送** | **WebRTC (DataChannel)** | ブラウザ間でのバイナリデータの直接ストリーミング転送。 |
+| **一時状態管理** | **Valkey** | 合言葉のハッシュ保持（TTL付き）、同一ネットワーク内のユーザーリスト管理。 |
+
+---
+
+### 2. ベクトル検索を用いた抽象的検索
+AIを用いてファイルの内容を多次元ベクトル化し、意味の近さを基に情報を検索する機能です。
+
+* **解決する問題**: 「内容は覚えているが、ファイル名や保存場所がわからない」という問題を、曖昧なワード（例：「青い空の画像」「去年の会議資料」）で解決します。
+* **特徴**: フォルダ整理に依存せず、AIが文脈を理解して関連性の高い情報を提示します。
+
+| カテゴリ | 技術名 | 用途 |
+| :--- | :--- | :--- |
+| **ベクトルDB** | **Qdrant** | 高次元ベクトルの保存、および高速な類似度検索（HNSWアルゴリズム等）。 |
+| **推論エンジン** | **Python (FastAPI)** | `multilingual-e5` 等のモデルを用いた、テキストや画像の意味解析とベクトル化。 |
+| **ストレージ** | **RustFS** | 永続化が必要なファイルの保存（S3互換API）。 |
+| **フロントエンド** | **TanStack Start** | 型安全なSSR/CSRによる、高速かつチラつきのない検索UIの提供。 |
+
+---
+
+### 3. OCRを用いた画像内の文字列検索
+画像内の文字情報を抽出し、キーワードとしてインデックス化する機能です。
+
+* **解決する問題**: スクリーンショットや領収書など、画像の中にしかない情報をテキスト検索の対象にします。
+
+| カテゴリ | 技術名 | 用途 |
+| :--- | :--- | :--- |
+| **OCRエンジン** | **PaddleOCR / EasyOCR** | Python側で動作する、画像からの高精度な文字列抽出。 |
+| **タスクキュー** | **Valkey** | 重いOCR処理を非同期で実行するためのメッセージブローカー。 |
+| **情報収集** | **Plasmo (Browser Ext.)** | ブラウザで閲覧したサイトの画像やテキストを自動で収集し、検索エンジンへ転送。 |
+
+---
+
+## システムインフラ・監視
+
+### 監視スタック
+* **Grafana / Prometheus**: APIのレスポンス遅延、P2P接続数、Valkeyの負荷、RustFSのストレージ使用量を可視化。
+* **Loki**: 全コンテナ（Rust, Python, DB）のログを一括管理。
+
+### 認証・データベース
+* **PostgreSQL**: ユーザー情報、永続ファイルのメタデータ、共有設定の管理。
+* **Session Management**: Valkeyを利用したセッションストアにより、TanStack StartとRust間での高速かつセキュアな認証共有。
