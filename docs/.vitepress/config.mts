@@ -16,7 +16,7 @@ const vitePressOptions:UserConfig<any> = {
   },
     vite: {
       server: {
-        allowedHosts: ["*"]
+        allowedHosts: true
       }
     }
 };
