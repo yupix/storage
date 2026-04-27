@@ -1,18 +1,21 @@
+---
+title: マイグレーション方法
+icon: rocket
+---
+
 # マイグレーション方法
 
-{% hint style="info" %}
+:::callout
 ここで紹介するコマンドは `/services/api` まで `cd` したことを前提としたものになるので、自分が今いるディレクトリに気を付けること。
-{% endhint %}
+:::
 
 ### テーブルの作成
 
-今回はユーザーテーブルを作るので `add_user_table` という名前でマイグレーションファイルを作成する。
-
-```
+```bash [descHead="テーブルの作成" desc="今回はユーザーテーブルを作るので add_user_table という名前でマイグレーションファイルを作成する。"] 
 sea-orm-cli migrate generate add_user_table
 ```
 
-<figure><img src="../.gitbook/assets/image.png" alt=""><figcaption></figcaption></figure>
+<figure><img src="../../public/assets/image.png" alt=""><figcaption></figcaption></figure>
 
 コマンドを実行すると上記のようなファイルが生成される。
 
@@ -22,14 +25,11 @@ sea-orm-cli migrate generate add_user_table
 
 書ければ以下のコマンドを実行しデータベースに変更内容を適応する。
 
-```
+```bash [descHead="変更の適応" desc="データベースに先ほど作成したコードの内容を適応する"] 
 cargo run -- refresh
 ```
 
-\
-その後以下のコマンドを実行し、実際のデータベースからRust上で操作するためのエンティティ(モデル)を生成する。
-
-```
+```bash [descHead="エンティティの生成" desc="実際のデータベースからRust上で操作するためのエンティティ(モデル)を生成する。"] 
 sea-orm-cli generate entity -o src/entities
 ```
 
