@@ -1,6 +1,6 @@
 ---
 title: 仕様
-icon: rocket
+icon: fa7-brands:postgresql
 ---
 
 # 仕様

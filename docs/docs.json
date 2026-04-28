@@ -10,6 +10,12 @@
             "content": "**xyd 0.1.0** - Docs platform for future dev.",
             "label": "Coming Soon",
             "icon": "sparkles"
+        },
+        "icons": {
+            "library": [
+                "lucide",
+                "fa7-brands"
+            ]
         }
     },
     "navigation": {
@@ -24,7 +30,8 @@
             {
                 "group": "introduction",
                 "pages": [
-                    "introduction"
+                    "introduction",
+                    "technology"
                 ]
             },
             {

@@ -1,6 +1,6 @@
 ---
 title: 概要
-icon: rocket
+icon: lucide:book
 ---
 
 # プロジェクト概要
