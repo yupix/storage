@@ -1,6 +1,6 @@
 ---
 title: マイグレーション方法
-icon: rocket
+icon: lucide:rocket
 ---
 
 # マイグレーション方法

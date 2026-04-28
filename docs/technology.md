@@ -1,3 +1,8 @@
+---
+title: 技術スタック
+icon: lucide:wrench
+---
+
 # 技術スタック
 
 ## メイン
