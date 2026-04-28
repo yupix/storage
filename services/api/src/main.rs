@@ -11,7 +11,7 @@ use utoipa_scalar::{Scalar, Servable};
 use sea_orm::DbConn;
 
 use config::Config;
-use handlers::{create_user, root};
+use crate::handlers::{create_user, root};
 
 #[derive(Clone)]
 pub struct AppState {

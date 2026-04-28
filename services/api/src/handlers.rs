@@ -1,3 +1,5 @@
+use utoipa;
+
 pub mod users;
 
 #[utoipa::path(
