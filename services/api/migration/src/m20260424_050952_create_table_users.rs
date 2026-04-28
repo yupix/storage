@@ -7,8 +7,6 @@ pub struct Migration;
 impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         // Replace the sample below with your own migration scripts
-        todo!();
-
         manager
             .create_table(
                 Table::create()
@@ -19,18 +17,25 @@ impl MigrationTrait for Migration {
                         .not_null()
                         .primary_key()
                     )
-                    .to_owned(),
+                    .col(string(Users::Username).not_null())
+                    .col(string(Users::AvatarUrl).null())
+                    .col(timestamp_with_time_zone(Users::DeletedAt).null())
+                    .col(boolean(Users::IsSuspended).not_null().default(false))
+                    .col(timestamp_with_time_zone(Users::CreatedAt).not_null())
+                    .col(timestamp_with_time_zone(Users::UpdatedAt).not_null())
+                    .to_owned()
             )
-            .await
+            .await?;
+
+        Ok(())
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        // Replace the sample below with your own migration scripts
-        todo!();
-
         manager
             .drop_table(Table::drop().table(Users::Table).to_owned())
-            .await
+            .await?;
+
+        Ok(())
     }
 }
 
@@ -38,4 +43,10 @@ impl MigrationTrait for Migration {
 enum Users {
     Table,
     Id,
+    Username,
+    AvatarUrl,
+    DeletedAt,
+    IsSuspended,
+    CreatedAt,
+    UpdatedAt,
 }
