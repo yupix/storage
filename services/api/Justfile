@@ -1,0 +1,20 @@
+[private]
+@defualt: help
+
+@help:
+    echo "Usage: just <command>"
+    echo ""
+    echo "Available commands:"
+    echo "  db-g NAME: Generate a new database migration with the specified NAME."
+    echo "  db-g-e: Generate database entities using sea-orm-cli."
+    echo "  db-r: Refresh the database by running the cargo command."
+
+db-g NAME:
+    sea-orm-cli migrate generate {{NAME}}
+
+db-g-e:
+    sea-orm-cli generate entity --output-dir ./entity/src --lib --entity-format dense --with-serde both
+
+db-r:
+    cargo run -- refresh
+
