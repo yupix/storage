@@ -30,4 +30,3 @@ impl MigrationTrait for Migration {
             .await
     }
 }
-
