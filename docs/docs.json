@@ -1,4 +1,5 @@
 {
+    "$schema": "https://xyd.dev/public/docs.json",
     "theme": {
         "name": "picasso",
         "logo": {
@@ -54,5 +55,12 @@
             "source": "index",
             "destination": "introduction"
         }
-    ]
+    ],
+    "advanced": {
+        "vite": {
+            "server": {
+                "allowedHosts": true
+            }
+        }
+    }
 }
