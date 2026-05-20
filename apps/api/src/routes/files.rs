@@ -6,5 +6,5 @@ use crate::AppState;
 pub fn routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::<AppState>::new()
         // routes!マクロは一つのエンドポイントのメソッドをまとめてルーティングするためのマクロっぽい...?同じメソッドを複数定義しようとするとエラーになる。
-        .routes(routes!(crate::handlers::files::login))
+        .routes(routes!(crate::handlers::files::get_files))
 }

@@ -1,7 +1,12 @@
 use sea_orm::{EntityTrait, ColumnTrait, QueryFilter};
 use crate::extractors::CurrentUser;
 use crate::AppState;
-use axum::{Json, extract::State, http::StatusCode};
+use axum::{
+    Json, extract::State, 
+    http::StatusCode,
+};
+use crate::entities::files::Entity as DbFiles;
+use crate::entities::files::Column as DbColumn;
 
 #[derive(Debug, serde::Serialize, utoipa::ToSchema)] 
 pub struct FileResponse {
@@ -14,10 +19,20 @@ pub struct FileResponse {
 
 //引数としてデータベースへのpathとuser情報を受け取る
 //AIコードのため後々理解＆修正
+#[utoipa::path(
+    get,
+    path = "/",
+    // request_body = LoginRequest,
+    responses(
+        (status = 200, description = "successful", body = [FileResponse]),
+        (status = 500, description = "Internal server error"),
+    )
+)]
 pub async fn get_files(
     State(state): State<AppState>,
     current_user: CurrentUser
 ) -> Result<Json<Vec<FileResponse>>, StatusCode> {
+
     let db_files = files::Entity::find()
         .filter(files::Column::SenderId.eq(&current_user.id))
         .all(&state.db)
@@ -36,4 +51,5 @@ pub async fn get_files(
     .collect();
 
     Ok(Json(response))
+
 }
