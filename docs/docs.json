@@ -41,6 +41,12 @@
                     "database/overview",
                     "database/migration"
                 ]
+            },
+            {
+                "group": "P2P ファイル転送",
+                "pages": [
+                    "p2p/overview"
+                ]
             }
         ]
     },
@@ -62,5 +68,8 @@
                 "allowedHosts": true
             }
         }
+    },
+    "integrations": {
+        "diagrams": true
     }
 }
