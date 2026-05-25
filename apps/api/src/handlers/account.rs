@@ -1,9 +1,10 @@
 use axum_session::Session;
 use axum_session_redispool::SessionRedisPool;
 use axum::{Json, extract::State};
-use sea_orm::{EntityTrait};
+use sea_orm::{ActiveValue::Set, EntityTrait};
 use sea_orm::ActiveModelTrait;
 use sea_orm::{ColumnTrait, QueryFilter};
+use chrono::{Utc, FixedOffset};
 use crate::entities::users;
 use crate::{AppState, models::user, utils::auth::AuthError};
 
@@ -30,8 +31,11 @@ pub async fn delete(
     .one(&state.db)
     .await?
     .ok_or(AuthError::Forbidden)?;
+    let now = Utc::now().with_timezone(&FixedOffset::east_opt(0).unwrap());
     // 削除
-    let active: users::ActiveModel = user.into();
-    active.delete(&state.db).await?;
+    let mut active: users::ActiveModel = user.into();
+    active.deleted_at = Set(Some(now));
+    active.update(&state.db).await?;
+
     Ok(Json("Delete success".to_string()))
 }

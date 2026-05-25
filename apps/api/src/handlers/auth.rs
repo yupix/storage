@@ -102,6 +102,7 @@ pub async fn register(
         is_suspended: Set(false),
         created_at: Set(now),
         updated_at: Set(now),
+        deleted_at: Set(None),
     };
 
     users::Entity::insert(user.clone())
