@@ -7,8 +7,8 @@ use axum_valid::Valid;
 use chrono::Utc;
 use sea_orm::prelude::Uuid;
 use sea_orm::{
-    ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter,
-    QueryOrder,
+    ActiveModelTrait, ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, PaginatorTrait,
+    QueryFilter, QueryOrder,
 };
 use serde::Deserialize;
 use validator::Validate;
@@ -32,6 +32,23 @@ pub struct CreateFolderRequest {
     #[validate(length(min = 1, max = 255))]
     pub name: String,
     pub folder_id: Option<Uuid>,
+}
+
+#[derive(Validate, Debug, Deserialize, utoipa::ToSchema)]
+pub struct UpdateFolderRequest {
+    #[validate(length(min = 1, max = 255))]
+    pub name: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_optional_field")]
+    pub folder_id: Option<Option<Uuid>>,
+}
+
+fn deserialize_optional_field<'de, D>(
+    deserializer: D,
+) -> Result<Option<Option<Uuid>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Option::<Uuid>::deserialize(deserializer).map(Some)
 }
 
 fn trim_name(name: &str) -> Result<String, AuthError> {
@@ -100,6 +117,31 @@ async fn get_owned_folder(
         .one(db)
         .await?
         .ok_or(AuthError::NotFound)
+}
+
+async fn collect_descendant_ids<C: ConnectionTrait>(
+    db: &C,
+    root_id: Uuid,
+    user_id: Uuid,
+) -> Result<Vec<Uuid>, AuthError> {
+    let mut descendants = Vec::new();
+    let mut queue = vec![root_id];
+
+    while let Some(current) = queue.pop() {
+        let children = folders::Entity::find()
+            .filter(folders::Column::FolderId.eq(current))
+            .filter(folders::Column::OwnerId.eq(user_id))
+            .filter(folders::Column::IsDeleted.eq(false))
+            .all(db)
+            .await?;
+
+        for child in children {
+            descendants.push(child.id);
+            queue.push(child.id);
+        }
+    }
+
+    Ok(descendants)
 }
 
 #[utoipa::path(
@@ -234,5 +276,87 @@ pub async fn get_folder(
 ) -> Result<Json<FolderResponse>, AuthError> {
     let folder = get_owned_folder(&state.db, id, auth.user_id).await?;
     let owner = load_owner(&state.db, auth.user_id).await?;
+    Ok(Json(FolderResponse::from_models(&folder, &owner)))
+}
+
+#[utoipa::path(
+    patch,
+    path = "/{id}",
+    params(("id" = Uuid, Path, description = "Folder ID")),
+    request_body = UpdateFolderRequest,
+    responses(
+        (status = 200, description = "Folder updated", body = FolderResponse),
+        SessionAuthErrors,
+        (status = 404, description = "Folder or destination not found"),
+        (status = 409, description = "Duplicate folder name"),
+    )
+)]
+pub async fn update_folder(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(id): Path<Uuid>,
+    Valid(Json(payload)): Valid<Json<UpdateFolderRequest>>,
+) -> Result<Json<FolderResponse>, AuthError> {
+    if payload.name.is_none() && payload.folder_id.is_none() {
+        return Err(AuthError::InvalidInput(
+            "name and folder_id cannot both be omitted".into(),
+        ));
+    }
+
+    let mut folder = get_owned_folder(&state.db, id, auth.user_id).await?;
+    let owner = load_owner(&state.db, auth.user_id).await?;
+    let now = Utc::now().fixed_offset();
+
+    let new_name = if let Some(ref name) = payload.name {
+        Some(trim_name(name)?)
+    } else {
+        None
+    };
+
+    let new_parent = match payload.folder_id {
+        None => None,
+        Some(None) => Some(None),
+        Some(Some(parent_id)) => {
+            if parent_id == id {
+                return Err(AuthError::InvalidInput("circular folder reference".into()));
+            }
+            verify_parent_folder(&state.db, parent_id, auth.user_id).await?;
+            let descendants = collect_descendant_ids(&state.db, id, auth.user_id).await?;
+            if descendants.contains(&parent_id) {
+                return Err(AuthError::InvalidInput("circular folder reference".into()));
+            }
+            Some(Some(parent_id))
+        }
+    };
+
+    let effective_parent = match new_parent {
+        Some(ref p) => *p,
+        None => folder.folder_id,
+    };
+
+    let effective_name = new_name.as_deref().unwrap_or(&folder.name);
+
+    if duplicate_name_exists(
+        &state.db,
+        auth.user_id,
+        effective_parent,
+        effective_name,
+        Some(id),
+    )
+    .await?
+    {
+        return Err(AuthError::Conflict("duplicate-folder-name".into()));
+    }
+
+    let mut am: folders::ActiveModel = folder.clone().into();
+    if let Some(name) = new_name {
+        am.name = Set(name);
+    }
+    if let Some(parent) = new_parent {
+        am.folder_id = Set(parent);
+    }
+    am.updated_at = Set(Some(now));
+    folder = am.update(&state.db).await?;
+
     Ok(Json(FolderResponse::from_models(&folder, &owner)))
 }
