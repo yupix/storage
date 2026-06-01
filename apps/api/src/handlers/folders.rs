@@ -7,9 +7,10 @@ use axum_valid::Valid;
 use chrono::Utc;
 use sea_orm::prelude::Uuid;
 use sea_orm::{
-    ActiveModelTrait, ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, PaginatorTrait,
-    QueryFilter, QueryOrder, TransactionTrait,
+    ActiveModelTrait, ActiveValue::Set, ColumnTrait, ConnectionTrait, DatabaseBackend, EntityTrait,
+    FromQueryResult, PaginatorTrait, QueryFilter, QueryOrder, Statement, TransactionTrait,
 };
+use sea_orm::sea_query::Expr;
 use serde::Deserialize;
 use validator::Validate;
 
@@ -124,29 +125,36 @@ async fn get_owned_folder(
         .ok_or(AuthError::NotFound)
 }
 
+#[derive(FromQueryResult)]
+struct DescendantId {
+    id: Uuid,
+}
+
 async fn collect_descendant_ids<C: ConnectionTrait>(
     db: &C,
     root_id: Uuid,
     user_id: Uuid,
 ) -> Result<Vec<Uuid>, AuthError> {
-    let mut descendants = Vec::new();
-    let mut queue = vec![root_id];
+    let sql = r#"
+        WITH RECURSIVE descendants AS (
+            SELECT id FROM folders
+            WHERE folder_id = $1::uuid AND owner_id = $2::uuid AND is_deleted = false
+            UNION ALL
+            SELECT f.id FROM folders f
+            INNER JOIN descendants d ON f.folder_id = d.id
+            WHERE f.owner_id = $2::uuid AND f.is_deleted = false
+        )
+        SELECT id FROM descendants
+    "#;
 
-    while let Some(current) = queue.pop() {
-        let children = folders::Entity::find()
-            .filter(folders::Column::FolderId.eq(current))
-            .filter(folders::Column::OwnerId.eq(user_id))
-            .filter(folders::Column::IsDeleted.eq(false))
-            .all(db)
-            .await?;
+    let stmt = Statement::from_sql_and_values(
+        DatabaseBackend::Postgres,
+        sql,
+        [root_id.into(), user_id.into()],
+    );
 
-        for child in children {
-            descendants.push(child.id);
-            queue.push(child.id);
-        }
-    }
-
-    Ok(descendants)
+    let rows = DescendantId::find_by_statement(stmt).all(db).await?;
+    Ok(rows.into_iter().map(|r| r.id).collect())
 }
 
 async fn soft_delete_folders<C: ConnectionTrait>(
@@ -154,17 +162,16 @@ async fn soft_delete_folders<C: ConnectionTrait>(
     folder_ids: &[Uuid],
     now: sea_orm::prelude::DateTimeWithTimeZone,
 ) -> Result<(), AuthError> {
-    for folder_id in folder_ids {
-        let folder = folders::Entity::find_by_id(*folder_id)
-            .one(txn)
-            .await?
-            .ok_or(AuthError::NotFound)?;
-        let mut am: folders::ActiveModel = folder.into();
-        am.is_deleted = Set(true);
-        am.deleted_at = Set(Some(now));
-        am.updated_at = Set(Some(now));
-        am.update(txn).await?;
+    if folder_ids.is_empty() {
+        return Ok(());
     }
+    folders::Entity::update_many()
+        .col_expr(folders::Column::IsDeleted, Expr::value(true))
+        .col_expr(folders::Column::DeletedAt, Expr::value(now))
+        .col_expr(folders::Column::UpdatedAt, Expr::value(now))
+        .filter(folders::Column::Id.is_in(folder_ids.to_vec()))
+        .exec(txn)
+        .await?;
     Ok(())
 }
 
@@ -176,20 +183,14 @@ async fn soft_delete_files_in_folders<C: ConnectionTrait>(
     if folder_ids.is_empty() {
         return Ok(());
     }
-
-    let file_rows = files::Entity::find()
+    files::Entity::update_many()
+        .col_expr(files::Column::IsDeleted, Expr::value(true))
+        .col_expr(files::Column::DeletedAt, Expr::value(now))
+        .col_expr(files::Column::UpdatedAt, Expr::value(now))
         .filter(files::Column::FolderId.is_in(folder_ids.to_vec()))
         .filter(files::Column::IsDeleted.eq(false))
-        .all(txn)
+        .exec(txn)
         .await?;
-
-    for file in file_rows {
-        let mut am: files::ActiveModel = file.into();
-        am.is_deleted = Set(true);
-        am.deleted_at = Set(Some(now));
-        am.updated_at = Set(Some(now));
-        am.update(txn).await?;
-    }
     Ok(())
 }
 
@@ -436,32 +437,22 @@ pub async fn delete_folder(
     let txn = state.db.begin().await?;
 
     if to_home {
-        let child_folders = folders::Entity::find()
+        folders::Entity::update_many()
+            .col_expr(folders::Column::FolderId, Expr::value(Option::<Uuid>::None))
+            .col_expr(folders::Column::UpdatedAt, Expr::value(now))
             .filter(folders::Column::FolderId.eq(id))
             .filter(folders::Column::OwnerId.eq(auth.user_id))
             .filter(folders::Column::IsDeleted.eq(false))
-            .all(&txn)
+            .exec(&txn)
             .await?;
 
-        for child in child_folders {
-            let mut am: folders::ActiveModel = child.into();
-            am.folder_id = Set(None);
-            am.updated_at = Set(Some(now));
-            am.update(&txn).await?;
-        }
-
-        let child_files = files::Entity::find()
+        files::Entity::update_many()
+            .col_expr(files::Column::FolderId, Expr::value(Option::<Uuid>::None))
+            .col_expr(files::Column::UpdatedAt, Expr::value(now))
             .filter(files::Column::FolderId.eq(id))
             .filter(files::Column::IsDeleted.eq(false))
-            .all(&txn)
+            .exec(&txn)
             .await?;
-
-        for file in child_files {
-            let mut am: files::ActiveModel = file.into();
-            am.folder_id = Set(None);
-            am.updated_at = Set(Some(now));
-            am.update(&txn).await?;
-        }
 
         soft_delete_folders(&txn, &[id], now).await?;
     } else {
