@@ -34,10 +34,7 @@ pub async fn get_files(
         id: file.id.to_string(),
         name: file.filename,
         size: file.filesize,
-        updated_at: file
-            .updated_at
-            .map(|t| t.to_string())
-            .unwrap_or_default(),
+        updated_at: file.updated_at.to_string(),
         sender_id: file.author_id.to_string(),
     })
     .collect();
@@ -67,23 +64,28 @@ pub async fn delete_file(
     current_user: CurrentUser,
     Path(file_id): Path<String>,
 ) -> Result<StatusCode, StatusCode> {
-    // ① 指定されたファイルがDBに本当にあるか探す
-    let file_model = crate::entities::files::Entity::find_by_id(&file_id)
+
+    //file_idをuuidに変換する
+    let uuid_id = sea_orm::prelude::Uuid::parse_str(&file_id)
+        .map_err(|_| StatusCode::BAD_REQUEST)?;
+
+    // 指定されたファイルがDBに本当にあるか探す
+    let file_model = crate::entities::files::Entity::find_by_id(uuid_id)
         .one(&state.db)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
 
-    // ② 防衛策：他人のファイルじゃないかチェックする
-    if file_model.author_id.to_string() != current_user.id {
+    // 他人のファイルじゃないかチェックする
+    if file_model.author_id != current_user.id {
         return Err(StatusCode::FORBIDDEN);
     }
 
-    // ③ 安全が確認できたのでDBから削除する
+    //  安全が確認できたのでDBから削除する
     file_model.delete(&state.db)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    // 最後に「無事に消したよ（204）」と返す
+    // 204を返す
     Ok(StatusCode::NO_CONTENT)
 }
