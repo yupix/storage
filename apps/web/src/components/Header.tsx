@@ -27,7 +27,7 @@ export default function Header() {
             合言葉受信
           </Link>
           <a
-            href="https://tanstack.com/start/latest/docs/framework/react/overview"
+            href=""
             className="nav-link"
             target="_blank"
             rel="noreferrer"
