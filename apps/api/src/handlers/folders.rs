@@ -89,30 +89,6 @@ async fn verify_parent_folder(
     Ok(())
 }
 
-async fn duplicate_name_exists<C: ConnectionTrait>(
-    db: &C,
-    user_id: Uuid,
-    parent_folder_id: Option<Uuid>,
-    name: &str,
-    exclude_id: Option<Uuid>,
-) -> Result<bool, AuthError> {
-    let mut query = folders::Entity::find()
-        .filter(folders::Column::OwnerId.eq(user_id))
-        .filter(folders::Column::IsDeleted.eq(false))
-        .filter(folders::Column::Name.eq(name));
-
-    query = match parent_folder_id {
-        Some(pid) => query.filter(folders::Column::FolderId.eq(pid)),
-        None => query.filter(folders::Column::FolderId.is_null()),
-    };
-
-    if let Some(id) = exclude_id {
-        query = query.filter(folders::Column::Id.ne(id));
-    }
-
-    Ok(query.one(db).await?.is_some())
-}
-
 async fn get_owned_folder<C: ConnectionTrait>(
     db: &C,
     folder_id: Uuid,
@@ -261,7 +237,6 @@ pub async fn list_folders(
         (status = 201, description = "Folder created", body = FolderResponse),
         SessionAuthErrors,
         (status = 404, description = "Parent folder not found"),
-        (status = 409, description = "Duplicate folder name"),
     )
 )]
 pub async fn create_folder(
@@ -273,18 +248,6 @@ pub async fn create_folder(
 
     if let Some(parent_id) = payload.folder_id {
         verify_parent_folder(&state.db, parent_id, auth.user_id).await?;
-    }
-
-    if duplicate_name_exists(
-        &state.db,
-        auth.user_id,
-        payload.folder_id,
-        &name,
-        None,
-    )
-    .await?
-    {
-        return Err(AuthError::Conflict("duplicate-folder-name".into()));
     }
 
     let owner = load_owner(&state.db, auth.user_id).await?;
@@ -339,7 +302,6 @@ pub async fn get_folder(
         (status = 200, description = "Folder updated", body = FolderResponse),
         SessionAuthErrors,
         (status = 404, description = "Folder or destination not found"),
-        (status = 409, description = "Duplicate folder name"),
     )
 )]
 pub async fn update_folder(
@@ -380,25 +342,6 @@ pub async fn update_folder(
         }
     };
 
-    let effective_parent = match new_parent {
-        Some(ref p) => *p,
-        None => folder.folder_id,
-    };
-
-    let effective_name = new_name.as_deref().unwrap_or(&folder.name);
-
-    if duplicate_name_exists(
-        &state.db,
-        auth.user_id,
-        effective_parent,
-        effective_name,
-        Some(id),
-    )
-    .await?
-    {
-        return Err(AuthError::Conflict("duplicate-folder-name".into()));
-    }
-
     let mut am: folders::ActiveModel = folder.clone().into();
     if let Some(name) = new_name {
         am.name = Set(name);
@@ -438,20 +381,6 @@ pub async fn delete_folder(
     get_owned_folder(&txn, id, auth.user_id).await?;
 
     if to_home {
-        // ルートへ移動する子フォルダの名前衝突を事前チェック
-        let child_folders = folders::Entity::find()
-            .filter(folders::Column::FolderId.eq(id))
-            .filter(folders::Column::OwnerId.eq(auth.user_id))
-            .filter(folders::Column::IsDeleted.eq(false))
-            .all(&txn)
-            .await?;
-
-        for child in &child_folders {
-            if duplicate_name_exists(&txn, auth.user_id, None, &child.name, None).await? {
-                return Err(AuthError::Conflict("duplicate-folder-name".into()));
-            }
-        }
-
         folders::Entity::update_many()
             .col_expr(folders::Column::FolderId, Expr::value(Option::<Uuid>::None))
             .col_expr(folders::Column::UpdatedAt, Expr::value(now))
