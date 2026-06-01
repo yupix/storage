@@ -17,16 +17,6 @@ body,
   background-color: #ededed;
 }
 
-.bold {
-  font-weight: bold;
-  font-size: 1rem;
-  margin: 0 1rem;
-}
-
-.header-wrap {
-  padding: 1rem;
-}
-
 .search-bar {
   border: 1px solid green;
   justify-content: center;

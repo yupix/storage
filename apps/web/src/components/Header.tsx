@@ -3,7 +3,7 @@ import ThemeToggle from './ThemeToggle'
 
 export default function Header() {
   return (
-     <header className="header-wrap">
+     <header className="p-4">
       <nav className="page-wrap flex flex-wrap items-center gap-x-3 gap-y-2 py-3 sm:py-4">
         <h2 className="m-0 text-base font-semibold tracking-tight">
           <Link to="/" className="inline-flex items-center ">
@@ -15,7 +15,7 @@ export default function Header() {
           type="text"
           value="検索"
           name="topSearch"
-          className="search-bar"
+          className="border-green"
         />
 
         <div className="header-buttons">

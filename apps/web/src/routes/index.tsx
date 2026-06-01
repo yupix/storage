@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import ToolbarDefault from '../components/ToolbarDefault';
-import { ToolbarSelected } from '../components/ToolbarDefault';
+import { ToolbarSelected, ToolbarSearchResult } from '../components/ToolbarDefault';
 
 export const Route = createFileRoute('/')({ component: App })
 
