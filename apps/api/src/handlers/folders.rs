@@ -8,12 +8,12 @@ use chrono::Utc;
 use sea_orm::prelude::Uuid;
 use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, PaginatorTrait,
-    QueryFilter, QueryOrder,
+    QueryFilter, QueryOrder, TransactionTrait,
 };
 use serde::Deserialize;
 use validator::Validate;
 
-use crate::entities::{folders, users};
+use crate::entities::{files, folders, users};
 use crate::extractors::AuthUser;
 use crate::models::{FolderResponse, ListFoldersResponse};
 use crate::openapi::SessionAuthErrors;
@@ -25,6 +25,11 @@ pub struct ListFoldersQuery {
     pub folder_id: Option<Uuid>,
     pub page: Option<u64>,
     pub limit: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
+pub struct DeleteFolderQuery {
+    pub to_home: Option<bool>,
 }
 
 #[derive(Validate, Debug, Deserialize, utoipa::ToSchema)]
@@ -142,6 +147,50 @@ async fn collect_descendant_ids<C: ConnectionTrait>(
     }
 
     Ok(descendants)
+}
+
+async fn soft_delete_folders<C: ConnectionTrait>(
+    txn: &C,
+    folder_ids: &[Uuid],
+    now: sea_orm::prelude::DateTimeWithTimeZone,
+) -> Result<(), AuthError> {
+    for folder_id in folder_ids {
+        let folder = folders::Entity::find_by_id(*folder_id)
+            .one(txn)
+            .await?
+            .ok_or(AuthError::NotFound)?;
+        let mut am: folders::ActiveModel = folder.into();
+        am.is_deleted = Set(true);
+        am.deleted_at = Set(Some(now));
+        am.updated_at = Set(Some(now));
+        am.update(txn).await?;
+    }
+    Ok(())
+}
+
+async fn soft_delete_files_in_folders<C: ConnectionTrait>(
+    txn: &C,
+    folder_ids: &[Uuid],
+    now: sea_orm::prelude::DateTimeWithTimeZone,
+) -> Result<(), AuthError> {
+    if folder_ids.is_empty() {
+        return Ok(());
+    }
+
+    let file_rows = files::Entity::find()
+        .filter(files::Column::FolderId.is_in(folder_ids.to_vec()))
+        .filter(files::Column::IsDeleted.eq(false))
+        .all(txn)
+        .await?;
+
+    for file in file_rows {
+        let mut am: files::ActiveModel = file.into();
+        am.is_deleted = Set(true);
+        am.deleted_at = Set(Some(now));
+        am.updated_at = Set(Some(now));
+        am.update(txn).await?;
+    }
+    Ok(())
 }
 
 #[utoipa::path(
@@ -359,4 +408,70 @@ pub async fn update_folder(
     folder = am.update(&state.db).await?;
 
     Ok(Json(FolderResponse::from_models(&folder, &owner)))
+}
+
+#[utoipa::path(
+    delete,
+    path = "/{id}",
+    params(
+        ("id" = Uuid, Path, description = "Folder ID"),
+        DeleteFolderQuery,
+    ),
+    responses(
+        (status = 204, description = "Folder deleted"),
+        SessionAuthErrors,
+        (status = 404, description = "Folder not found"),
+    )
+)]
+pub async fn delete_folder(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(id): Path<Uuid>,
+    Query(query): Query<DeleteFolderQuery>,
+) -> Result<StatusCode, AuthError> {
+    get_owned_folder(&state.db, id, auth.user_id).await?;
+
+    let to_home = query.to_home.unwrap_or(false);
+    let now = Utc::now().fixed_offset();
+    let txn = state.db.begin().await?;
+
+    if to_home {
+        let child_folders = folders::Entity::find()
+            .filter(folders::Column::FolderId.eq(id))
+            .filter(folders::Column::OwnerId.eq(auth.user_id))
+            .filter(folders::Column::IsDeleted.eq(false))
+            .all(&txn)
+            .await?;
+
+        for child in child_folders {
+            let mut am: folders::ActiveModel = child.into();
+            am.folder_id = Set(None);
+            am.updated_at = Set(Some(now));
+            am.update(&txn).await?;
+        }
+
+        let child_files = files::Entity::find()
+            .filter(files::Column::FolderId.eq(id))
+            .filter(files::Column::IsDeleted.eq(false))
+            .all(&txn)
+            .await?;
+
+        for file in child_files {
+            let mut am: files::ActiveModel = file.into();
+            am.folder_id = Set(None);
+            am.updated_at = Set(Some(now));
+            am.update(&txn).await?;
+        }
+
+        soft_delete_folders(&txn, &[id], now).await?;
+    } else {
+        let descendants = collect_descendant_ids(&txn, id, auth.user_id).await?;
+        let mut all_folder_ids = vec![id];
+        all_folder_ids.extend(descendants);
+        soft_delete_folders(&txn, &all_folder_ids, now).await?;
+        soft_delete_files_in_folders(&txn, &all_folder_ids, now).await?;
+    }
+
+    txn.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
 }
