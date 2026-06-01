@@ -43,7 +43,10 @@ pub async fn get_files(
         id: file.id.to_string(),
         name: file.filename,
         size: file.filesize,
-        updated_at: file.updated_at.to_string(),
+        updated_at: file
+            .updated_at
+            .map(|t| t.to_string())
+            .unwrap_or_default(),
         sender_id: file.author_id.to_string(),
     })
     .collect();

@@ -5,38 +5,31 @@ use serde::{Deserialize, Serialize};
 
 #[sea_orm::model]
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize, Deserialize)]
-#[sea_orm(table_name = "files")]
+#[sea_orm(table_name = "folders")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
-    pub filename: String,
-    pub file_type: String,
-    pub filesize: i64,
-    pub filehash: String,
-    pub url: String,
+    pub name: String,
     pub folder_id: Option<Uuid>,
-    pub author_id: Uuid,
+    pub owner_id: Uuid,
     pub is_deleted: bool,
     pub deleted_at: Option<DateTimeWithTimeZone>,
-    #[sea_orm(column_type = "Text", nullable)]
-    pub ocr_text: Option<String>,
     pub created_at: Option<DateTimeWithTimeZone>,
     pub updated_at: Option<DateTimeWithTimeZone>,
     #[sea_orm(has_many)]
-    pub file_permissions: HasMany<super::file_permissions::Entity>,
+    pub files: HasMany<super::files::Entity>,
     #[sea_orm(
-        belongs_to,
+        self_ref,
+        relation_enum = "SelfRef",
         from = "folder_id",
         to = "id",
         on_update = "Cascade",
         on_delete = "SetNull"
     )]
-    pub folders: HasOne<super::folders::Entity>,
-    #[sea_orm(has_many)]
-    pub share_links: HasMany<super::share_links::Entity>,
+    pub folders: HasOne<Entity>,
     #[sea_orm(
         belongs_to,
-        from = "author_id",
+        from = "owner_id",
         to = "id",
         on_update = "Cascade",
         on_delete = "Cascade"
