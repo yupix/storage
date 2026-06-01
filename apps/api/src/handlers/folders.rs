@@ -59,7 +59,8 @@ where
 
 fn trim_name(name: &str) -> Result<String, AuthError> {
     let trimmed = name.trim();
-    if trimmed.is_empty() || trimmed.len() > 255 {
+    let char_count = trimmed.chars().count();
+    if char_count == 0 || char_count > 255 {
         return Err(AuthError::InvalidInput("invalid name".into()));
     }
     Ok(trimmed.to_string())
@@ -137,12 +138,12 @@ async fn collect_descendant_ids<C: ConnectionTrait>(
 ) -> Result<Vec<Uuid>, AuthError> {
     let sql = r#"
         WITH RECURSIVE descendants AS (
-            SELECT id FROM folders
+            SELECT id, 1 AS depth FROM folders
             WHERE folder_id = $1::uuid AND owner_id = $2::uuid AND is_deleted = false
             UNION ALL
-            SELECT f.id FROM folders f
+            SELECT f.id, d.depth + 1 FROM folders f
             INNER JOIN descendants d ON f.folder_id = d.id
-            WHERE f.owner_id = $2::uuid AND f.is_deleted = false
+            WHERE f.owner_id = $2::uuid AND f.is_deleted = false AND d.depth < 100
         )
         SELECT id FROM descendants
     "#;
@@ -437,6 +438,20 @@ pub async fn delete_folder(
     let txn = state.db.begin().await?;
 
     if to_home {
+        // ルートへ移動する子フォルダの名前衝突を事前チェック
+        let child_folders = folders::Entity::find()
+            .filter(folders::Column::FolderId.eq(id))
+            .filter(folders::Column::OwnerId.eq(auth.user_id))
+            .filter(folders::Column::IsDeleted.eq(false))
+            .all(&state.db)
+            .await?;
+
+        for child in &child_folders {
+            if duplicate_name_exists(&state.db, auth.user_id, None, &child.name, None).await? {
+                return Err(AuthError::Conflict("duplicate-folder-name".into()));
+            }
+        }
+
         folders::Entity::update_many()
             .col_expr(folders::Column::FolderId, Expr::value(Option::<Uuid>::None))
             .col_expr(folders::Column::UpdatedAt, Expr::value(now))
