@@ -89,8 +89,8 @@ async fn verify_parent_folder(
     Ok(())
 }
 
-async fn duplicate_name_exists(
-    db: &sea_orm::DatabaseConnection,
+async fn duplicate_name_exists<C: ConnectionTrait>(
+    db: &C,
     user_id: Uuid,
     parent_folder_id: Option<Uuid>,
     name: &str,
@@ -113,8 +113,8 @@ async fn duplicate_name_exists(
     Ok(query.one(db).await?.is_some())
 }
 
-async fn get_owned_folder(
-    db: &sea_orm::DatabaseConnection,
+async fn get_owned_folder<C: ConnectionTrait>(
+    db: &C,
     folder_id: Uuid,
     user_id: Uuid,
 ) -> Result<folders::Model, AuthError> {
@@ -139,11 +139,11 @@ async fn collect_descendant_ids<C: ConnectionTrait>(
     let sql = r#"
         WITH RECURSIVE descendants AS (
             SELECT id, 1 AS depth FROM folders
-            WHERE folder_id = $1::uuid AND owner_id = $2::uuid AND is_deleted = false
+            WHERE folder_id = $1 AND owner_id = $2 AND is_deleted = false
             UNION ALL
             SELECT f.id, d.depth + 1 FROM folders f
             INNER JOIN descendants d ON f.folder_id = d.id
-            WHERE f.owner_id = $2::uuid AND f.is_deleted = false AND d.depth < 100
+            WHERE f.owner_id = $2 AND f.is_deleted = false AND d.depth < 100
         )
         SELECT id FROM descendants
     "#;
@@ -431,11 +431,11 @@ pub async fn delete_folder(
     Path(id): Path<Uuid>,
     Query(query): Query<DeleteFolderQuery>,
 ) -> Result<StatusCode, AuthError> {
-    get_owned_folder(&state.db, id, auth.user_id).await?;
-
     let to_home = query.to_home.unwrap_or(false);
     let now = Utc::now().fixed_offset();
     let txn = state.db.begin().await?;
+
+    get_owned_folder(&txn, id, auth.user_id).await?;
 
     if to_home {
         // ルートへ移動する子フォルダの名前衝突を事前チェック
@@ -443,11 +443,11 @@ pub async fn delete_folder(
             .filter(folders::Column::FolderId.eq(id))
             .filter(folders::Column::OwnerId.eq(auth.user_id))
             .filter(folders::Column::IsDeleted.eq(false))
-            .all(&state.db)
+            .all(&txn)
             .await?;
 
         for child in &child_folders {
-            if duplicate_name_exists(&state.db, auth.user_id, None, &child.name, None).await? {
+            if duplicate_name_exists(&txn, auth.user_id, None, &child.name, None).await? {
                 return Err(AuthError::Conflict("duplicate-folder-name".into()));
             }
         }
