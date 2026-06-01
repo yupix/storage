@@ -1,6 +1,6 @@
 use axum::{
     Json,
-    extract::{Query, State},
+    extract::{Path, Query, State},
     http::StatusCode,
 };
 use axum_valid::Valid;
@@ -87,6 +87,19 @@ async fn duplicate_name_exists(
     }
 
     Ok(query.one(db).await?.is_some())
+}
+
+async fn get_owned_folder(
+    db: &sea_orm::DatabaseConnection,
+    folder_id: Uuid,
+    user_id: Uuid,
+) -> Result<folders::Model, AuthError> {
+    folders::Entity::find_by_id(folder_id)
+        .filter(folders::Column::OwnerId.eq(user_id))
+        .filter(folders::Column::IsDeleted.eq(false))
+        .one(db)
+        .await?
+        .ok_or(AuthError::NotFound)
 }
 
 #[utoipa::path(
@@ -202,4 +215,24 @@ pub async fn create_folder(
         StatusCode::CREATED,
         Json(FolderResponse::from_models(&model, &owner)),
     ))
+}
+
+#[utoipa::path(
+    get,
+    path = "/{id}",
+    params(("id" = Uuid, Path, description = "Folder ID")),
+    responses(
+        (status = 200, description = "Folder detail", body = FolderResponse),
+        SessionAuthErrors,
+        (status = 404, description = "Folder not found"),
+    )
+)]
+pub async fn get_folder(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(id): Path<Uuid>,
+) -> Result<Json<FolderResponse>, AuthError> {
+    let folder = get_owned_folder(&state.db, id, auth.user_id).await?;
+    let owner = load_owner(&state.db, auth.user_id).await?;
+    Ok(Json(FolderResponse::from_models(&folder, &owner)))
 }
