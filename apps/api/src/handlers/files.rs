@@ -1,9 +1,9 @@
-use sea_orm::{EntityTrait, ColumnTrait, QueryFilter};
+use sea_orm::{EntityTrait, ColumnTrait, QueryFilter,ModelTrait};
 use crate::extractors::CurrentUser;
 use crate::payloads::files::FileResponse;
 use crate::AppState;
 use axum::{
-    Json, extract::State,
+    Json, extract::{State, Path},
     http::StatusCode,
 };
 use crate::entities::files;
@@ -43,4 +43,47 @@ pub async fn get_files(
     .collect();
 
     Ok(Json(response))
+}
+
+
+
+
+//ファイル削除
+#[utoipa::path(
+    delete,                      
+    path = "/{id}",   
+    params(
+        ("id" = String, Path, description = "削除するファイルのUUID") 
+    ),
+    responses(
+        (status = 204, description = "正常に削除されました（返却データなし）"),
+        (status = 403, description = "このファイルを削除する権限がありません"),
+        (status = 404, description = "ファイルが見つかりません"),
+        (status = 500, description = "Internal server error"),
+    )
+)]
+pub async fn delete_file(
+    State(state): State<AppState>,
+    current_user: CurrentUser,
+    Path(file_id): Path<String>,
+) -> Result<StatusCode, StatusCode> {
+    // ① 指定されたファイルがDBに本当にあるか探す
+    let file_model = crate::entities::files::Entity::find_by_id(&file_id)
+        .one(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    // ② 防衛策：他人のファイルじゃないかチェックする
+    if file_model.author_id.to_string() != current_user.id {
+        return Err(StatusCode::FORBIDDEN);
+    }
+
+    // ③ 安全が確認できたのでDBから削除する
+    file_model.delete(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // 最後に「無事に消したよ（204）」と返す
+    Ok(StatusCode::NO_CONTENT)
 }
