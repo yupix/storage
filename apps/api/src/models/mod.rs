@@ -1,2 +1,2 @@
 pub mod user;
-pub use user::{CreateUser, User};
+pub use user::{CreateUser, User, UserResponse};

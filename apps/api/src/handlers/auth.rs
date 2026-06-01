@@ -9,8 +9,8 @@ use sea_orm::{ColumnTrait, QueryFilter};
 use serde::Deserialize;
 use validator::Validate;
 
-use crate::entities;
 use crate::extractors::{AuthUser, CurrentUser};
+use crate::models::UserResponse;
 use crate::openapi::{CredentialErrors, InternalOnlyError, SessionAuthErrors, UnauthorizedErrors};
 use crate::utils::auth::{AuthError, create_password_hash, verify_password};
 use crate::{AppState, entities::users};
@@ -100,6 +100,8 @@ pub async fn register(
         email: Set(email),
         password_hash: Set(password_hash),
         is_suspended: Set(false),
+        deleted_at: Set(None),
+        freeze_reason: Set(None),
         created_at: Set(now),
         updated_at: Set(now),
     };
@@ -118,15 +120,15 @@ pub async fn register(
     get,
     path = "/me",
     responses(
-        (status = 200, description = "Current user info", body = entities::users::Model),
+        (status = 200, description = "Current user info", body = UserResponse),
         SessionAuthErrors,
     )
 )]
 pub async fn me(
     State(_): State<AppState>,
     user: CurrentUser,
-) -> Result<Json<entities::users::Model>, AuthError> {
-    Ok(Json(user.0))
+) -> Result<Json<UserResponse>, AuthError> {
+    Ok(Json(user.0.into()))
 }
 
 #[axum::debug_handler]
