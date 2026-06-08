@@ -2,23 +2,36 @@ use axum_session::Session;
 use axum_session_redispool::SessionRedisPool;
 use axum::{Json, extract::State};
 use sea_orm::{ActiveValue::Set, EntityTrait};
-use sea_orm::ActiveModelTrait;
+use sea_orm::{ActiveModelTrait, DeleteResult};
 use sea_orm::{ColumnTrait, QueryFilter};
 use chrono::{Utc, FixedOffset};
+use axum_valid::Valid;
+use validator::Validate;
+use serde::Deserialize;
 use crate::entities::users;
+use crate::utils::auth::{create_password_hash, verify_password};
 use crate::{AppState, models::user, utils::auth::AuthError};
+
+
+#[derive(Validate, Debug, Deserialize, utoipa::ToSchema)]
+pub struct DeleteRequest{
+    #[schema(value_type = String, format="password")]
+    #[validate(length(min = 8))]
+    pub password : String
+}
 
 #[utoipa::path(
     post,
     path = "/delete",
+    request_body = DeleteRequest,
     responses(
         (status = 200, description = "Delete success", body = String),
     )
 )]
-
 pub async fn delete(
     session: Session<SessionRedisPool>,
     State(state):State<AppState>,
+    Valid(Json(payload)): Valid<Json<DeleteRequest>>,
     
 ) -> Result<Json<String>, AuthError> {
     // sessionからuser_id取得
@@ -31,6 +44,10 @@ pub async fn delete(
     .one(&state.db)
     .await?
     .ok_or(AuthError::Forbidden)?;
+    // パスワードチェック
+    if !verify_password(&payload.password, &user.password_hash)?{
+        return Err(AuthError::Forbidden)
+    }
     let now = Utc::now().with_timezone(&FixedOffset::east_opt(0).unwrap());
     // 削除
     let mut active: users::ActiveModel = user.into();
@@ -39,3 +56,4 @@ pub async fn delete(
 
     Ok(Json("Delete success".to_string()))
 }
+
