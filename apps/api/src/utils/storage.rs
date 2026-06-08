@@ -29,13 +29,13 @@ impl StorageClient {
         }
     }
 
-    pub async fn upload(&self, key: &str, stream: ByteStream, content_type: &str) -> Result<()> {
+    pub async fn upload(&self, key: &str, stream: impl Into<ByteStream>, content_type: &str) -> Result<()> {
         self.inner
             .put_object()
             .bucket(&self.bucket)
             .key(key)
             .content_type(content_type)
-            .body(stream)
+            .body(stream.into())
             .send()
             .await
             .map_err(|e| anyhow::anyhow!("upload failed: {e}"))?;
