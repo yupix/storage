@@ -6,8 +6,8 @@ export const Route = createFileRoute('/')({ component: App })
 
 function App() {
   return (
- <main className="page-wrap px-4 pb-8 pt-14">
-      <div className="page-divider">
+ <main className="pt-0 px-4 pb-8">
+      <div className="flex border-red h-70vh">
         <div className="file-directory">
           <div className="directory-container">
             <h1>directory</h1>

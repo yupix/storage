@@ -17,10 +17,6 @@ body,
   background-color: #ededed;
 }
 
-.page-wrap {
-  padding: 0;
-}
-
 .page-divider {
   display: flex;
   border: 1px solid red;
