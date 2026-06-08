@@ -2,6 +2,7 @@ use axum::{
     Json,
     extract::{Multipart, Path, Query, State},
     http::StatusCode,
+    response::IntoResponse,
 };
 use chrono::Utc;
 use sea_orm::{
@@ -15,7 +16,7 @@ use std::time::Duration;
 use crate::entities::{file_permissions, files, folders};
 use crate::extractors::CurrentUser;
 use crate::payloads::files::{
-    FileDetailResponse, FileListQuery, FileResponse, PaginatedFileResponse,
+    EmptyTrashResponse, FileDetailResponse, FileListQuery, FileResponse, PaginatedFileResponse,
     UpdateFileRequest, UploadFileRequest,
 };
 use crate::utils::auth::AuthError;
@@ -451,27 +452,34 @@ pub async fn restore_file(
     path = "/trash",
     responses(
         (status = 204, description = "ゴミ箱を空にしました"),
+        (status = 207, description = "一部のファイル削除に失敗しました", body = EmptyTrashResponse),
         (status = 401, description = "未認証"),
     )
 )]
 pub async fn empty_trash(
     State(state): State<AppState>,
     current_user: CurrentUser,
-) -> Result<StatusCode, AuthError> {
+) -> Result<impl axum::response::IntoResponse, AuthError> {
     let trashed = files::Entity::find()
         .filter(files::Column::AuthorId.eq(current_user.id))
         .filter(files::Column::IsDeleted.eq(true))
         .all(&state.db)
         .await?;
 
-    // ストレージ削除に成功したものだけ DB からも削除する
     let mut deleted_ids: Vec<Uuid> = Vec::new();
+    let mut failed_ids: Vec<String> = Vec::new();
+
     for file in &trashed {
         match state.storage.delete(&file.url).await {
             Ok(()) => deleted_ids.push(file.id),
-            Err(e) => tracing::warn!("ストレージ削除失敗 key={}: {e}", file.url),
+            Err(e) => {
+                tracing::warn!("ストレージ削除失敗 key={}: {e}", file.url);
+                failed_ids.push(file.id.to_string());
+            }
         }
     }
+
+    let deleted_strs: Vec<String> = deleted_ids.iter().map(|id| id.to_string()).collect();
 
     if !deleted_ids.is_empty() {
         files::Entity::delete_many()
@@ -480,5 +488,16 @@ pub async fn empty_trash(
             .await?;
     }
 
-    Ok(StatusCode::NO_CONTENT)
+    if failed_ids.is_empty() {
+        Ok(StatusCode::NO_CONTENT.into_response())
+    } else {
+        Ok((
+            StatusCode::MULTI_STATUS,
+            Json(EmptyTrashResponse {
+                deleted: deleted_strs,
+                failed: failed_ids,
+            }),
+        )
+            .into_response())
+    }
 }

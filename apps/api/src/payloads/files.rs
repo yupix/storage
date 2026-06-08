@@ -56,6 +56,13 @@ where
     Option::<Uuid>::deserialize(deserializer).map(Some)
 }
 
+/// ゴミ箱空にする操作の部分失敗レスポンス（HTTP 207）
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub struct EmptyTrashResponse {
+    pub deleted: Vec<String>,
+    pub failed: Vec<String>,
+}
+
 /// multipart/form-data アップロード用リクエスト（OpenAPI スキーマ定義用）
 #[derive(utoipa::ToSchema)]
 #[allow(dead_code)]
