@@ -266,10 +266,10 @@ pub async fn upload_file(
     {
         Ok(m) => {
             if let Err(e) = txn.commit().await {
-                // commit 失敗時もアップロード済みオブジェクトを補償削除
-                if let Err(se) = state.storage.delete(&storage_key).await {
-                    tracing::warn!("補償削除失敗 key={storage_key}: {se}");
-                }
+                // commit 結果が不明なためストレージは削除しない。
+                // コミット済みの場合に削除するとメタデータだけ残りファイルが失われるため、
+                // 孤立オブジェクトとして残し照合・回収できる状態にする。
+                tracing::warn!("commit 失敗、ストレージオブジェクトを保留 key={storage_key}: {e}");
                 return Err(e.into());
             }
             m
@@ -511,11 +511,13 @@ pub async fn restore_file(
         return Err(AuthError::InvalidInput("ファイルはゴミ箱にありません".into()));
     }
 
-    // 元フォルダーが削除済みならルートへ復元
+    // 元フォルダーが削除済みならルートへ復元。
+    // delete_folder?to_home=true と直列化するため SELECT FOR UPDATE でロックする。
     let restored_folder_id = if let Some(fid) = file.folder_id {
         let exists = folders::Entity::find_by_id(fid)
             .filter(folders::Column::OwnerId.eq(current_user.id))
             .filter(folders::Column::IsDeleted.eq(false))
+            .lock(LockType::Update)
             .one(&txn)
             .await?
             .is_some();
