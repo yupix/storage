@@ -7,6 +7,16 @@ pub struct Settings {
     pub redis_url: String,
     #[serde(default = "default_allow_origin")]
     pub allow_origin: String,
+    pub rustfs_endpoint: String,
+    pub rustfs_access_key: String,
+    pub rustfs_secret_key: String,
+    pub rustfs_bucket: String,
+    #[serde(default = "default_rustfs_force_path_style")]
+    pub rustfs_force_path_style: bool,
+}
+
+fn default_rustfs_force_path_style() -> bool {
+    true
 }
 
 fn default_allow_origin() -> String {

@@ -1,6 +1,6 @@
 use sea_orm::DatabaseConnection;
 
-use crate::{settings::Settings, utils::redis::RedisConnection};
+use crate::{settings::Settings, utils::redis::RedisConnection, utils::storage::StorageClient};
 
 pub mod config;
 pub mod entities;
@@ -8,8 +8,8 @@ pub mod error;
 pub mod extractors;
 pub mod handlers;
 pub mod models;
-pub mod payloads;
 pub mod openapi;
+pub mod payloads;
 pub mod routes;
 pub mod server;
 pub mod settings;
@@ -20,4 +20,5 @@ pub struct AppState {
     pub settings: Settings,
     pub db: DatabaseConnection,
     pub redis_client: RedisConnection,
+    pub storage: StorageClient,
 }
