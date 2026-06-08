@@ -293,8 +293,9 @@ pub async fn update_file(
     }
 
     if let Some(Some(fid)) = payload.folder_id {
+        // 移動先はファイル所有者のフォルダーとして検証する
         folders::Entity::find_by_id(fid)
-            .filter(folders::Column::OwnerId.eq(current_user.id))
+            .filter(folders::Column::OwnerId.eq(file.author_id))
             .filter(folders::Column::IsDeleted.eq(false))
             .one(&state.db)
             .await?
