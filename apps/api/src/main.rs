@@ -16,6 +16,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         &settings.rustfs_access_key,
         &settings.rustfs_secret_key,
         &settings.rustfs_bucket,
+        settings.rustfs_force_path_style,
     );
 
     let state = AppState {

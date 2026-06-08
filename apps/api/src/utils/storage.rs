@@ -15,13 +15,13 @@ pub struct StorageClient {
 }
 
 impl StorageClient {
-    pub fn new(endpoint: &str, access_key: &str, secret_key: &str, bucket: &str) -> Self {
+    pub fn new(endpoint: &str, access_key: &str, secret_key: &str, bucket: &str, force_path_style: bool) -> Self {
         let credentials = Credentials::new(access_key, secret_key, None, None, "rustfs");
         let config = Builder::new()
             .endpoint_url(endpoint)
             .credentials_provider(credentials)
             .region(Region::new("us-east-1"))
-            .force_path_style(true)
+            .force_path_style(force_path_style)
             .build();
         Self {
             inner: Client::from_conf(config),
