@@ -43,7 +43,7 @@ pub async fn run(state: AppState) -> Result<(), Box<dyn std::error::Error>> {
     // wildcard `*` which is disallowed when `Access-Control-Allow-Credentials` is true.
     let cors = CorsLayer::new()
         .allow_origin(settings.allow_origin.parse::<HeaderValue>()?)
-        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
+        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::PATCH, Method::DELETE])
         .allow_headers(AllowHeaders::mirror_request())
         .allow_credentials(true);
 

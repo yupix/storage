@@ -5,14 +5,14 @@ use axum::{
 };
 use chrono::Utc;
 use sea_orm::{
-    ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait,
-    PaginatorTrait, QueryFilter,
+    ActiveModelTrait, ActiveValue::Set, ColumnTrait, DatabaseConnection, EntityTrait,
+    PaginatorTrait, QueryFilter, QueryOrder,
 };
 use sea_orm::prelude::Uuid;
 use sha2::{Digest, Sha256};
 use std::time::Duration;
 
-use crate::entities::{files, folders};
+use crate::entities::{file_permissions, files, folders};
 use crate::extractors::CurrentUser;
 use crate::payloads::files::{
     FileDetailResponse, FileListQuery, FileResponse, PaginatedFileResponse,
@@ -28,6 +28,26 @@ fn file_to_response(file: files::Model) -> FileResponse {
         size: file.filesize,
         updated_at: file.updated_at.map(|dt| dt.to_string()).unwrap_or_default(),
         sender_id: file.author_id.to_string(),
+    }
+}
+
+/// 作者でない場合に file_permissions を確認する。
+/// `require_editor = true` なら editor ロールが必要、false なら viewer でも可。
+async fn check_file_permission(
+    db: &DatabaseConnection,
+    file_id: Uuid,
+    user_id: Uuid,
+    require_editor: bool,
+) -> Result<(), AuthError> {
+    let perm = file_permissions::Entity::find()
+        .filter(file_permissions::Column::FileId.eq(file_id))
+        .filter(file_permissions::Column::UserId.eq(user_id))
+        .one(db)
+        .await?;
+
+    match perm {
+        Some(p) if !require_editor || p.role == "editor" => Ok(()),
+        _ => Err(AuthError::Forbidden),
     }
 }
 
@@ -53,7 +73,9 @@ pub async fn get_files(
 
     let mut selector = files::Entity::find()
         .filter(files::Column::AuthorId.eq(current_user.id))
-        .filter(files::Column::IsDeleted.eq(false));
+        .filter(files::Column::IsDeleted.eq(false))
+        .order_by_desc(files::Column::UpdatedAt)
+        .order_by_asc(files::Column::Id);
 
     selector = match query.folder_id {
         Some(fid) => selector.filter(files::Column::FolderId.eq(fid)),
@@ -153,13 +175,13 @@ pub async fn upload_file(
         .map_err(|e| AuthError::Internal(e))?;
 
     let now = Utc::now().fixed_offset();
-    let model = files::ActiveModel {
+    let model = match (files::ActiveModel {
         id: Set(file_id),
         filename: Set(filename),
         file_type: Set(mime),
         filesize: Set(filesize),
         filehash: Set(hash),
-        url: Set(storage_key),
+        url: Set(storage_key.clone()),
         folder_id: Set(folder_id),
         author_id: Set(current_user.id),
         is_deleted: Set(false),
@@ -167,9 +189,19 @@ pub async fn upload_file(
         ocr_text: Set(None),
         created_at: Set(Some(now)),
         updated_at: Set(Some(now)),
-    }
+    })
     .insert(&state.db)
-    .await?;
+    .await
+    {
+        Ok(m) => m,
+        Err(e) => {
+            // DB 登録失敗時はアップロード済みオブジェクトを補償削除
+            if let Err(se) = state.storage.delete(&storage_key).await {
+                tracing::warn!("補償削除失敗 key={storage_key}: {se}");
+            }
+            return Err(AuthError::Internal(e.into()));
+        }
+    };
 
     Ok((StatusCode::CREATED, Json(file_to_response(model))))
 }
@@ -197,7 +229,7 @@ pub async fn get_file(
         .ok_or(AuthError::NotFound)?;
 
     if file.author_id != current_user.id {
-        return Err(AuthError::Forbidden);
+        check_file_permission(&state.db, file.id, current_user.id, false).await?;
     }
 
     let url = state
@@ -244,11 +276,14 @@ pub async fn update_file(
     }
 
     let file = files::Entity::find_by_id(file_id)
-        .filter(files::Column::AuthorId.eq(current_user.id))
         .filter(files::Column::IsDeleted.eq(false))
         .one(&state.db)
         .await?
         .ok_or(AuthError::NotFound)?;
+
+    if file.author_id != current_user.id {
+        check_file_permission(&state.db, file.id, current_user.id, true).await?;
+    }
 
     if let Some(Some(fid)) = payload.folder_id {
         folders::Entity::find_by_id(fid)
@@ -295,11 +330,14 @@ pub async fn delete_file(
     Path(file_id): Path<Uuid>,
 ) -> Result<StatusCode, AuthError> {
     let file = files::Entity::find_by_id(file_id)
-        .filter(files::Column::AuthorId.eq(current_user.id))
         .filter(files::Column::IsDeleted.eq(false))
         .one(&state.db)
         .await?
         .ok_or(AuthError::NotFound)?;
+
+    if file.author_id != current_user.id {
+        check_file_permission(&state.db, file.id, current_user.id, true).await?;
+    }
 
     let now = Utc::now().fixed_offset();
     let mut active: files::ActiveModel = file.into();
@@ -334,6 +372,8 @@ pub async fn get_trash(
     let paginator = files::Entity::find()
         .filter(files::Column::AuthorId.eq(current_user.id))
         .filter(files::Column::IsDeleted.eq(true))
+        .order_by_desc(files::Column::DeletedAt)
+        .order_by_asc(files::Column::Id)
         .paginate(&state.db, limit);
 
     let total = paginator.num_items().await?;
@@ -416,16 +456,18 @@ pub async fn empty_trash(
         .all(&state.db)
         .await?;
 
+    // ストレージ削除に成功したものだけ DB からも削除する
+    let mut deleted_ids: Vec<Uuid> = Vec::new();
     for file in &trashed {
-        if let Err(e) = state.storage.delete(&file.url).await {
-            tracing::warn!("ストレージ削除失敗 key={}: {e}", file.url);
+        match state.storage.delete(&file.url).await {
+            Ok(()) => deleted_ids.push(file.id),
+            Err(e) => tracing::warn!("ストレージ削除失敗 key={}: {e}", file.url),
         }
     }
 
-    let ids: Vec<Uuid> = trashed.iter().map(|f| f.id).collect();
-    if !ids.is_empty() {
+    if !deleted_ids.is_empty() {
         files::Entity::delete_many()
-            .filter(files::Column::Id.is_in(ids))
+            .filter(files::Column::Id.is_in(deleted_ids))
             .exec(&state.db)
             .await?;
     }
