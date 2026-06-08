@@ -15,20 +15,17 @@ export default function Header() {
           type="text"
           value="検索"
           name="topSearch"
-          className="border-green"
+          className="justify-center m-auto w-96 h-8 p-4 bg-white rounded-full border-2 border-gray-300"
         />
 
         <div className="header-buttons">
-          <Link
-            to="/"
-            className="nav-link"
-            activeProps={{ className: "nav-link is-active" }}
-          >
+          <a href="">
             合言葉受信
-          </Link>
+          </a>
+
           <a
             href=""
-            className="nav-link"
+            className="bg-blue-500 mx-15 px-5 py-2 rounded-lg text-white font-bold"
             target="_blank"
             rel="noreferrer"
           >
