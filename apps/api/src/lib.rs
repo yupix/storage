@@ -8,6 +8,7 @@ pub mod error;
 pub mod extractors;
 pub mod handlers;
 pub mod models;
+pub mod payloads;
 pub mod openapi;
 pub mod routes;
 pub mod server;

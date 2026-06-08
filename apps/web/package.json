@@ -16,6 +16,7 @@
     "start": "node --import ./.output/server/instrument.server.mjs .output/server/index.mjs"
   },
   "dependencies": {
+    "@base-ui/react": "^1.5.0",
     "@fontsource-variable/geist": "^5.2.9",
     "@sentry/tanstackstart-react": "^10.42.0",
     "@t3-oss/env-core": "^0.13.10",
@@ -28,11 +29,13 @@
     "@tanstack/router-plugin": "^1.132.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "date-fns": "^4.4.0",
     "dotenv-cli": "^11.0.0",
     "lucide-react": "^0.545.0",
     "nitro": "npm:nitro-nightly@latest",
     "radix-ui": "^1.4.3",
     "react": "^19.2.0",
+    "react-day-picker": "^10.0.1",
     "react-dom": "^19.2.0",
     "shadcn": "^4.7.0",
     "tailwind-merge": "^3.6.0",

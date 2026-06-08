@@ -6,24 +6,13 @@ use chrono::Utc;
 use sea_orm::prelude::Uuid;
 use sea_orm::{ActiveValue::Set, EntityTrait};
 use sea_orm::{ColumnTrait, QueryFilter};
-use serde::Deserialize;
-use validator::Validate;
 
-use crate::entities;
 use crate::extractors::{AuthUser, CurrentUser};
+use crate::models::UserResponse;
 use crate::openapi::{CredentialErrors, InternalOnlyError, SessionAuthErrors, UnauthorizedErrors};
+use crate::payloads::auth::{LoginRequest, RegisterRequest};
 use crate::utils::auth::{AuthError, create_password_hash, verify_password};
 use crate::{AppState, entities::users};
-
-#[derive(Validate, Debug, Deserialize, utoipa::ToSchema)]
-pub struct LoginRequest {
-    #[schema(value_type = String, format="email")]
-    #[validate(email)]
-    pub email: String,
-    #[schema(value_type = String, format="password")]
-    #[validate(length(min = 8))]
-    pub password: String,
-}
 
 #[axum::debug_handler]
 #[utoipa::path(
@@ -53,19 +42,6 @@ pub async fn login(
     } else {
         Err(AuthError::Forbidden)
     }
-}
-
-#[derive(Validate, Debug, Deserialize, utoipa::ToSchema)]
-pub struct RegisterRequest {
-    #[schema(value_type = String, format="username")]
-    #[validate(length(min = 3))]
-    pub username: String,
-    #[schema(value_type = String, format="email")]
-    #[validate(email)]
-    pub email: String,
-    #[schema(value_type = String, format="password")]
-    #[validate(length(min = 8))]
-    pub password: String,
 }
 
 #[axum::debug_handler]
@@ -100,9 +76,10 @@ pub async fn register(
         email: Set(email),
         password_hash: Set(password_hash),
         is_suspended: Set(false),
+        deleted_at: Set(None),
+        freeze_reason: Set(None),
         created_at: Set(now),
         updated_at: Set(now),
-        deleted_at: Set(None),
     };
 
     users::Entity::insert(user.clone())
@@ -119,15 +96,15 @@ pub async fn register(
     get,
     path = "/me",
     responses(
-        (status = 200, description = "Current user info", body = entities::users::Model),
+        (status = 200, description = "Current user info", body = UserResponse),
         SessionAuthErrors,
     )
 )]
 pub async fn me(
     State(_): State<AppState>,
     user: CurrentUser,
-) -> Result<Json<entities::users::Model>, AuthError> {
-    Ok(Json(user.0))
+) -> Result<Json<UserResponse>, AuthError> {
+    Ok(Json(user.0.into()))
 }
 
 #[axum::debug_handler]

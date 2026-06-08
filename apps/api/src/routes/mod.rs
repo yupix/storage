@@ -1,15 +1,17 @@
 use utoipa_axum::router::OpenApiRouter;
 
-use crate::{AppState, routes::auth::routes};
-
+use crate::AppState;
 
 pub mod auth;
-pub mod account;
+pub mod files;
+pub mod folders;
 
 pub fn create_routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new().nest(
         "/v1",
-        OpenApiRouter::new().nest("/auth", crate::routes::auth::routes())
-        .nest("/account", crate::routes::account::routes()),
+        OpenApiRouter::new()
+            .nest("/auth", crate::routes::auth::routes())
+            .nest("/files", crate::routes::files::routes())
+            .nest("/folders", crate::routes::folders::routes()),
     )
 }
