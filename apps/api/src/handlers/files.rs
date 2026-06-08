@@ -15,7 +15,7 @@ use sha2::{Digest, Sha256};
 use std::time::Duration;
 use tokio::io::AsyncWriteExt;
 
-use crate::entities::{file_permissions, files, folders};
+use crate::entities::{file_permissions, files, folders, users};
 use crate::extractors::CurrentUser;
 use crate::payloads::files::{
     EmptyTrashResponse, FileDetailResponse, FileListQuery, FileResponse, PaginatedFileResponse,
@@ -34,14 +34,24 @@ fn file_to_response(file: files::Model) -> FileResponse {
     }
 }
 
-/// 作者でない場合に file_permissions を確認する。
+/// 作者でない場合に file_permissions と所有者の凍結状態を確認する。
 /// `require_editor = true` なら editor ロールが必要、false なら viewer でも可。
 async fn check_file_permission(
     db: &DatabaseConnection,
     file_id: Uuid,
+    file_author_id: Uuid,
     user_id: Uuid,
     require_editor: bool,
 ) -> Result<(), AuthError> {
+    // 所有者が凍結されている場合は共有ファイルへのアクセスを拒否
+    let owner = users::Entity::find_by_id(file_author_id)
+        .one(db)
+        .await?
+        .ok_or(AuthError::NotFound)?;
+    if owner.is_suspended {
+        return Err(AuthError::Forbidden);
+    }
+
     let perm = file_permissions::Entity::find()
         .filter(file_permissions::Column::FileId.eq(file_id))
         .filter(file_permissions::Column::UserId.eq(user_id))
@@ -273,7 +283,7 @@ pub async fn get_file(
         .ok_or(AuthError::NotFound)?;
 
     if file.author_id != current_user.id {
-        check_file_permission(&state.db, file.id, current_user.id, false).await?;
+        check_file_permission(&state.db, file.id, file.author_id, current_user.id, false).await?;
     }
 
     let url = state
@@ -326,7 +336,7 @@ pub async fn update_file(
         .ok_or(AuthError::NotFound)?;
 
     if file.author_id != current_user.id {
-        check_file_permission(&state.db, file.id, current_user.id, true).await?;
+        check_file_permission(&state.db, file.id, file.author_id, current_user.id, true).await?;
     }
 
     if let Some(Some(fid)) = payload.folder_id {
@@ -381,7 +391,7 @@ pub async fn delete_file(
         .ok_or(AuthError::NotFound)?;
 
     if file.author_id != current_user.id {
-        check_file_permission(&state.db, file.id, current_user.id, true).await?;
+        check_file_permission(&state.db, file.id, file.author_id, current_user.id, true).await?;
     }
 
     let now = Utc::now().fixed_offset();
