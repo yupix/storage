@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import ToolbarDefault from '../components/ToolbarDefault';
 import { ToolbarSelected, ToolbarSearchResult } from '../components/ToolbarDefault';
+import MainContentsDefault from '#/components/MainContents';
 
 export const Route = createFileRoute('/')({ component: App })
 
@@ -23,7 +24,7 @@ function App() {
             <ToolbarSelected />
           </div>
           <div className="h-[90%] outline-1">
-            <h3>content</h3>
+            <MainContentsDefault />
           </div>
         </div>
       </div>
