@@ -5,6 +5,12 @@ use crate::AppState;
 
 pub fn routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::<AppState>::new()
-        // routes!マクロは一つのエンドポイントのメソッドをまとめてルーティングするためのマクロっぽい...?同じメソッドを複数定義しようとするとエラーになる。
+        .routes(routes!(crate::handlers::files::upload_file))
         .routes(routes!(crate::handlers::files::get_files))
+        .routes(routes!(crate::handlers::files::get_trash))
+        .routes(routes!(crate::handlers::files::empty_trash))
+        .routes(routes!(crate::handlers::files::restore_file))
+        .routes(routes!(crate::handlers::files::get_file))
+        .routes(routes!(crate::handlers::files::update_file))
+        .routes(routes!(crate::handlers::files::delete_file))
 }
