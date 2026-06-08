@@ -73,6 +73,9 @@ pub async fn get_files(
         return Err(AuthError::InvalidInput("invalid page".into()));
     }
     let limit = query.limit.unwrap_or(50).min(100);
+    if limit == 0 {
+        return Err(AuthError::InvalidInput("invalid limit".into()));
+    }
 
     let mut selector = files::Entity::find()
         .filter(files::Column::AuthorId.eq(current_user.id))
@@ -410,6 +413,9 @@ pub async fn get_trash(
         return Err(AuthError::InvalidInput("invalid page".into()));
     }
     let limit = query.limit.unwrap_or(50).min(100);
+    if limit == 0 {
+        return Err(AuthError::InvalidInput("invalid limit".into()));
+    }
 
     let paginator = files::Entity::find()
         .filter(files::Column::AuthorId.eq(current_user.id))
