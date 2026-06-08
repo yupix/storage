@@ -19,13 +19,14 @@ export default function Header() {
         />
 
         <div className="header-buttons">
-          <a href="">
+          <a href=""
+          className="bg-blue-500 mx-5 px-5 py-2 rounded-lg text-white font-bold">
             合言葉受信
           </a>
 
           <a
             href=""
-            className="bg-blue-500 mx-15 px-5 py-2 rounded-lg text-white font-bold"
+            className="bg-blue-500 mx-10 px-5 py-2 rounded-lg text-white font-bold"
             target="_blank"
             rel="noreferrer"
           >
