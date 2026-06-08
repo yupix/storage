@@ -144,6 +144,6 @@ HyperDrive は同一LAN内だけでなく、インターネット越しの異な
 
 ## 関連ドキュメント
 
-- [合言葉共有 API仕様](../ファイル系/共有系/合言葉共有.md)
-- [WebRTCシグナリング インフラ概要](WebRTCシグナリング.md)
-- [WebSocketシグナリング エンドポイント](WebSocketシグナリングエンドポイント.md)
+- [合言葉共有 API仕様](../../api/files/sharing/watchword.md)
+- [WebRTCシグナリング インフラ概要](webrtc.md)
+- [WebSocketシグナリング エンドポイント](websocket.md)

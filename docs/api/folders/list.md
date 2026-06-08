@@ -92,6 +92,6 @@
 - `users` テーブルを JOIN して `id` / `username` / `avatar_url` を取得し OwnerInfo を組み立てる（`email` / `is_suspended` / `password_hash` 等の内部情報は含めない）
 - 実装時に `OwnerInfo` DTO（または同等の struct）を `models/` に定義すること
 - ソート: `name ASC`（安定ソートを推奨）
-- ページネーション: [共通/ページネーション.md](../共通/ページネーション.md) に準拠
-- エラー形式: [共通/エラーレスポンス.md](../共通/エラーレスポンス.md) に準拠
+- ページネーション: [ページネーション](../common/pagination.md)に準拠
+- エラー形式: [エラーレスポンス](../common/errors.md)に準拠
 - 必要コンポーネント: PostgreSQL

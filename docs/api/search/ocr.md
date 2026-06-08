@@ -56,7 +56,7 @@
 
 | コンポーネント | 技術 | 備考 |
 |---|---|---|
-| OCRエンジン | PaddleOCR / EasyOCR | 詳細: [インフラ/OCRエンジン.md](../インフラ/OCRエンジン.md) |
+| OCRエンジン | PaddleOCR / EasyOCR | 詳細: [OCRエンジン](../../spec/infra/ocr.md) |
 | 処理サービス | Python FastAPI | OCR処理・Valkey連携 |
 | タスクキュー | Valkey | 非同期OCRジョブ管理 |
 | ブラウザ拡張 | Plasmo | ブラウザ上の画像キャプチャ・送信 |
