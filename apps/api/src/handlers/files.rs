@@ -223,7 +223,16 @@ pub async fn upload_file(
     let now = Utc::now().fixed_offset();
     // トランザクション内でフォルダーをロックしてから INSERT することで、
     // 検証後にフォルダーが論理削除されても未削除フォルダーへの参照を保証する
-    let txn = state.db.begin().await?;
+    let txn = match state.db.begin().await {
+        Ok(t) => t,
+        Err(e) => {
+            // begin() 失敗時もアップロード済みオブジェクトを補償削除する
+            if let Err(se) = state.storage.delete(&storage_key).await {
+                tracing::warn!("補償削除失敗 key={storage_key}: {se}");
+            }
+            return Err(e.into());
+        }
+    };
     let model = match async {
         if let Some(fid) = folder_id {
             folders::Entity::find_by_id(fid)

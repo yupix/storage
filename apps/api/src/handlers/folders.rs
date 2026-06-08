@@ -56,13 +56,13 @@ async fn get_owned_folder<C: ConnectionTrait>(
     db: &C,
     folder_id: Uuid,
     user_id: Uuid,
+    lock: bool,
 ) -> Result<folders::Model, AuthError> {
-    folders::Entity::find_by_id(folder_id)
+    let q = folders::Entity::find_by_id(folder_id)
         .filter(folders::Column::OwnerId.eq(user_id))
-        .filter(folders::Column::IsDeleted.eq(false))
-        .one(db)
-        .await?
-        .ok_or(AuthError::NotFound)
+        .filter(folders::Column::IsDeleted.eq(false));
+    let q = if lock { q.lock(LockType::Update) } else { q };
+    q.one(db).await?.ok_or(AuthError::NotFound)
 }
 
 #[derive(FromQueryResult)]
@@ -260,7 +260,7 @@ pub async fn get_folder(
     auth: AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<Json<FolderResponse>, AuthError> {
-    let folder = get_owned_folder(&state.db, id, auth.user_id).await?;
+    let folder = get_owned_folder(&state.db, id, auth.user_id, false).await?;
     let owner = load_owner(&state.db, auth.user_id).await?;
     Ok(Json(FolderResponse::from_models(&folder, &owner)))
 }
@@ -368,7 +368,8 @@ pub async fn delete_folder(
     let now = Utc::now().fixed_offset();
     let txn = state.db.begin().await?;
 
-    get_owned_folder(&txn, id, auth.user_id).await?;
+    // アップロード/移動処理と同じフォルダー行を最初にロックして直列化する
+    get_owned_folder(&txn, id, auth.user_id, true).await?;
 
     if to_home {
         folders::Entity::update_many()
