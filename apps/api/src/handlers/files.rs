@@ -481,13 +481,18 @@ pub async fn restore_file(
     current_user: CurrentUser,
     Path(file_id): Path<Uuid>,
 ) -> Result<Json<FileResponse>, AuthError> {
+    let txn = state.db.begin().await?;
+
+    // SELECT FOR UPDATE で empty_trash との競合を直列化する
     let file = files::Entity::find_by_id(file_id)
         .filter(files::Column::AuthorId.eq(current_user.id))
-        .one(&state.db)
+        .lock(LockType::Update)
+        .one(&txn)
         .await?
         .ok_or(AuthError::NotFound)?;
 
     if !file.is_deleted {
+        let _ = txn.rollback().await;
         return Err(AuthError::InvalidInput("ファイルはゴミ箱にありません".into()));
     }
 
@@ -496,7 +501,7 @@ pub async fn restore_file(
         let exists = folders::Entity::find_by_id(fid)
             .filter(folders::Column::OwnerId.eq(current_user.id))
             .filter(folders::Column::IsDeleted.eq(false))
-            .one(&state.db)
+            .one(&txn)
             .await?
             .is_some();
         if exists { Some(fid) } else { None }
@@ -511,7 +516,8 @@ pub async fn restore_file(
     active.folder_id = Set(restored_folder_id);
     active.updated_at = Set(Some(now));
 
-    let updated = active.update(&state.db).await?;
+    let updated = active.update(&txn).await?;
+    txn.commit().await?;
     Ok(Json(file_to_response(updated)))
 }
 
@@ -528,10 +534,15 @@ pub async fn empty_trash(
     State(state): State<AppState>,
     current_user: CurrentUser,
 ) -> Result<impl axum::response::IntoResponse, AuthError> {
+    // SELECT FOR UPDATE で restore_file との競合を直列化する。
+    // ロック取得時点で is_deleted = true のファイルのみ対象にするため、
+    // 復元済みファイルを誤って削除しない。
+    let txn = state.db.begin().await?;
     let trashed = files::Entity::find()
         .filter(files::Column::AuthorId.eq(current_user.id))
         .filter(files::Column::IsDeleted.eq(true))
-        .all(&state.db)
+        .lock(LockType::Update)
+        .all(&txn)
         .await?;
 
     let mut deleted_ids: Vec<Uuid> = Vec::new();
@@ -552,9 +563,10 @@ pub async fn empty_trash(
     if !deleted_ids.is_empty() {
         files::Entity::delete_many()
             .filter(files::Column::Id.is_in(deleted_ids))
-            .exec(&state.db)
+            .exec(&txn)
             .await?;
     }
+    txn.commit().await?;
 
     if failed_ids.is_empty() {
         Ok(StatusCode::NO_CONTENT.into_response())
