@@ -17,7 +17,13 @@ const config = defineConfig({
     viteReact(),
   ],
   server: {
-    allowedHosts: true
+    allowedHosts: true,
+    proxy: {
+      '/v1': {
+        target: process.env.API_BASE_URL ?? 'http://localhost:8080',
+        changeOrigin: true,
+      },
+    },
   }
 })
 
