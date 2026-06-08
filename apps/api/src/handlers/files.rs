@@ -1,21 +1,12 @@
 use sea_orm::{EntityTrait, ColumnTrait, QueryFilter};
 use crate::extractors::CurrentUser;
+use crate::payloads::files::FileResponse;
 use crate::AppState;
 use axum::{
-    Json, extract::State, 
+    Json, extract::State,
     http::StatusCode,
 };
-// ⭕ 修正：preludeが迷子でも確実に files.rs を直接見に行くルートです
-use crate::entities::files; 
-
-#[derive(Debug, serde::Serialize, utoipa::ToSchema)] 
-pub struct FileResponse {
-    pub id: String,
-    pub name: String,
-    pub size: i64,
-    pub updated_at: String,
-    pub sender_id: String,  
-}
+use crate::entities::files;
 
 #[utoipa::path(
     get,

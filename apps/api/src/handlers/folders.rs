@@ -11,51 +11,14 @@ use sea_orm::{
     FromQueryResult, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, Statement, TransactionTrait,
 };
 use sea_orm::sea_query::{Expr, LockType};
-use serde::Deserialize;
-use validator::Validate;
 
 use crate::entities::{files, folders, users};
 use crate::extractors::AuthUser;
 use crate::models::{FolderResponse, ListFoldersResponse};
 use crate::openapi::SessionAuthErrors;
+use crate::payloads::folders::{CreateFolderRequest, DeleteFolderQuery, ListFoldersQuery, UpdateFolderRequest};
 use crate::utils::auth::AuthError;
 use crate::AppState;
-
-#[derive(Debug, Deserialize, utoipa::IntoParams)]
-pub struct ListFoldersQuery {
-    pub folder_id: Option<Uuid>,
-    pub page: Option<u64>,
-    pub limit: Option<u64>,
-}
-
-#[derive(Debug, Deserialize, utoipa::IntoParams)]
-pub struct DeleteFolderQuery {
-    pub to_home: Option<bool>,
-}
-
-#[derive(Validate, Debug, Deserialize, utoipa::ToSchema)]
-pub struct CreateFolderRequest {
-    #[validate(length(min = 1, max = 255))]
-    pub name: String,
-    pub folder_id: Option<Uuid>,
-}
-
-#[derive(Validate, Debug, Deserialize, utoipa::ToSchema)]
-pub struct UpdateFolderRequest {
-    #[validate(length(min = 1, max = 255))]
-    pub name: Option<String>,
-    #[serde(default, deserialize_with = "deserialize_optional_field")]
-    pub folder_id: Option<Option<Uuid>>,
-}
-
-fn deserialize_optional_field<'de, D>(
-    deserializer: D,
-) -> Result<Option<Option<Uuid>>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    Option::<Uuid>::deserialize(deserializer).map(Some)
-}
 
 fn trim_name(name: &str) -> Result<String, AuthError> {
     let trimmed = name.trim();
