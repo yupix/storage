@@ -1,4 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
+import { FileLink } from "@/components/ui/file-link";
+import { GetFileContext, GetFileProvider } from '#/contexts/GetFileContext';
+import { useContext } from 'react';
+import { FileUrl } from "@/components/ui/file-url"
 
 export const Route = createFileRoute('/')({ component: App })
 
@@ -12,6 +17,20 @@ function App() {
             <ul>
               <li>ホーム</li>
               <li>フォルダー</li>
+              <GetFileProvider>
+                <ScrollArea className="h-[200px] w-[350px] rounded-md border p-4">
+                  <FileLink />
+                  <FileUrl />
+                  <p>test</p>
+                  <p>test</p>
+                  <p>test</p>
+                  <p>test</p>
+                  <p>test</p>
+                  <p>test</p>
+                  <p>test</p>
+                  <p>test</p>
+                </ScrollArea>
+              </GetFileProvider>
             </ul>
           </div>
         </div>
