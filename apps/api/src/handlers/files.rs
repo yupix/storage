@@ -147,6 +147,13 @@ pub async fn upload_file(
     let bytes =
         file_bytes.ok_or_else(|| AuthError::InvalidInput("file フィールドが必要です".into()))?;
     let filename = original_filename.unwrap_or_else(|| "unnamed".to_string());
+    let filename = {
+        let trimmed = filename.trim().to_string();
+        if trimmed.is_empty() || trimmed.chars().count() > 255 {
+            return Err(AuthError::InvalidInput("invalid filename".into()));
+        }
+        trimmed
+    };
     let mime = content_type.unwrap_or_else(|| "application/octet-stream".to_string());
     let filesize = bytes.len() as i64;
 
