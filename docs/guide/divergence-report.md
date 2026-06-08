@@ -3,7 +3,7 @@
 **作成日**: 2026-05-31  
 **担当**: subtask_027 (cmd_009)  
 **対象リポジトリ**: `/home/coder/storage`  
-**参照仕様**: `docs/database/実装ガイド/DBスキーマ.md`, `docs/database/仕様書.md`
+**参照仕様**: `docs/guide/database.md`, `docs/api/readme.md`
 
 ---
 
@@ -74,8 +74,8 @@
 
 | 内容 | 追記先 |
 |------|--------|
-| ログイン識別子は **email**（username ではない） | `docs/database/アカウント系/ログイン.md` 実装メモ |
-| GET `/v1/auth/me`（プロフィール取得の実装パス） | `docs/database/仕様書.md` 早見表 |
+| ログイン識別子は **email**（username ではない） | `docs/api/auth/login.md` 実装メモ |
+| GET `/v1/auth/me`（プロフィール取得の実装パス） | `docs/api/auth/profile.md` |
 
 ### 3.2 残存乖離（今回未修正）
 

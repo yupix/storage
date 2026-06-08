@@ -1,4 +1,20 @@
-# DBスキーマ
+# データベース
+
+PostgreSQLを使用し、Rustからの操作にはSeaORMを使用する。原則として
+アプリケーションコードに生のSQLを書かず、スキーマ変更はmigrationで管理する。
+
+削除可能なデータは物理削除せず、削除フラグと削除日時による論理削除を基本とする。
+
+実際のスキーマは
+[`apps/api/migration/src`](../../apps/api/migration/src)を正とする。
+以下は設計時点の概要であり、実装との差分は
+[コード仕様乖離レポート](divergence-report.md)を参照すること。
+
+## 設計図
+
+![データベース設計図](../spec/assets/caec7a03-bb22-4826-bea2-5566a3f83d1c/04698666-ebc9-4184-aa54-9182d306d9f0/Untitled%20Diagram_2026-04-27T04_54_52.781Z.png)
+
+[設計図の編集用JSON](../spec/assets/caec7a03-bb22-4826-bea2-5566a3f83d1c/b36381a8-a169-43a7-be6a-b9284ed5329b/Untitled%20Diagram_2026-04-27T04_54_43.548Z.json)
 
 ## users テーブル
 
@@ -48,7 +64,7 @@
 
 ## file_permissions（★新規テーブル）
 
-権限モデル（共通/権限モデル.md）から追加:
+権限モデル（[権限モデル](../api/common/permissions.md)）から追加:
 
 | 列名 | 型 | NULL | 説明 |
 |---|---|---|---|
@@ -61,7 +77,7 @@
 
 ## share_links（★新規テーブル）
 
-リンク共有（ファイル系/共有系/リンク共有.md）から追加:
+リンク共有（[共有リンク](../api/files/sharing/link.md)）から追加:
 
 | 列名 | 型 | NULL | 説明 |
 |---|---|---|---|

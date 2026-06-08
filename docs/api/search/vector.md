@@ -59,7 +59,7 @@
 
 | コンポーネント | 技術 | 備考 |
 |---|---|---|
-| ベクトルDB | Qdrant | HNSW近傍探索、詳細: [インフラ/ベクトル検索基盤.md](../インフラ/ベクトル検索基盤.md) |
+| ベクトルDB | Qdrant | HNSW近傍探索、詳細: [ベクトル検索基盤](../../spec/infra/vector-db.md) |
 | 埋め込みサービス | Python FastAPI + multilingual-e5 | ファイルアップロード時に非同期実行 |
 | メインAPI | Rust (Axum) | Qdrant への問い合わせ |
 

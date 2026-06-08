@@ -10,7 +10,7 @@
 
 指定 ID のフォルダーを論理削除する。`folders.owner_id` がセッションの `user_id` と一致する場合のみ許可する。
 
-物理削除・DB 行の DELETE は行わない。`is_deleted = true` および `deleted_at` の設定で論理削除とする（[仕様書.md](../仕様書.md) の方針に準拠）。
+物理削除・DB 行の DELETE は行わない。`is_deleted = true` および `deleted_at` の設定で論理削除とする（[データベース設計](../../guide/database.md)の方針に準拠）。
 
 ## 必要なデータ
 
@@ -69,5 +69,5 @@
 - `to_home=true` 時: 子フォルダー・配下ファイルの `folder_id` を `NULL` に更新してから対象フォルダーを論理削除
 - `to_home=false` 時: 子孫フォルダーと配下ファイルを再帰的に論理削除
 - `files.folder_id` への FK は物理削除時 `ON DELETE SET NULL`（`apps/api/src/entities/files.rs`）— 論理削除ではアプリ層で制御
-- エラー形式: [共通/エラーレスポンス.md](../共通/エラーレスポンス.md) に準拠
+- エラー形式: [エラーレスポンス](../common/errors.md)に準拠
 - 必要コンポーネント: PostgreSQL

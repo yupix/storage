@@ -51,4 +51,4 @@
 | ルーム管理 | Valkey | 合言葉をキーにルーム状態管理・TTL付き |
 | P2P転送 | WebRTC DataChannel | バイナリ直接転送（サーバー経由なし） |
 
-詳細: [インフラ/WebRTCシグナリング.md](../../インフラ/WebRTCシグナリング.md)
+詳細: [WebRTCシグナリング](../../../spec/infra/webrtc.md)
