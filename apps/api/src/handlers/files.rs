@@ -4,6 +4,7 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
+use aws_sdk_s3::primitives::ByteStream;
 use chrono::Utc;
 use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, ColumnTrait, DatabaseConnection, EntityTrait,
@@ -12,6 +13,7 @@ use sea_orm::{
 use sea_orm::prelude::Uuid;
 use sha2::{Digest, Sha256};
 use std::time::Duration;
+use tokio::io::AsyncWriteExt;
 
 use crate::entities::{file_permissions, files, folders};
 use crate::extractors::CurrentUser;
@@ -111,25 +113,59 @@ pub async fn upload_file(
     current_user: CurrentUser,
     mut multipart: Multipart,
 ) -> Result<(StatusCode, Json<FileResponse>), AuthError> {
-    let mut file_bytes: Option<Vec<u8>> = None;
-    let mut original_filename: Option<String> = None;
-    let mut content_type: Option<String> = None;
     let mut folder_id: Option<Uuid> = None;
 
-    while let Some(field) = multipart
+    // ファイルフィールドの情報（バイト列はまだ読まない）
+    struct FileField {
+        filename: String,
+        mime: String,
+        tmp: tempfile::NamedTempFile,
+        filesize: i64,
+        hash: String,
+    }
+    let mut file_field: Option<FileField> = None;
+
+    while let Some(mut field) = multipart
         .next_field()
         .await
         .map_err(|e| AuthError::InvalidInput(e.to_string()))?
     {
         match field.name().unwrap_or("") {
             "file" => {
-                original_filename = field.file_name().map(|s| s.to_string());
-                content_type = field.content_type().map(|s| s.to_string());
-                let data = field
-                    .bytes()
+                let fname = field.file_name().map(|s| s.to_string()).unwrap_or_else(|| "unnamed".to_string());
+                let mime = field.content_type().map(|s| s.to_string()).unwrap_or_else(|| "application/octet-stream".to_string());
+
+                // テンポラリファイルにチャンク単位で書き込みながらハッシュを計算
+                let tmp = tempfile::NamedTempFile::new()
+                    .map_err(|e| AuthError::Internal(anyhow::anyhow!("temp file: {e}")))?;
+                let mut async_file = tokio::fs::File::from_std(
+                    tmp.as_file()
+                        .try_clone()
+                        .map_err(|e| AuthError::Internal(anyhow::anyhow!("file clone: {e}")))?,
+                );
+                let mut hasher = Sha256::new();
+                let mut filesize: i64 = 0;
+
+                while let Some(chunk) = field
+                    .chunk()
                     .await
-                    .map_err(|e| AuthError::InvalidInput(e.to_string()))?;
-                file_bytes = Some(data.to_vec());
+                    .map_err(|e| AuthError::InvalidInput(e.to_string()))?
+                {
+                    filesize += chunk.len() as i64;
+                    hasher.update(&chunk);
+                    async_file
+                        .write_all(&chunk)
+                        .await
+                        .map_err(|e| AuthError::Internal(anyhow::anyhow!("write chunk: {e}")))?;
+                }
+                async_file
+                    .flush()
+                    .await
+                    .map_err(|e| AuthError::Internal(anyhow::anyhow!("flush: {e}")))?;
+                drop(async_file);
+
+                let hash = format!("{:x}", hasher.finalize());
+                file_field = Some(FileField { filename: fname, mime, tmp, filesize, hash });
             }
             "folder_id" => {
                 let text = field
@@ -145,24 +181,17 @@ pub async fn upload_file(
         }
     }
 
-    let bytes =
-        file_bytes.ok_or_else(|| AuthError::InvalidInput("file フィールドが必要です".into()))?;
-    let filename = original_filename.unwrap_or_else(|| "unnamed".to_string());
+    let ff = file_field.ok_or_else(|| AuthError::InvalidInput("file フィールドが必要です".into()))?;
     let filename = {
-        let trimmed = filename.trim().to_string();
+        let trimmed = ff.filename.trim().to_string();
         if trimmed.is_empty() || trimmed.chars().count() > 255 {
             return Err(AuthError::InvalidInput("invalid filename".into()));
         }
         trimmed
     };
-    let mime = content_type.unwrap_or_else(|| "application/octet-stream".to_string());
-    let filesize = bytes.len() as i64;
-
-    let hash = {
-        let mut h = Sha256::new();
-        h.update(&bytes);
-        format!("{:x}", h.finalize())
-    };
+    let mime = ff.mime;
+    let filesize = ff.filesize;
+    let hash = ff.hash;
 
     if let Some(fid) = folder_id {
         folders::Entity::find_by_id(fid)
@@ -176,9 +205,13 @@ pub async fn upload_file(
     let file_id = Uuid::new_v4();
     let storage_key = format!("{}/{}", current_user.id, file_id);
 
+    let stream = ByteStream::from_path(ff.tmp.path())
+        .await
+        .map_err(|e| AuthError::Internal(anyhow::anyhow!("bytestream: {e}")))?;
+
     state
         .storage
-        .upload(&storage_key, bytes, &mime)
+        .upload(&storage_key, stream, &mime)
         .await
         .map_err(|e| AuthError::Internal(e))?;
 
