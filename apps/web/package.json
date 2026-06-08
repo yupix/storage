@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "dotenv -e .env.local -- sh -c \"NODE_OPTIONS='--import ./instrument.server.mjs' vite dev --port 3400\"",
     "build": "vite build && cp instrument.server.mjs .output/server",
+    "generate:api": "cargo run --manifest-path ../api/Cargo.toml --bin generate_schema > src/api/schema.json && openapi-typescript src/api/schema.json -o src/api/schema.d.ts && node -e \"const fs=require('fs');fs.unlinkSync('src/api/schema.json')\"",
     "preview": "vite preview",
     "test": "vitest run",
     "format": "biome format",
@@ -33,6 +34,7 @@
     "dotenv-cli": "^11.0.0",
     "lucide-react": "^0.545.0",
     "nitro": "npm:nitro-nightly@latest",
+    "openapi-fetch": "^0.17.0",
     "radix-ui": "^1.4.3",
     "react": "^19.2.0",
     "react-day-picker": "^10.0.1",
@@ -55,6 +57,7 @@
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^6.0.1",
     "jsdom": "^28.1.0",
+    "openapi-typescript": "^7.13.0",
     "typescript": "^5.7.2",
     "vite": "^8.0.0",
     "vitest": "^3.0.5"
