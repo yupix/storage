@@ -8,8 +8,9 @@ use aws_sdk_s3::primitives::ByteStream;
 use chrono::Utc;
 use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, ColumnTrait, DatabaseConnection, EntityTrait,
-    PaginatorTrait, QueryFilter, QueryOrder,
+    PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, TransactionTrait,
 };
+use sea_orm::sea_query::LockType;
 use sea_orm::prelude::Uuid;
 use sha2::{Digest, Sha256};
 use std::time::Duration;
@@ -206,15 +207,6 @@ pub async fn upload_file(
     let filesize = ff.filesize;
     let hash = ff.hash;
 
-    if let Some(fid) = folder_id {
-        folders::Entity::find_by_id(fid)
-            .filter(folders::Column::OwnerId.eq(current_user.id))
-            .filter(folders::Column::IsDeleted.eq(false))
-            .one(&state.db)
-            .await?
-            .ok_or(AuthError::NotFound)?;
-    }
-
     let file_id = Uuid::new_v4();
     let storage_key = format!("{}/{}", current_user.id, file_id);
 
@@ -229,31 +221,51 @@ pub async fn upload_file(
         .map_err(|e| AuthError::Internal(e))?;
 
     let now = Utc::now().fixed_offset();
-    let model = match (files::ActiveModel {
-        id: Set(file_id),
-        filename: Set(filename),
-        file_type: Set(mime),
-        filesize: Set(filesize),
-        filehash: Set(hash),
-        url: Set(storage_key.clone()),
-        folder_id: Set(folder_id),
-        author_id: Set(current_user.id),
-        is_deleted: Set(false),
-        deleted_at: Set(None),
-        ocr_text: Set(None),
-        created_at: Set(Some(now)),
-        updated_at: Set(Some(now)),
-    })
-    .insert(&state.db)
+    // トランザクション内でフォルダーをロックしてから INSERT することで、
+    // 検証後にフォルダーが論理削除されても未削除フォルダーへの参照を保証する
+    let txn = state.db.begin().await?;
+    let model = match async {
+        if let Some(fid) = folder_id {
+            folders::Entity::find_by_id(fid)
+                .filter(folders::Column::OwnerId.eq(current_user.id))
+                .filter(folders::Column::IsDeleted.eq(false))
+                .lock(LockType::Update)
+                .one(&txn)
+                .await?
+                .ok_or(AuthError::NotFound)?;
+        }
+        files::ActiveModel {
+            id: Set(file_id),
+            filename: Set(filename),
+            file_type: Set(mime),
+            filesize: Set(filesize),
+            filehash: Set(hash),
+            url: Set(storage_key.clone()),
+            folder_id: Set(folder_id),
+            author_id: Set(current_user.id),
+            is_deleted: Set(false),
+            deleted_at: Set(None),
+            ocr_text: Set(None),
+            created_at: Set(Some(now)),
+            updated_at: Set(Some(now)),
+        }
+        .insert(&txn)
+        .await
+        .map_err(AuthError::from)
+    }
     .await
     {
-        Ok(m) => m,
+        Ok(m) => {
+            txn.commit().await?;
+            m
+        }
         Err(e) => {
+            let _ = txn.rollback().await;
             // DB 登録失敗時はアップロード済みオブジェクトを補償削除
             if let Err(se) = state.storage.delete(&storage_key).await {
                 tracing::warn!("補償削除失敗 key={storage_key}: {se}");
             }
-            return Err(AuthError::Internal(e.into()));
+            return Err(e);
         }
     };
 
@@ -339,16 +351,7 @@ pub async fn update_file(
         check_file_permission(&state.db, file.id, file.author_id, current_user.id, true).await?;
     }
 
-    if let Some(Some(fid)) = payload.folder_id {
-        // 移動先はファイル所有者のフォルダーとして検証する
-        folders::Entity::find_by_id(fid)
-            .filter(folders::Column::OwnerId.eq(file.author_id))
-            .filter(folders::Column::IsDeleted.eq(false))
-            .one(&state.db)
-            .await?
-            .ok_or(AuthError::NotFound)?;
-    }
-
+    let author_id = file.author_id;
     let now = Utc::now().fixed_offset();
     let mut active: files::ActiveModel = file.into();
 
@@ -364,7 +367,23 @@ pub async fn update_file(
     }
     active.updated_at = Set(Some(now));
 
-    let updated = active.update(&state.db).await?;
+    // トランザクション内でフォルダーをロックしてから UPDATE することで
+    // 検証後のフォルダー論理削除との競合を防ぐ
+    let txn = state.db.begin().await?;
+    if let Some(Some(fid)) = payload.folder_id {
+        // 移動先はファイル所有者のフォルダーとして検証する
+        folders::Entity::find_by_id(fid)
+            .filter(folders::Column::OwnerId.eq(author_id))
+            .filter(folders::Column::IsDeleted.eq(false))
+            .lock(LockType::Update)
+            .one(&txn)
+            .await?
+            .ok_or(AuthError::NotFound)?;
+    }
+    let updated = match active.update(&txn).await {
+        Ok(m) => { txn.commit().await?; m }
+        Err(e) => { let _ = txn.rollback().await; return Err(e.into()); }
+    };
     Ok(Json(file_to_response(updated)))
 }
 
