@@ -1,4 +1,4 @@
-use sea_orm::{EntityTrait, ColumnTrait, QueryFilter,ModelTrait};
+use sea_orm::{EntityTrait, ColumnTrait, QueryFilter, ModelTrait};
 use crate::extractors::CurrentUser;
 use crate::payloads::files::FileResponse;
 use crate::AppState;
@@ -10,7 +10,7 @@ use crate::entities::files;
 
 #[utoipa::path(
     get,
-    path = "/",
+    path = "/mine",
     responses(
         (status = 200, description = "successful", body = [FileResponse]),
         (status = 500, description = "Internal server error"),
@@ -21,7 +21,6 @@ pub async fn get_files(
     current_user: CurrentUser
 ) -> Result<Json<Vec<FileResponse>>, StatusCode> {
 
-    // files::Entity と書くことで、上の files.rs の中身を直接使えます
     let db_files = files::Entity::find()
         .filter(files::Column::AuthorId.eq(current_user.id.clone()))
         .all(&state.db)
@@ -29,31 +28,26 @@ pub async fn get_files(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let response: Vec<FileResponse> = db_files
-    .into_iter()
-    .map(|file| FileResponse {
-        id: file.id.to_string(),
-        name: file.filename,
-        size: file.filesize,
-        updated_at: file.updated_at
-        .map(|dt|dt.to_string())
-        .unwrap_or_default(),
-        sender_id: file.author_id.to_string(),
-        
-    })
-    .collect();
+        .into_iter()
+        .map(|file| FileResponse {
+            id: file.id.to_string(),
+            name: file.filename,
+            size: file.filesize,
+            updated_at: file.updated_at
+                .map(|dt| dt.to_string())
+                .unwrap_or_default(),
+            sender_id: file.author_id.to_string(),
+        })
+        .collect();
 
     Ok(Json(response))
 }
 
-
-
-
-//ファイル削除
 #[utoipa::path(
-    delete,                      
-    path = "/{id}",   
+    delete,
+    path = "/{id}",
     params(
-        ("id" = String, Path, description = "削除するファイルのUUID") 
+        ("id" = String, Path, description = "削除するファイルのUUID")
     ),
     responses(
         (status = 204, description = "正常に削除されました（返却データなし）"),
@@ -67,28 +61,22 @@ pub async fn delete_file(
     current_user: CurrentUser,
     Path(file_id): Path<String>,
 ) -> Result<StatusCode, StatusCode> {
-
-    //file_idをuuidに変換する
     let uuid_id = sea_orm::prelude::Uuid::parse_str(&file_id)
         .map_err(|_| StatusCode::BAD_REQUEST)?;
 
-    // 指定されたファイルがDBに本当にあるか探す
-    let file_model = crate::entities::files::Entity::find_by_id(uuid_id)
+    let file_model = files::Entity::find_by_id(uuid_id)
         .one(&state.db)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
 
-    // 他人のファイルじゃないかチェックする
     if file_model.author_id != current_user.id {
         return Err(StatusCode::FORBIDDEN);
     }
 
-    //  安全が確認できたのでDBから削除する
     file_model.delete(&state.db)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    // 204を返す
     Ok(StatusCode::NO_CONTENT)
 }
