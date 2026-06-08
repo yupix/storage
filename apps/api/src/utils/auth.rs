@@ -26,6 +26,12 @@ pub enum AuthError {
     Unauthorized,
     #[error("forbidden")]
     Forbidden,
+    #[error("not found")]
+    NotFound,
+    #[error("invalid input: {0}")]
+    InvalidInput(String),
+    #[error("conflict: {0}")]
+    Conflict(String),
 }
 
 impl From<sea_orm::DbErr> for AuthError {
@@ -59,6 +65,23 @@ impl IntoResponse for AuthError {
                 Json(ServerError {
                     message: "forbidden".into(),
                 }),
+            )
+                .into_response(),
+            AuthError::NotFound => (
+                StatusCode::NOT_FOUND,
+                Json(ServerError {
+                    message: "not-found".into(),
+                }),
+            )
+                .into_response(),
+            AuthError::InvalidInput(message) => (
+                StatusCode::BAD_REQUEST,
+                Json(ServerError { message }),
+            )
+                .into_response(),
+            AuthError::Conflict(message) => (
+                StatusCode::CONFLICT,
+                Json(ServerError { message }),
             )
                 .into_response(),
         }
