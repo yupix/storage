@@ -73,7 +73,7 @@ export default function ThemeToggle() {
       onClick={toggleMode}
       aria-label={label}
       title={label}
-      className=" transition hover:-translate-y-0.5"
+      className="mx-5 bg-blue-500 px-5 py-2.5 rounded-lg text-white font-semibold transition hover:bg-blue-600 cursor-pointer"
     >
       {mode === "auto" ? "テーマ" : mode === "dark" ? "Dark" : "Light"}
     </button>

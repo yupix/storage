@@ -15,18 +15,18 @@ export default function Header() {
           type="text"
           value="検索"
           name="topSearch"
-          className="justify-center m-auto w-96 h-8 p-4 bg-white rounded-full border-2 border-gray-300"
+          className="justify-center m-auto w-128 h-10 p-4 bg-white rounded-lg border-1 border-gray-300"
         />
 
         <div className="header-buttons">
           <a href=""
-          className="bg-blue-500 mx-5 px-5 py-2 rounded-lg text-white font-bold">
+          className="bg-blue-500 mr-5 px-5 py-3 rounded-lg text-white font-semibold duration-300 hover:bg-blue-600">
             合言葉受信
           </a>
 
           <a
             href=""
-            className="bg-blue-500 mx-10 px-5 py-2 rounded-lg text-white font-bold"
+            className="bg-blue-500 mx-5 px-5 py-3 rounded-lg text-white font-semibold duration-300 hover:bg-blue-600"
             target="_blank"
             rel="noreferrer"
           >
