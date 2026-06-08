@@ -8,9 +8,9 @@ use chrono::Utc;
 use sea_orm::prelude::Uuid;
 use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, ColumnTrait, ConnectionTrait, DatabaseBackend, EntityTrait,
-    FromQueryResult, PaginatorTrait, QueryFilter, QueryOrder, Statement, TransactionTrait,
+    FromQueryResult, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, Statement, TransactionTrait,
 };
-use sea_orm::sea_query::Expr;
+use sea_orm::sea_query::{Expr, LockType};
 use serde::Deserialize;
 use validator::Validate;
 
@@ -73,8 +73,8 @@ async fn load_owner(db: &sea_orm::DatabaseConnection, user_id: Uuid) -> Result<u
         .ok_or(AuthError::Unauthorized)
 }
 
-async fn verify_parent_folder(
-    db: &sea_orm::DatabaseConnection,
+async fn verify_parent_folder<C: ConnectionTrait>(
+    db: &C,
     parent_id: Uuid,
     user_id: Uuid,
 ) -> Result<(), AuthError> {
@@ -114,12 +114,12 @@ async fn collect_descendant_ids<C: ConnectionTrait>(
 ) -> Result<Vec<Uuid>, AuthError> {
     let sql = r#"
         WITH RECURSIVE descendants AS (
-            SELECT id, 1 AS depth FROM folders
+            SELECT id FROM folders
             WHERE folder_id = $1 AND owner_id = $2 AND is_deleted = false
             UNION ALL
-            SELECT f.id, d.depth + 1 FROM folders f
+            SELECT f.id FROM folders f
             INNER JOIN descendants d ON f.folder_id = d.id
-            WHERE f.owner_id = $2 AND f.is_deleted = false AND d.depth < 100
+            WHERE f.owner_id = $2 AND f.is_deleted = false
         )
         SELECT id FROM descendants
     "#;
@@ -205,7 +205,8 @@ pub async fn list_folders(
     let mut selector = folders::Entity::find()
         .filter(folders::Column::OwnerId.eq(auth.user_id))
         .filter(folders::Column::IsDeleted.eq(false))
-        .order_by_asc(folders::Column::Name);
+        .order_by_asc(folders::Column::Name)
+        .order_by_asc(folders::Column::Id);
 
     selector = match query.folder_id {
         Some(parent_id) => selector.filter(folders::Column::FolderId.eq(parent_id)),
@@ -245,14 +246,21 @@ pub async fn create_folder(
     Valid(Json(payload)): Valid<Json<CreateFolderRequest>>,
 ) -> Result<(StatusCode, Json<FolderResponse>), AuthError> {
     let name = trim_name(&payload.name)?;
-
-    if let Some(parent_id) = payload.folder_id {
-        verify_parent_folder(&state.db, parent_id, auth.user_id).await?;
-    }
-
     let owner = load_owner(&state.db, auth.user_id).await?;
     let now = Utc::now().fixed_offset();
     let folder_id = Uuid::new_v4();
+    let txn = state.db.begin().await?;
+
+    if let Some(parent_id) = payload.folder_id {
+        // Lock parent row to prevent concurrent soft-delete between validation and INSERT
+        folders::Entity::find_by_id(parent_id)
+            .filter(folders::Column::OwnerId.eq(auth.user_id))
+            .filter(folders::Column::IsDeleted.eq(false))
+            .lock(LockType::Update)
+            .one(&txn)
+            .await?
+            .ok_or(AuthError::NotFound)?;
+    }
 
     let folder = folders::ActiveModel {
         id: Set(folder_id),
@@ -265,7 +273,8 @@ pub async fn create_folder(
         updated_at: Set(Some(now)),
     };
 
-    let model = folder.insert(&state.db).await?;
+    let model = folder.insert(&txn).await?;
+    txn.commit().await?;
 
     Ok((
         StatusCode::CREATED,
@@ -316,15 +325,24 @@ pub async fn update_folder(
         ));
     }
 
-    let mut folder = get_owned_folder(&state.db, id, auth.user_id).await?;
-    let owner = load_owner(&state.db, auth.user_id).await?;
-    let now = Utc::now().fixed_offset();
-
     let new_name = if let Some(ref name) = payload.name {
         Some(trim_name(name)?)
     } else {
         None
     };
+
+    let owner = load_owner(&state.db, auth.user_id).await?;
+    let now = Utc::now().fixed_offset();
+    let txn = state.db.begin().await?;
+
+    // Lock target row first to serialize concurrent moves of the same folder
+    let folder = folders::Entity::find_by_id(id)
+        .filter(folders::Column::OwnerId.eq(auth.user_id))
+        .filter(folders::Column::IsDeleted.eq(false))
+        .lock(LockType::Update)
+        .one(&txn)
+        .await?
+        .ok_or(AuthError::NotFound)?;
 
     let new_parent = match payload.folder_id {
         None => None,
@@ -333,8 +351,16 @@ pub async fn update_folder(
             if parent_id == id {
                 return Err(AuthError::InvalidInput("circular folder reference".into()));
             }
-            verify_parent_folder(&state.db, parent_id, auth.user_id).await?;
-            let descendants = collect_descendant_ids(&state.db, id, auth.user_id).await?;
+            // Lock new parent row too; concurrent A→B / B→A moves will deadlock here,
+            // causing PostgreSQL to abort one of them and prevent cycle creation.
+            folders::Entity::find_by_id(parent_id)
+                .filter(folders::Column::OwnerId.eq(auth.user_id))
+                .filter(folders::Column::IsDeleted.eq(false))
+                .lock(LockType::Update)
+                .one(&txn)
+                .await?
+                .ok_or(AuthError::NotFound)?;
+            let descendants = collect_descendant_ids(&txn, id, auth.user_id).await?;
             if descendants.contains(&parent_id) {
                 return Err(AuthError::InvalidInput("circular folder reference".into()));
             }
@@ -350,7 +376,8 @@ pub async fn update_folder(
         am.folder_id = Set(parent);
     }
     am.updated_at = Set(Some(now));
-    folder = am.update(&state.db).await?;
+    let folder = am.update(&txn).await?;
+    txn.commit().await?;
 
     Ok(Json(FolderResponse::from_models(&folder, &owner)))
 }

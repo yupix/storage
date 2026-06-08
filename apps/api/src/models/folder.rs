@@ -11,9 +11,9 @@ pub struct FolderResponse {
     pub name: String,
     pub folder_id: Option<Uuid>,
     pub owner: OwnerInfo,
-    #[schema(value_type = String, format = DateTime)]
+    #[schema(value_type = String, format = "date-time")]
     pub created_at: DateTimeWithTimeZone,
-    #[schema(value_type = String, format = DateTime)]
+    #[schema(value_type = String, format = "date-time")]
     pub updated_at: DateTimeWithTimeZone,
 }
 
