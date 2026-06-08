@@ -265,7 +265,13 @@ pub async fn upload_file(
     .await
     {
         Ok(m) => {
-            txn.commit().await?;
+            if let Err(e) = txn.commit().await {
+                // commit 失敗時もアップロード済みオブジェクトを補償削除
+                if let Err(se) = state.storage.delete(&storage_key).await {
+                    tracing::warn!("補償削除失敗 key={storage_key}: {se}");
+                }
+                return Err(e.into());
+            }
             m
         }
         Err(e) => {
@@ -554,28 +560,30 @@ pub async fn empty_trash(
         .all(&txn)
         .await?;
 
-    let mut deleted_ids: Vec<Uuid> = Vec::new();
-    let mut failed_ids: Vec<String> = Vec::new();
+    // DB 削除をストレージ削除より先にコミットする。
+    // ストレージ削除後に DB がロールバックされると存在しないオブジェクトを
+    // 参照する行が残るため、順序を DB → ストレージとする。
+    // ストレージ削除失敗は孤立オブジェクトとして残るがオペレーターが回収できる。
+    if !trashed.is_empty() {
+        let ids: Vec<Uuid> = trashed.iter().map(|f| f.id).collect();
+        files::Entity::delete_many()
+            .filter(files::Column::Id.is_in(ids))
+            .exec(&txn)
+            .await?;
+    }
+    txn.commit().await?;
 
+    let mut deleted_strs: Vec<String> = Vec::new();
+    let mut failed_ids: Vec<String> = Vec::new();
     for file in &trashed {
         match state.storage.delete(&file.url).await {
-            Ok(()) => deleted_ids.push(file.id),
+            Ok(()) => deleted_strs.push(file.id.to_string()),
             Err(e) => {
                 tracing::warn!("ストレージ削除失敗 key={}: {e}", file.url);
                 failed_ids.push(file.id.to_string());
             }
         }
     }
-
-    let deleted_strs: Vec<String> = deleted_ids.iter().map(|id| id.to_string()).collect();
-
-    if !deleted_ids.is_empty() {
-        files::Entity::delete_many()
-            .filter(files::Column::Id.is_in(deleted_ids))
-            .exec(&txn)
-            .await?;
-    }
-    txn.commit().await?;
 
     if failed_ids.is_empty() {
         Ok(StatusCode::NO_CONTENT.into_response())
