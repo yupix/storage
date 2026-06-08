@@ -1,31 +1,62 @@
-use sea_orm::{EntityTrait, ColumnTrait, QueryFilter, ModelTrait};
-use crate::extractors::CurrentUser;
-use crate::payloads::files::FileResponse;
-use crate::AppState;
 use axum::{
-    Json, extract::{State, Path},
+    Json, 
+    extract::{State, Path, Query},
     http::StatusCode,
 };
+use sea_orm::{Paginator, PaginatorTrait, sqlx::query_builder};
+use sea_orm::{EntityTrait, ColumnTrait, QueryFilter, ModelTrait};
+use crate::extractors::CurrentUser;
+use crate::payloads::files::{FileListQuery, FileResponse, PaginatedFileResponse};
+use crate::AppState;
 use crate::entities::files;
 
 #[utoipa::path(
     get,
     path = "/mine",
     responses(
-        (status = 200, description = "successful", body = [FileResponse]),
+        (status = 200, description = "successful", body = PaginatedFileResponse),
         (status = 500, description = "Internal server error"),
     )
 )]
 pub async fn get_files(
     State(state): State<AppState>,
-    current_user: CurrentUser
-) -> Result<Json<Vec<FileResponse>>, StatusCode> {
+    current_user: CurrentUser,
+    Query(query): Query<FileListQuery>
+) -> Result<Json<PaginatedFileResponse>, StatusCode> {
 
-    let db_files = files::Entity::find()
-        .filter(files::Column::AuthorId.eq(current_user.id.clone()))
-        .all(&state.db)
+    //page番号の決定(省略時は1)
+    let page = query.page.unwrap_or(1);
+
+    //件数の決定(50~100の範囲)
+    let mut limit = query.limit.unwrap_or(50);
+    if limit > 100 {
+        limit = 100;
+    }
+
+    let mut query_builder = files::Entity::find()
+    .filter(files::Column::AuthorId.eq(current_user.id.clone()))
+    .filter(files::Column::IsDeleted.eq(false));
+
+    if let Some(f_id) = query.folder_id {
+        //指定フォルダー内のみ
+        query_builder = query_builder.filter(files::Column::FolderId.eq(f_id));
+    } else {
+        //省略時はルート
+        query_builder = query_builder.filter(files::Column::FolderId.is_null())
+    }
+
+    // ページネーターの作成
+    let pagenator = query_builder.paginate(&state.db, limit);
+    
+    // 総件数の取得
+    let total_items = pagenator.num_items().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    
+    // 指定ページのデータ取得
+    let db_files = pagenator
+        .fetch_page(page - 1)        
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    // 🛠️ 【ここまで差し替え】
 
     let response: Vec<FileResponse> = db_files
         .into_iter()
@@ -40,7 +71,15 @@ pub async fn get_files(
         })
         .collect();
 
-    Ok(Json(response))
+    // 🛠️ 【ここも差し替え！】古い Ok(Json(response)) から、大きな箱に詰め替える処理に変更
+    let final_response = PaginatedFileResponse {
+        files: response,
+        total: total_items,
+        page,
+        limit,
+    };
+    
+    Ok(Json(final_response))
 }
 
 #[utoipa::path(
