@@ -49,6 +49,8 @@ pub async fn delete(
     active.deleted_at = Set(Some(now));
     active.update(&state.db).await?;
 
+    session.remove("user_id");
+
     Ok(Json("Delete success".to_string()))
 }
 
