@@ -182,19 +182,30 @@ impl StorageDriver for Storage {
 
 ```env
 # バックエンドを明示指定（省略時は自動検出）
-STORAGE_DRIVER=s3      # "s3" | "local"
+# STORAGE_DRIVER=s3      # "s3" | "local"
 
-# S3 バックエンド設定（現行の RUSTFS_* をそのまま維持し後方互換を保つ）
-RUSTFS_ENDPOINT=http://localhost:9000
-RUSTFS_ACCESS_KEY=minioadmin
-RUSTFS_SECRET_KEY=minioadmin
-RUSTFS_BUCKET=hyperdrive
-RUSTFS_FORCE_PATH_STYLE=true
+# S3 バックエンド設定（すべて設定されている場合に自動選択）
+# RUSTFS_ENDPOINT=http://localhost:9000
+# RUSTFS_ACCESS_KEY=minioadmin
+# RUSTFS_SECRET_KEY=minioadmin
+# RUSTFS_BUCKET=hyperdrive
+# RUSTFS_FORCE_PATH_STYLE=true
 
 # ローカルバックエンド設定
 LOCAL_STORAGE_PATH=./data/uploads
 LOCAL_BASE_URL=http://localhost:3400
-LOCAL_SIGNED_URL_SECRET=<32バイト以上のランダム文字列>
+LOCAL_SIGNED_URL_SECRET=<32文字以上のランダム文字列>
+```
+
+#### ローカル開発用 `.env`（S3 なし）
+
+```env
+DATABASE_URL=postgres://coder@localhost/coder?host=/var/run/postgresql
+REDIS_URL=redis://localhost:6379
+
+LOCAL_STORAGE_PATH=./data/uploads
+LOCAL_BASE_URL=http://localhost:3400
+LOCAL_SIGNED_URL_SECRET=local-dev-secret-change-this-in-production
 ```
 
 ### 自動検出ロジック
@@ -233,7 +244,7 @@ pub struct Settings {
     pub rustfs_force_path_style: bool,
 
     // ローカル設定
-    #[serde(default = "default_local_path")]
+    #[serde(default = "default_local_storage_path")]
     pub local_storage_path: String,
     pub local_base_url: Option<String>,
     pub local_signed_url_secret: Option<String>,
@@ -302,15 +313,13 @@ let url = state.storage.get_download_url(&file.url, Duration::from_secs(3600)).a
 
 ## 移行計画
 
-| フェーズ | 内容 |
-|----------|------|
-| 1 | `StorageDriver` トレイトを定義し `S3Driver` を実装（機能変更なし、リファクタリングのみ） |
-| 2 | `LocalDriver` を実装・ローカルダウンロードエンドポイントを追加 |
-| 3 | 自動検出ロジックを実装・`Settings` を更新 |
-| 4 | `upload_file` / `get_file` ハンドラーの呼び出し箇所を新 API に変更 |
-| 5 | 既存のテストが通ることを確認・E2E テストを追加 |
-
-フェーズ 1 完了時点でリグレッションなし（S3 のみを使う既存環境は影響ゼロ）。
+| フェーズ | 内容 | 状態 |
+|----------|------|------|
+| 1 | `StorageDriver` トレイトを定義し `S3Driver` を実装（リファクタリングのみ） | ✅ 完了 |
+| 2 | `LocalDriver` を実装・ローカルダウンロードエンドポイントを追加 | ✅ 完了 |
+| 3 | 自動検出ロジックを実装・`Settings` を更新 | ✅ 完了 |
+| 4 | `upload_file` / `get_file` ハンドラーの呼び出し箇所を新 API に変更 | ✅ 完了 |
+| 5 | 既存のテストが通ることを確認・E2E テストを追加 | 未着手 |
 
 ---
 
