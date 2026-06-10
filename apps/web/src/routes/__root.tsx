@@ -18,7 +18,12 @@ export const Route = createRootRoute({
     links: [{ rel: 'stylesheet', href: appCss }],
   }),
   beforeLoad: async ({ location }) => {
-    const user = await getUser()
+    let user = null
+    try {
+      user = await getUser()
+    } catch {
+      // バックエンドに接続できない場合は未認証として扱う
+    }
     if (!user && location.pathname !== '/login') {
       throw redirect({ to: '/login' })
     }
