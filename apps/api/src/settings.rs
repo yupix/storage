@@ -7,20 +7,33 @@ pub struct Settings {
     pub redis_url: String,
     #[serde(default = "default_allow_origin")]
     pub allow_origin: String,
-    pub rustfs_endpoint: String,
-    pub rustfs_access_key: String,
-    pub rustfs_secret_key: String,
-    pub rustfs_bucket: String,
-    #[serde(default = "default_rustfs_force_path_style")]
+
+    #[serde(default)]
+    pub storage_driver: Option<String>,
+
+    pub rustfs_endpoint: Option<String>,
+    pub rustfs_access_key: Option<String>,
+    pub rustfs_secret_key: Option<String>,
+    pub rustfs_bucket: Option<String>,
+    #[serde(default = "default_true")]
     pub rustfs_force_path_style: bool,
+
+    #[serde(default = "default_local_storage_path")]
+    pub local_storage_path: String,
+    pub local_base_url: Option<String>,
+    pub local_signed_url_secret: Option<String>,
 }
 
-fn default_rustfs_force_path_style() -> bool {
+fn default_true() -> bool {
     true
 }
 
 fn default_allow_origin() -> String {
     "http://localhost:3000".to_string()
+}
+
+fn default_local_storage_path() -> String {
+    "./data/uploads".to_string()
 }
 
 pub fn load_settings() -> Result<Settings, anyhow::Error> {
