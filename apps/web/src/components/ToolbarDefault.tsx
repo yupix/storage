@@ -68,13 +68,24 @@ export const ToolbarSelected = () => {
   )
 }
 
-export default function ToolbarDefault() {
+interface ToolbarDefaultProps {
+  onUpload?: () => void
+  uploading?: boolean
+}
+
+export default function ToolbarDefault({ onUpload, uploading }: ToolbarDefaultProps) {
   return (
     <div className="bg-card text-card-foreground h-12 mx-1.5 my-2 px-3 rounded-lg flex items-center gap-1 ring-1 ring-foreground/10 overflow-x-auto">
       <Button variant="ghost" size="icon-sm" title="フォルダー作成">
         <Folder />
       </Button>
-      <Button variant="ghost" size="icon-sm" title="アップロード">
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        title="アップロード"
+        onClick={onUpload}
+        disabled={uploading}
+      >
         <CloudUpload />
       </Button>
       <Button variant="ghost" size="icon-sm" title="共有">

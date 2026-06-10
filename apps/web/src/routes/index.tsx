@@ -1,16 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import ToolbarDefault from '../components/ToolbarDefault'
 import MainContentsDefault from '#/components/MainContents'
 import { Home, Folder, Star, Trash2, Clock, Menu } from 'lucide-react'
 import { Button } from '../components/ui/button'
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from '../components/ui/sheet'
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '../components/ui/sheet'
+import { fetchMyFiles, uploadFile } from '../lib/files'
+import type { FileItem } from '../lib/files'
 
 export const Route = createFileRoute('/')({ component: App })
 
@@ -43,9 +39,68 @@ function SidebarNav({ onItemClick }: { onItemClick?: () => void }) {
 
 function App() {
   const [sheetOpen, setSheetOpen] = useState(false)
+  const [files, setFiles] = useState<FileItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const refreshFiles = useCallback(async () => {
+    try {
+      const data = await fetchMyFiles()
+      setFiles(data.files)
+    } catch {
+      // エラー時はファイル一覧を空のままにする
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    refreshFiles()
+  }, [refreshFiles])
+
+  const handleUploadClick = () => {
+    setUploadError(null)
+    fileInputRef.current?.click()
+  }
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = e.target.files
+    if (!selected || selected.length === 0) return
+    e.target.value = ''
+
+    setUploading(true)
+    setUploadError(null)
+
+    const errors: string[] = []
+    for (const file of Array.from(selected)) {
+      try {
+        await uploadFile(file)
+      } catch (err) {
+        errors.push(`${file.name}: ${err instanceof Error ? err.message : 'エラー'}`)
+      }
+    }
+
+    if (errors.length > 0) {
+      setUploadError(errors.join('\n'))
+    }
+
+    setUploading(false)
+    await refreshFiles()
+  }
 
   return (
     <main className="px-2 sm:px-4 pb-8 bg-background min-h-[calc(100vh-4rem)]">
+      {/* hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={handleFileSelect}
+      />
+
       <div className="flex gap-2 pt-2">
         {/* Desktop sidebar */}
         <aside className="hidden md:block w-52 shrink-0">
@@ -55,7 +110,6 @@ function App() {
         </aside>
 
         <div className="flex-1 min-w-0 flex flex-col gap-0">
-          {/* Mobile: menu button + toolbar in one row */}
           <div className="flex items-center gap-1">
             <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
               <SheetTrigger asChild>
@@ -75,12 +129,28 @@ function App() {
             </Sheet>
 
             <div className="flex-1 min-w-0">
-              <ToolbarDefault />
+              <ToolbarDefault onUpload={handleUploadClick} uploading={uploading} />
             </div>
           </div>
 
+          {uploadError && (
+            <p className="mx-1.5 mb-2 text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2 whitespace-pre-line">
+              {uploadError}
+            </p>
+          )}
+
+          {uploading && (
+            <p className="mx-1.5 mb-2 text-sm text-muted-foreground px-3 animate-pulse">
+              アップロード中...
+            </p>
+          )}
+
           <div className="bg-card text-card-foreground rounded-xl ring-1 ring-foreground/10 mx-1.5 min-h-96">
-            <MainContentsDefault />
+            <MainContentsDefault
+              files={files}
+              loading={loading}
+              onUpload={handleUploadClick}
+            />
           </div>
         </div>
       </div>
