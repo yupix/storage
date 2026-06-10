@@ -7,10 +7,10 @@ export const Route = createFileRoute('/')({ component: App })
 
 function App() {
   return (
- <main className="pt-0 px-4 pb-8 bg-[#ededed]">
+ <main className="pt-0 px-4 pb-8 bg-background">
       <div className="flex h-[70vh] min-h-full">
         <div className="min-w-[20%]">
-          <div className="bg-white rounded-lg h-full m-[0.5rem] p-4">
+          <div className="bg-card text-card-foreground rounded-lg h-full m-[0.5rem] p-4">
             <h1>directory</h1>
             <ul>
               <li>ホーム</li>
