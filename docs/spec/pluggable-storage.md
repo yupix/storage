@@ -111,7 +111,12 @@ impl StorageDriver for LocalDriver {
         if let Some(parent) = dest.parent() {
             tokio::fs::create_dir_all(parent).await?;
         }
-        tokio::fs::copy(path, &dest).await?;
+        // 同一ファイルシステムなら rename（移動）で済ませてディスク I/O を最小化。
+        // クロスデバイスなど rename が失敗した場合のみ copy + 元ファイル削除にフォールバック。
+        if tokio::fs::rename(path, &dest).await.is_err() {
+            tokio::fs::copy(path, &dest).await?;
+            tokio::fs::remove_file(path).await.ok();
+        }
         Ok(())
     }
 
