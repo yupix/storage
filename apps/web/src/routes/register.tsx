@@ -41,7 +41,7 @@ function RegisterPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#ededed]">
       <div className="w-full max-w-sm">
-        <div className="bg-white rounded-xl shadow-sm ring-1 ring-foreground/10 p-8">
+        <div className="bg-card text-card-foreground rounded-xl shadow-sm ring-1 ring-foreground/10 p-8">
           <div className="mb-8 text-center">
             <h1 className="text-2xl font-bold tracking-tight">HyperDrive</h1>
             <p className="mt-2 text-sm text-muted-foreground">
