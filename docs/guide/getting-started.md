@@ -34,7 +34,7 @@ Coder 環境には以下がプリインストールされている。
 | PostgreSQL | DB（ソケット経由でローカル接続） |
 | Valkey | セッション管理（Redis 互換） |
 
-RustFS・Qdrant は別途起動が必要（後述）。
+S3互換ストレージ（MinIO / RustFS 等）・Qdrant は別途起動が必要（後述）。S3なしの場合はローカルストレージが自動使用される。
 
 ---
 
@@ -53,11 +53,19 @@ Coder 環境でのデフォルト値は以下の通り。
 DATABASE_URL=postgres://coder@localhost/coder?host=/var/run/postgresql
 REDIS_URL=redis://localhost:6379
 
-RUSTFS_ENDPOINT=http://localhost:9000
-RUSTFS_ACCESS_KEY=minioadmin
-RUSTFS_SECRET_KEY=minioadmin
-RUSTFS_BUCKET=hyperdrive
-RUSTFS_FORCE_PATH_STYLE=true
+LOCAL_STORAGE_PATH=./data/uploads
+LOCAL_BASE_URL=http://localhost:3400
+LOCAL_SIGNED_URL_SECRET=local-dev-secret-change-this-in-production
+```
+
+S3互換ストレージ（MinIO / RustFS 等）を使う場合は代わりに以下を設定する。
+
+```env
+S3_ENDPOINT=http://localhost:9000
+S3_ACCESS_KEY=minioadmin
+S3_SECRET_KEY=minioadmin
+S3_BUCKET=hyperdrive
+S3_FORCE_PATH_STYLE=true
 ```
 
 ### 2. フロントエンドの環境変数を設定
@@ -161,7 +169,7 @@ pnpm generate:api
 | API ドキュメント (Scalar) | http://localhost:8080/scalar |
 | PostgreSQL | localhost:5432 |
 | Valkey | localhost:6379 |
-| RustFS | http://localhost:9000 |
+| S3互換ストレージ（MinIO等） | http://localhost:9000 |
 | Qdrant | http://localhost:6333 |
 
 ---

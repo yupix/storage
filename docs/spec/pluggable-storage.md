@@ -185,11 +185,11 @@ impl StorageDriver for Storage {
 # STORAGE_DRIVER=s3      # "s3" | "local"
 
 # S3 バックエンド設定（すべて設定されている場合に自動選択）
-# RUSTFS_ENDPOINT=http://localhost:9000
-# RUSTFS_ACCESS_KEY=minioadmin
-# RUSTFS_SECRET_KEY=minioadmin
-# RUSTFS_BUCKET=hyperdrive
-# RUSTFS_FORCE_PATH_STYLE=true
+# S3_ENDPOINT=http://localhost:9000
+# S3_ACCESS_KEY=minioadmin
+# S3_SECRET_KEY=minioadmin
+# S3_BUCKET=hyperdrive
+# S3_FORCE_PATH_STYLE=true
 
 # ローカルバックエンド設定
 LOCAL_STORAGE_PATH=./data/uploads
@@ -215,7 +215,7 @@ STORAGE_DRIVER が設定されている
   → 指定されたバックエンドを使用（不正値はエラー）
 
 STORAGE_DRIVER が未設定
-  → RUSTFS_ENDPOINT, RUSTFS_ACCESS_KEY, RUSTFS_SECRET_KEY, RUSTFS_BUCKET が
+  → S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET が
      すべて設定されている → S3 バックエンド
   → いずれか欠けている → ローカルバックエンド（警告ログを出力）
 ```
@@ -236,12 +236,12 @@ pub struct Settings {
     pub storage_driver: Option<String>,   // "s3" | "local" | None（自動検出）
 
     // S3 設定（すべて Optional に）
-    pub rustfs_endpoint: Option<String>,
-    pub rustfs_access_key: Option<String>,
-    pub rustfs_secret_key: Option<String>,
-    pub rustfs_bucket: Option<String>,
+    pub s3_endpoint: Option<String>,
+    pub s3_access_key: Option<String>,
+    pub s3_secret_key: Option<String>,
+    pub s3_bucket: Option<String>,
     #[serde(default = "default_true")]
-    pub rustfs_force_path_style: bool,
+    pub s3_force_path_style: bool,
 
     // ローカル設定
     #[serde(default = "default_local_storage_path")]

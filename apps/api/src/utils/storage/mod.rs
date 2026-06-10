@@ -47,10 +47,10 @@ pub fn build_storage(settings: &Settings) -> Result<Storage> {
         Some("local") => build_local(settings),
         Some(other) => Err(anyhow::anyhow!("不明なストレージドライバー: {other}")),
         None => {
-            let has_s3 = settings.rustfs_endpoint.is_some()
-                && settings.rustfs_access_key.is_some()
-                && settings.rustfs_secret_key.is_some()
-                && settings.rustfs_bucket.is_some();
+            let has_s3 = settings.s3_endpoint.is_some()
+                && settings.s3_access_key.is_some()
+                && settings.s3_secret_key.is_some()
+                && settings.s3_bucket.is_some();
             if has_s3 {
                 build_s3(settings)
             } else {
@@ -66,27 +66,27 @@ pub fn build_storage(settings: &Settings) -> Result<Storage> {
 
 fn build_s3(settings: &Settings) -> Result<Storage> {
     let endpoint = settings
-        .rustfs_endpoint
+        .s3_endpoint
         .as_deref()
-        .ok_or_else(|| anyhow::anyhow!("RUSTFS_ENDPOINT が未設定です"))?;
+        .ok_or_else(|| anyhow::anyhow!("S3_ENDPOINT が未設定です"))?;
     let access_key = settings
-        .rustfs_access_key
+        .s3_access_key
         .as_deref()
-        .ok_or_else(|| anyhow::anyhow!("RUSTFS_ACCESS_KEY が未設定です"))?;
+        .ok_or_else(|| anyhow::anyhow!("S3_ACCESS_KEY が未設定です"))?;
     let secret_key = settings
-        .rustfs_secret_key
+        .s3_secret_key
         .as_deref()
-        .ok_or_else(|| anyhow::anyhow!("RUSTFS_SECRET_KEY が未設定です"))?;
+        .ok_or_else(|| anyhow::anyhow!("S3_SECRET_KEY が未設定です"))?;
     let bucket = settings
-        .rustfs_bucket
+        .s3_bucket
         .as_deref()
-        .ok_or_else(|| anyhow::anyhow!("RUSTFS_BUCKET が未設定です"))?;
+        .ok_or_else(|| anyhow::anyhow!("S3_BUCKET が未設定です"))?;
     Ok(Storage::S3(S3Driver::new(
         endpoint,
         access_key,
         secret_key,
         bucket,
-        settings.rustfs_force_path_style,
+        settings.s3_force_path_style,
     )))
 }
 

@@ -24,7 +24,7 @@ impl S3Driver {
         bucket: &str,
         force_path_style: bool,
     ) -> Self {
-        let credentials = Credentials::new(access_key, secret_key, None, None, "rustfs");
+        let credentials = Credentials::new(access_key, secret_key, None, None, "s3");
         let config = Builder::new()
             .endpoint_url(endpoint)
             .credentials_provider(credentials)

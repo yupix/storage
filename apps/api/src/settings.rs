@@ -11,12 +11,12 @@ pub struct Settings {
     #[serde(default)]
     pub storage_driver: Option<String>,
 
-    pub rustfs_endpoint: Option<String>,
-    pub rustfs_access_key: Option<String>,
-    pub rustfs_secret_key: Option<String>,
-    pub rustfs_bucket: Option<String>,
+    pub s3_endpoint: Option<String>,
+    pub s3_access_key: Option<String>,
+    pub s3_secret_key: Option<String>,
+    pub s3_bucket: Option<String>,
     #[serde(default = "default_true")]
-    pub rustfs_force_path_style: bool,
+    pub s3_force_path_style: bool,
 
     #[serde(default = "default_local_storage_path")]
     pub local_storage_path: String,

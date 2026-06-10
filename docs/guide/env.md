@@ -9,13 +9,19 @@
 |---|---|---|
 | `DATABASE_URL` | Yes | PostgreSQL接続文字列 |
 | `REDIS_URL` | Yes | RedisまたはValkeyの接続文字列 |
-| `RUSTFS_ENDPOINT` | Yes | RustFSのS3互換エンドポイント |
-| `RUSTFS_ACCESS_KEY` | Yes | RustFSアクセスキー |
-| `RUSTFS_SECRET_KEY` | Yes | RustFSシークレットキー |
-| `RUSTFS_BUCKET` | Yes | 使用するバケット名 |
-| `RUSTFS_FORCE_PATH_STYLE` | No | path-styleアクセスを使う。既定値は`true` |
+| `STORAGE_DRIVER` | No | ストレージバックエンドを明示指定。`s3` または `local`。省略時は自動検出 |
+| `S3_ENDPOINT` | No* | S3互換エンドポイントURL |
+| `S3_ACCESS_KEY` | No* | S3アクセスキー |
+| `S3_SECRET_KEY` | No* | S3シークレットキー |
+| `S3_BUCKET` | No* | 使用するバケット名 |
+| `S3_FORCE_PATH_STYLE` | No | path-styleアクセスを使う。既定値は`true` |
+| `LOCAL_STORAGE_PATH` | No | ローカルストレージの保存先。既定値は`./data/uploads` |
+| `LOCAL_BASE_URL` | No | ローカルストレージのダウンロードURL生成に使うベースURL。既定値は`http://localhost:3400` |
+| `LOCAL_SIGNED_URL_SECRET` | No* | ローカルストレージの署名付きURL生成用シークレット（32文字以上必須） |
 | `ALLOW_ORIGIN` | No | CORS許可オリジン。既定値は`http://localhost:3000` |
 | `RUST_ENV` | No | `production`の場合に本番向けCookie設定を使用 |
+
+\* `S3_*` は4つすべて設定された場合にS3バックエンドが自動選択される。ローカルバックエンド使用時は `LOCAL_SIGNED_URL_SECRET` が必須。
 
 ## Web (`apps/web/.env.local`)
 
