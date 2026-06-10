@@ -593,15 +593,29 @@ pub async fn empty_trash(
     }
     txn.commit().await?;
 
+    let mut join_set = tokio::task::JoinSet::new();
+    for file in &trashed {
+        let storage = state.storage.clone();
+        let url = file.url.clone();
+        let id = file.id.to_string();
+        join_set.spawn(async move {
+            match storage.delete(&url).await {
+                Ok(()) => Ok(id),
+                Err(e) => Err((id, url, e)),
+            }
+        });
+    }
+
     let mut deleted_strs: Vec<String> = Vec::new();
     let mut failed_ids: Vec<String> = Vec::new();
-    for file in &trashed {
-        match state.storage.delete(&file.url).await {
-            Ok(()) => deleted_strs.push(file.id.to_string()),
-            Err(e) => {
-                tracing::warn!("ストレージ削除失敗 key={}: {e}", file.url);
-                failed_ids.push(file.id.to_string());
+    while let Some(result) = join_set.join_next().await {
+        match result {
+            Ok(Ok(id)) => deleted_strs.push(id),
+            Ok(Err((id, url, e))) => {
+                tracing::warn!("ストレージ削除失敗 key={}: {e}", url);
+                failed_ids.push(id);
             }
+            Err(e) => tracing::warn!("ストレージ削除タスク失敗: {e}"),
         }
     }
 
