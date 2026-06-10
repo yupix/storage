@@ -12,10 +12,14 @@ import {
   Download,
 } from 'lucide-react'
 
-export const ToolbarSearchResult = () => {
+interface ToolbarSearchResultProps {
+  query?: string
+}
+
+export const ToolbarSearchResult = ({ query = '' }: ToolbarSearchResultProps) => {
   return (
     <div className="bg-card text-card-foreground h-12 mx-1.5 my-2 px-3 rounded-lg flex items-center gap-1 ring-1 ring-foreground/10 overflow-x-auto">
-      <p className="font-semibold text-sm mr-2 shrink-0">「」の検索結果</p>
+      <p className="font-semibold text-sm mr-2 shrink-0">「{query}」の検索結果</p>
       <Button variant="ghost" size="icon-sm" title="フォルダー作成">
         <Folder />
       </Button>
