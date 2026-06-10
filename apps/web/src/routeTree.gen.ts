@@ -37,35 +37,35 @@ const DemoSentryTestingRoute = DemoSentryTestingRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/login': typeof LoginRoute
   '/about': typeof AboutRoute
+  '/login': typeof LoginRoute
   '/demo/sentry/testing': typeof DemoSentryTestingRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/login': typeof LoginRoute
   '/about': typeof AboutRoute
+  '/login': typeof LoginRoute
   '/demo/sentry/testing': typeof DemoSentryTestingRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/login': typeof LoginRoute
   '/about': typeof AboutRoute
+  '/login': typeof LoginRoute
   '/demo/sentry/testing': typeof DemoSentryTestingRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/about' | '/demo/sentry/testing'
+  fullPaths: '/' | '/about' | '/login' | '/demo/sentry/testing'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/about' | '/demo/sentry/testing'
-  id: '__root__' | '/' | '/login' | '/about' | '/demo/sentry/testing'
+  to: '/' | '/about' | '/login' | '/demo/sentry/testing'
+  id: '__root__' | '/' | '/about' | '/login' | '/demo/sentry/testing'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  LoginRoute: typeof LoginRoute
   AboutRoute: typeof AboutRoute
+  LoginRoute: typeof LoginRoute
   DemoSentryTestingRoute: typeof DemoSentryTestingRoute
 }
 
@@ -104,8 +104,8 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  LoginRoute: LoginRoute,
   AboutRoute: AboutRoute,
+  LoginRoute: LoginRoute,
   DemoSentryTestingRoute: DemoSentryTestingRoute,
 }
 export const routeTree = rootRouteImport
