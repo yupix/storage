@@ -34,7 +34,7 @@ function FileCard({ name, updatedAt }: FileCardProps) {
                 className="shrink-0"
                 onClick={(e) => e.stopPropagation()}
               >
-                <EllipsisVertical />
+                <EllipsisVertical className="size-4" />
               </Button>
             </div>
             {updatedAt && (
@@ -45,36 +45,36 @@ function FileCard({ name, updatedAt }: FileCardProps) {
       </ContextMenuTrigger>
       <ContextMenuContent>
         <ContextMenuItem>
-          <Download />
+          <Download className="mr-2 size-4" />
           ダウンロード
         </ContextMenuItem>
         <ContextMenuItem>
-          <SquarePen />
+          <SquarePen className="mr-2 size-4" />
           名前変更
         </ContextMenuItem>
         <ContextMenuItem>
-          <Share2 />
+          <Share2 className="mr-2 size-4" />
           共有
         </ContextMenuItem>
         <ContextMenuItem>
-          <MoveRight />
+          <MoveRight className="mr-2 size-4" />
           移動
         </ContextMenuItem>
         <ContextMenuItem>
-          <Star />
+          <Star className="mr-2 size-4" />
           お気に入り
         </ContextMenuItem>
         <ContextMenuItem>
-          <Lock />
+          <Lock className="mr-2 size-4" />
           ロック
         </ContextMenuItem>
         <ContextMenuItem>
-          <Info />
+          <Info className="mr-2 size-4" />
           情報
         </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem variant="destructive">
-          <Trash2 />
+          <Trash2 className="mr-2 size-4" />
           削除
         </ContextMenuItem>
       </ContextMenuContent>
