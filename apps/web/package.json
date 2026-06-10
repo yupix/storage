@@ -6,7 +6,7 @@
     "#/*": "./src/*"
   },
   "scripts": {
-    "dev": "dotenv -e .env.local -- sh -c \"NODE_OPTIONS='--import ./instrument.server.mjs' vite dev --port 3400\"",
+    "dev": "dotenv -e .env.local -- sh -c \"NODE_OPTIONS='--import ./instrument.server.mjs' vite dev\"",
     "build": "vite build && cp instrument.server.mjs .output/server",
     "generate:api": "cargo run --manifest-path ../api/Cargo.toml --bin generate_schema > src/api/schema.json && openapi-typescript src/api/schema.json -o src/api/schema.d.ts && node -e \"const fs=require('fs');fs.unlinkSync('src/api/schema.json')\"",
     "preview": "vite preview",
