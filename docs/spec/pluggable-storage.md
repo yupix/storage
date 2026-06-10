@@ -122,8 +122,14 @@ impl StorageDriver for LocalDriver {
 
     async fn delete(&self, key: &str) -> Result<()> {
         let target = self.base_path.join(key);
-        tokio::fs::remove_file(&target).await.ok(); // 存在しない場合は無視
-        Ok(())
+        match tokio::fs::remove_file(&target).await {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()), // 存在しない場合は正常
+            Err(e) => {
+                tracing::warn!("ローカルストレージの削除失敗 key={key}: {e}");
+                Err(e.into())
+            }
+        }
     }
 
     async fn get_download_url(&self, key: &str, expires_in: Duration) -> Result<String> {
