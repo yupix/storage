@@ -300,6 +300,101 @@ let url = state.storage.get_download_url(&file.url, Duration::from_secs(3600)).a
 
 ---
 
+## S3 障害時の一時的なローカルフォールバック
+
+S3 が設定されているが一時的に接続できない場合（ネットワーク障害・S3 サービス障害）に、
+アップロードをローカルに退避し、S3 復帰後に自動で同期する仕組みを設ける。
+
+> **前提**：`STORAGE_DRIVER=s3`（または S3 自動検出）かつ `LocalDriver` の設定も揃っている場合のみ有効。
+> ローカルバックエンド専用構成では本機能は不要（フォールバック先がない）。
+
+### DB スキーマ変更
+
+`files` テーブルに以下のカラムを追加する。
+
+```sql
+ALTER TABLE files
+  ADD COLUMN storage_backend VARCHAR(16) NOT NULL DEFAULT 's3',
+  -- 's3' | 'local_pending_sync'
+  ADD COLUMN sync_failed_at TIMESTAMPTZ;
+  -- 最後に S3 同期を試みて失敗した時刻（NULL = 未失敗 or 同期済み）
+```
+
+### アップロード時のフォールバック
+
+```
+S3 へのアップロードを試みる（リトライ: 最大 3 回、指数バックオフ）
+  ↓ 成功
+  storage_backend = 's3' でファイルを DB に登録
+
+  ↓ 全リトライ失敗
+  LocalDriver でローカルに保存
+  storage_backend = 'local_pending_sync' でファイルを DB に登録
+  警告ログを出力
+```
+
+ユーザーへのレスポンスはどちらの場合も 201 Created を返す（フォールバックを透過的に扱う）。
+
+### ダウンロード時の切り替え
+
+`get_file` ハンドラーで `storage_backend` を参照し、URL 生成先を切り替える。
+
+```rust
+let url = match file.storage_backend.as_str() {
+    "local_pending_sync" => {
+        state.local_storage.get_download_url(&file.url, Duration::from_secs(3600)).await?
+    }
+    _ => {
+        state.storage.get_download_url(&file.url, Duration::from_secs(3600)).await?
+    }
+};
+```
+
+そのため `AppState` はフォールバック有効時に `local_storage: LocalDriver` を追加で保持する。
+
+### S3 への同期ジョブ
+
+サーバー起動時にバックグラウンドタスク（`tokio::spawn`）として起動し、定期的に未同期ファイルを S3 へ転送する。
+
+```
+ループ（インターバル: 60 秒）:
+  storage_backend = 'local_pending_sync' のファイルを最大 20 件取得
+  件数が 0 なら次のインターバルまでスキップ
+
+  各ファイルについて:
+    1. ローカルパスからファイルを読み込み S3 にアップロード
+    2. 成功 → storage_backend = 's3' に更新、ローカルファイルを削除
+    3. 失敗 → sync_failed_at を更新、次のループで再試行
+```
+
+長期間同期できないファイル（`sync_failed_at` が N 時間以上前）はアラートログを出力し、
+運用者が手動対応できるようにする。自動削除は行わない。
+
+### 設定追加
+
+```env
+# S3 フォールバック有効化（STORAGE_DRIVER=s3 時のみ有効）
+S3_FALLBACK_TO_LOCAL=true
+
+# フォールバック先のローカル設定（LocalDriver と共通）
+LOCAL_STORAGE_PATH=./data/uploads
+LOCAL_BASE_URL=http://localhost:3400
+LOCAL_SIGNED_URL_SECRET=<32バイト以上のランダム文字列>
+
+# 同期ジョブの設定
+SYNC_INTERVAL_SECS=60        # デフォルト: 60
+SYNC_BATCH_SIZE=20            # デフォルト: 20
+SYNC_ALERT_THRESHOLD_HOURS=6  # デフォルト: 6（これ以上経過したらアラート）
+```
+
+### 注意事項
+
+- ローカルに退避したファイルはサーバー再起動後も同期ジョブが引き続き処理するため、再起動によるデータ欠損は発生しない
+- `S3_FALLBACK_TO_LOCAL=true` でも `LOCAL_SIGNED_URL_SECRET` が未設定の場合は起動時エラーとする
+- 複数インスタンス構成では、各インスタンスが別々のローカルストレージを持つため、同期前にダウンロードリクエストが別インスタンスに届くとファイルが見つからない可能性がある。複数インスタンス構成では本機能の有効化を非推奨とし、警告ログを出力する
+
+---
+
 ## 移行計画
 
 | フェーズ | 内容 |
@@ -308,7 +403,8 @@ let url = state.storage.get_download_url(&file.url, Duration::from_secs(3600)).a
 | 2 | `LocalDriver` を実装・ローカルダウンロードエンドポイントを追加 |
 | 3 | 自動検出ロジックを実装・`Settings` を更新 |
 | 4 | `upload_file` / `get_file` ハンドラーの呼び出し箇所を新 API に変更 |
-| 5 | 既存のテストが通ることを確認・E2E テストを追加 |
+| 5 | S3 フォールバック機能を実装（DB マイグレーション・同期ジョブ） |
+| 6 | 既存のテストが通ることを確認・E2E テストを追加 |
 
 フェーズ 1 完了時点でリグレッションなし（S3 のみを使う既存環境は影響ゼロ）。
 
@@ -319,4 +415,3 @@ let url = state.storage.get_download_url(&file.url, Duration::from_secs(3600)).a
 - `LOCAL_SIGNED_URL_SECRET` のローテーション戦略（複数シークレット対応）
 - ローカルバックエンドでの大容量ファイルストリーミング時のメモリ効率
 - ローカルバックエンドの保存ディレクトリのパーミッション管理（Docker 環境での UID 問題）
-- S3 バックエンド障害時の一時的なローカルフォールバック（現仕様では対象外）
