@@ -146,7 +146,12 @@ pub async fn upload_file(
     {
         match field.name().unwrap_or("") {
             "file" => {
-                let fname = field.file_name().map(|s| s.to_string()).unwrap_or_else(|| "unnamed".to_string());
+                let raw_name = field.file_name().unwrap_or("unnamed").to_string();
+                let fname = std::path::Path::new(&raw_name)
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("unnamed")
+                    .to_string();
                 let mime = field.content_type().map(|s| s.to_string()).unwrap_or_else(|| "application/octet-stream".to_string());
 
                 // テンポラリファイルにチャンク単位で書き込みながらハッシュを計算
