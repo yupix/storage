@@ -503,22 +503,21 @@ pub async fn restore_file(
 ) -> Result<Json<FileResponse>, AuthError> {
     let txn = state.db.begin().await?;
 
-    // SELECT FOR UPDATE で empty_trash との競合を直列化する
-    let file = files::Entity::find_by_id(file_id)
+    // ロック順序を delete_folder と統一（Folder → File）するため、
+    // まずロックなしで file を読み folder_id を取得する。
+    let file_preview = files::Entity::find_by_id(file_id)
         .filter(files::Column::AuthorId.eq(current_user.id))
-        .lock(LockType::Update)
         .one(&txn)
         .await?
         .ok_or(AuthError::NotFound)?;
 
-    if !file.is_deleted {
+    if !file_preview.is_deleted {
         let _ = txn.rollback().await;
         return Err(AuthError::InvalidInput("ファイルはゴミ箱にありません".into()));
     }
 
-    // 元フォルダーが削除済みならルートへ復元。
-    // delete_folder?to_home=true と直列化するため SELECT FOR UPDATE でロックする。
-    let restored_folder_id = if let Some(fid) = file.folder_id {
+    // フォルダーを先にロック（delete_folder との Folder → File 順序を合わせてデッドロックを防ぐ）
+    let restored_folder_id = if let Some(fid) = file_preview.folder_id {
         let exists = folders::Entity::find_by_id(fid)
             .filter(folders::Column::OwnerId.eq(current_user.id))
             .filter(folders::Column::IsDeleted.eq(false))
@@ -530,6 +529,20 @@ pub async fn restore_file(
     } else {
         None
     };
+
+    // フォルダーの後にファイルをロック（empty_trash との競合も直列化）
+    let file = files::Entity::find_by_id(file_id)
+        .filter(files::Column::AuthorId.eq(current_user.id))
+        .lock(LockType::Update)
+        .one(&txn)
+        .await?
+        .ok_or(AuthError::NotFound)?;
+
+    // ロック取得後に再確認（ロック待ち中に状態が変化した場合に対応）
+    if !file.is_deleted {
+        let _ = txn.rollback().await;
+        return Err(AuthError::InvalidInput("ファイルはゴミ箱にありません".into()));
+    }
 
     let now = Utc::now().fixed_offset();
     let mut active: files::ActiveModel = file.into();
