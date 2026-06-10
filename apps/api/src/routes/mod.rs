@@ -1,3 +1,4 @@
+use axum::routing::get;
 use utoipa_axum::router::OpenApiRouter;
 
 use crate::AppState;
@@ -12,6 +13,10 @@ pub fn create_routes() -> OpenApiRouter<AppState> {
         OpenApiRouter::new()
             .nest("/auth", crate::routes::auth::routes())
             .nest("/files", crate::routes::files::routes())
-            .nest("/folders", crate::routes::folders::routes()),
+            .nest("/folders", crate::routes::folders::routes())
+            .route(
+                "/internal/download",
+                get(crate::handlers::internal::download_file),
+            ),
     )
 }
