@@ -146,6 +146,8 @@ impl StorageDriver for LocalDriver {
 
 - `exp` の UNIX タイムスタンプを確認し、期限切れなら 410 Gone を返す
 - `sig` を `HMAC-SHA256(key + ":" + exp, secret)` で検証し、不一致なら 403 を返す
+- `key` のパスコンポーネントを検証し、`..` や絶対パスを含まないことを確認する
+- 結合後のパス（`base_path.join(key)`）を `canonicalize` し、`base_path` 配下に収まっていることを `starts_with` で確認する（パス・トラバーサル対策）
 - 検証通過後、`base_path / key` を `Content-Disposition: attachment` でストリーミング配信
 
 このエンドポイントは**セッション認証不要**（署名が認可を代替）。URL を知っていれば期限内は誰でもダウンロードできるため、S3 の署名付き URL と同等の挙動となる。
