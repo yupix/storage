@@ -2,11 +2,12 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import ToolbarDefault from '../components/ToolbarDefault'
 import MainContentsDefault from '#/components/MainContents'
+import UploadProgress from '../components/UploadProgress'
 import { Home, Folder, Star, Trash2, Clock, Menu } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '../components/ui/sheet'
-import { fetchMyFiles, uploadFile } from '../lib/files'
-import type { FileItem } from '../lib/files'
+import { fetchMyFiles, uploadFileWithProgress, createUploadItem } from '../lib/files'
+import type { FileItem, UploadItem } from '../lib/files'
 
 export const Route = createFileRoute('/')({ component: App })
 
@@ -41,8 +42,7 @@ function App() {
   const [sheetOpen, setSheetOpen] = useState(false)
   const [files, setFiles] = useState<FileItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [uploading, setUploading] = useState(false)
-  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [uploadItems, setUploadItems] = useState<UploadItem[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const refreshFiles = useCallback(async () => {
@@ -60,39 +60,72 @@ function App() {
     refreshFiles()
   }, [refreshFiles])
 
+  // 全件完了したらファイル一覧を更新し、エラーなければ3秒後に閉じる
+  useEffect(() => {
+    if (uploadItems.length === 0) return
+    const allSettled = uploadItems.every((i) => i.status !== 'uploading')
+    if (!allSettled) return
+
+    refreshFiles()
+
+    const hasError = uploadItems.some((i) => i.status === 'error')
+    if (!hasError) {
+      const timer = setTimeout(() => {
+        setUploadItems((prev) => {
+          prev.forEach((i) => { if (i.preview) URL.revokeObjectURL(i.preview) })
+          return []
+        })
+      }, 3000)
+      return () => clearTimeout(timer)
+    }
+  }, [uploadItems, refreshFiles])
+
+  const updateItem = useCallback(
+    (id: string, patch: Partial<UploadItem>) => {
+      setUploadItems((prev) =>
+        prev.map((item) => (item.id === id ? { ...item, ...patch } : item)),
+      )
+    },
+    [],
+  )
+
   const handleUploadClick = () => {
-    setUploadError(null)
     fileInputRef.current?.click()
   }
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files
     if (!selected || selected.length === 0) return
     e.target.value = ''
 
-    setUploading(true)
-    setUploadError(null)
+    const newItems = Array.from(selected).map(createUploadItem)
+    setUploadItems((prev) => [...prev, ...newItems])
 
-    const errors: string[] = []
-    for (const file of Array.from(selected)) {
-      try {
-        await uploadFile(file)
-      } catch (err) {
-        errors.push(`${file.name}: ${err instanceof Error ? err.message : 'エラー'}`)
-      }
+    for (const item of newItems) {
+      uploadFileWithProgress(item.file, (progress) => {
+        updateItem(item.id, { progress })
+      })
+        .then(() => updateItem(item.id, { status: 'done', progress: 100 }))
+        .catch((err: unknown) =>
+          updateItem(item.id, {
+            status: 'error',
+            error: err instanceof Error ? err.message : 'エラー',
+          }),
+        )
     }
-
-    if (errors.length > 0) {
-      setUploadError(errors.join('\n'))
-    }
-
-    setUploading(false)
-    await refreshFiles()
   }
+
+  const handleCloseProgress = () => {
+    setUploadItems((prev) => {
+      prev.forEach((i) => { if (i.preview) URL.revokeObjectURL(i.preview) })
+      return []
+    })
+  }
+
+  const uploading = uploadItems.some((i) => i.status === 'uploading')
 
   return (
     <main className="px-2 sm:px-4 pb-8 bg-background min-h-[calc(100vh-4rem)]">
-      {/* hidden file input */}
       <input
         ref={fileInputRef}
         type="file"
@@ -133,18 +166,6 @@ function App() {
             </div>
           </div>
 
-          {uploadError && (
-            <p className="mx-1.5 mb-2 text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2 whitespace-pre-line">
-              {uploadError}
-            </p>
-          )}
-
-          {uploading && (
-            <p className="mx-1.5 mb-2 text-sm text-muted-foreground px-3 animate-pulse">
-              アップロード中...
-            </p>
-          )}
-
           <div className="bg-card text-card-foreground rounded-xl ring-1 ring-foreground/10 mx-1.5 min-h-96">
             <MainContentsDefault
               files={files}
@@ -154,6 +175,8 @@ function App() {
           </div>
         </div>
       </div>
+
+      <UploadProgress items={uploadItems} onClose={handleCloseProgress} />
     </main>
   )
 }

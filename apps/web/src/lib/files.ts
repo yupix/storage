@@ -13,22 +13,71 @@ export interface PaginatedFiles {
   limit: number
 }
 
+export interface UploadItem {
+  id: string
+  file: File
+  preview: string | null
+  progress: number
+  status: 'uploading' | 'done' | 'error'
+  error?: string
+}
+
 export async function fetchMyFiles(page = 1, limit = 50): Promise<PaginatedFiles> {
   const res = await fetch(`/v1/files/mine?page=${page}&limit=${limit}`)
   if (!res.ok) throw new Error('ファイル一覧の取得に失敗しました')
   return res.json()
 }
 
-export async function uploadFile(file: File, folderId?: string): Promise<FileItem> {
-  const form = new FormData()
-  form.append('file', file)
-  if (folderId) form.append('folder_id', folderId)
-  const res = await fetch('/v1/files/', { method: 'POST', body: form })
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}))
-    throw new Error((data as { message?: string }).message ?? 'アップロードに失敗しました')
+export function uploadFileWithProgress(
+  file: File,
+  onProgress: (percent: number) => void,
+  folderId?: string,
+): Promise<FileItem> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    const form = new FormData()
+    form.append('file', file)
+    if (folderId) form.append('folder_id', folderId)
+
+    xhr.upload.addEventListener('progress', (e) => {
+      if (e.lengthComputable) {
+        onProgress(Math.round((e.loaded / e.total) * 100))
+      }
+    })
+
+    xhr.addEventListener('load', () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText) as FileItem)
+        } catch {
+          reject(new Error('レスポンスの解析に失敗しました'))
+        }
+      } else {
+        try {
+          const data = JSON.parse(xhr.responseText) as { message?: string }
+          reject(new Error(data.message ?? 'アップロードに失敗しました'))
+        } catch {
+          reject(new Error('アップロードに失敗しました'))
+        }
+      }
+    })
+
+    xhr.addEventListener('error', () => reject(new Error('ネットワークエラーが発生しました')))
+    xhr.addEventListener('abort', () => reject(new Error('キャンセルされました')))
+
+    xhr.open('POST', '/v1/files/')
+    xhr.send(form)
+  })
+}
+
+export function createUploadItem(file: File): UploadItem {
+  return {
+    id: crypto.randomUUID(),
+    file,
+    preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : null,
+    progress: 0,
+    status: 'uploading',
   }
-  return res.json() as Promise<FileItem>
 }
 
 export function formatFileSize(bytes: number): string {
