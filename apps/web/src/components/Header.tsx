@@ -9,8 +9,13 @@ export default function Header() {
   const router = useRouter()
 
   const handleLogout = async () => {
-    await apiClient.POST('/v1/auth/logout')
-    router.invalidate()
+    try {
+      await apiClient.POST('/v1/auth/logout')
+    } catch {
+      // ネットワークエラーでもクライアント状態はリセットする
+    } finally {
+      router.invalidate()
+    }
   }
 
   return (
