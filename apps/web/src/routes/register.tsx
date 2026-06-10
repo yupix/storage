@@ -1,13 +1,14 @@
-import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
 import { apiClient } from '../api/client'
 import { Input } from '../components/ui/input'
 import { Button } from '../components/ui/button'
 
-export const Route = createFileRoute('/login')({ component: LoginPage })
+export const Route = createFileRoute('/register')({ component: RegisterPage })
 
-function LoginPage() {
-  const router = useRouter()
+function RegisterPage() {
+  const navigate = useNavigate()
+  const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -19,19 +20,19 @@ function LoginPage() {
     setLoading(true)
 
     try {
-      const { error: apiError } = await apiClient.POST('/v1/auth/login', {
-        body: { email, password },
+      const { error: apiError } = await apiClient.POST('/v1/auth/register', {
+        body: { username, email, password },
       })
 
       if (apiError) {
         const msg = (apiError as { message?: string }).message
-        setError(msg ?? 'メールアドレスまたはパスワードが正しくありません')
+        setError(msg ?? '登録に失敗しました')
         return
       }
 
-      await router.invalidate()
+      await navigate({ to: '/login' })
     } catch {
-      setError('ログインに失敗しました。しばらく経ってから再度お試しください。')
+      setError('登録に失敗しました。しばらく経ってから再度お試しください。')
     } finally {
       setLoading(false)
     }
@@ -44,11 +45,27 @@ function LoginPage() {
           <div className="mb-8 text-center">
             <h1 className="text-2xl font-bold tracking-tight">HyperDrive</h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              アカウントにログイン
+              アカウントを作成
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="username" className="text-sm font-medium">
+                ユーザー名
+              </label>
+              <Input
+                id="username"
+                type="text"
+                autoComplete="username"
+                required
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="yamada_taro"
+                className="h-10"
+              />
+            </div>
+
             <div className="flex flex-col gap-1.5">
               <label htmlFor="email" className="text-sm font-medium">
                 メールアドレス
@@ -72,7 +89,7 @@ function LoginPage() {
               <Input
                 id="password"
                 type="password"
-                autoComplete="current-password"
+                autoComplete="new-password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -88,14 +105,14 @@ function LoginPage() {
             )}
 
             <Button type="submit" disabled={loading} className="mt-2 h-10 w-full">
-              {loading ? 'ログイン中...' : 'ログイン'}
+              {loading ? '登録中...' : 'アカウントを作成'}
             </Button>
           </form>
 
           <p className="mt-6 text-center text-sm text-muted-foreground">
-            アカウントをお持ちでないですか？{' '}
-            <Link to="/register" className="text-primary font-medium hover:underline">
-              新規登録
+            すでにアカウントをお持ちですか？{' '}
+            <Link to="/login" className="text-primary font-medium hover:underline">
+              ログイン
             </Link>
           </p>
         </div>

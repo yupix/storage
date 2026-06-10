@@ -24,10 +24,11 @@ export const Route = createRootRoute({
     } catch {
       // バックエンドに接続できない場合は未認証として扱う
     }
-    if (!user && location.pathname !== '/login') {
+    const isPublicPage = location.pathname === '/login' || location.pathname === '/register'
+    if (!user && !isPublicPage) {
       throw redirect({ to: '/login' })
     }
-    if (user && location.pathname === '/login') {
+    if (user && isPublicPage) {
       throw redirect({ to: '/' })
     }
     return { user }
@@ -54,9 +55,9 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 function RootLayout() {
   const { user } = Route.useRouteContext()
   const location = useLocation()
-  const isLoginPage = location.pathname === '/login'
+  const isPublicPage = location.pathname === '/login' || location.pathname === '/register'
 
-  if (isLoginPage || !user) {
+  if (isPublicPage || !user) {
     return <Outlet />
   }
 
