@@ -28,46 +28,30 @@ export async function fetchMyFiles(page = 1, limit = 50): Promise<PaginatedFiles
   return res.json()
 }
 
-export function uploadFileWithProgress(
+export async function uploadFileWithProgress(
   file: File,
   onProgress: (percent: number) => void,
   folderId?: string,
 ): Promise<FileItem> {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest()
-    const form = new FormData()
-    form.append('file', file)
-    if (folderId) form.append('folder_id', folderId)
+  const form = new FormData()
+  form.append('file', file)
+  if (folderId) form.append('folder_id', folderId)
 
-    xhr.upload.addEventListener('progress', (e) => {
-      if (e.lengthComputable) {
-        onProgress(Math.round((e.loaded / e.total) * 100))
-      }
-    })
+  onProgress(0)
 
-    xhr.addEventListener('load', () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          resolve(JSON.parse(xhr.responseText) as FileItem)
-        } catch {
-          reject(new Error('レスポンスの解析に失敗しました'))
-        }
-      } else {
-        try {
-          const data = JSON.parse(xhr.responseText) as { message?: string }
-          reject(new Error(data.message ?? 'アップロードに失敗しました'))
-        } catch {
-          reject(new Error('アップロードに失敗しました'))
-        }
-      }
-    })
+  const res = await fetch('/v1/files', { method: 'POST', body: form })
 
-    xhr.addEventListener('error', () => reject(new Error('ネットワークエラーが発生しました')))
-    xhr.addEventListener('abort', () => reject(new Error('キャンセルされました')))
+  if (!res.ok) {
+    let message = 'アップロードに失敗しました'
+    try {
+      const data = await res.json() as { message?: string }
+      if (data.message) message = data.message
+    } catch { /* ignore */ }
+    throw new Error(message)
+  }
 
-    xhr.open('POST', '/v1/files')
-    xhr.send(form)
-  })
+  onProgress(100)
+  return res.json() as Promise<FileItem>
 }
 
 export function createUploadItem(file: File): UploadItem {
