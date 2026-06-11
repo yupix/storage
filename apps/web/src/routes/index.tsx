@@ -4,6 +4,8 @@ import ToolbarDefault from '../components/ToolbarDefault'
 import MainContentsDefault from '#/components/MainContents'
 import UploadProgress from '../components/UploadProgress'
 import FilePreviewDialog from '../components/FilePreviewDialog'
+import CreateFolderDialog from '../components/CreateFolderDialog'
+import MoveToFolderDialog from '../components/MoveToFolderDialog'
 import { Home, Folder, Star, Trash2, Clock, Menu } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '../components/ui/sheet'
@@ -11,28 +13,40 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '../components/ui/alert-dialog'
-import { fetchMyFiles, uploadFileWithProgress, createUploadItem, deleteFile } from '../lib/files'
-import type { FileItem, UploadItem } from '../lib/files'
+import { fetchMyFiles, fetchFolders, uploadFileWithProgress, createUploadItem, deleteFile } from '../lib/files'
+import type { FileItem, FolderItem, UploadItem } from '../lib/files'
 
 export const Route = createFileRoute('/')({ component: App })
 
-const sidebarItems = [
-  { icon: Home, label: 'ホーム' },
-  { icon: Folder, label: 'マイドライブ' },
-  { icon: Star, label: 'お気に入り' },
-  { icon: Clock, label: '最近使用' },
-  { icon: Trash2, label: 'ゴミ箱' },
+type SidebarSection = 'home' | 'drive' | 'favorites' | 'recent' | 'trash'
+
+const sidebarItems: { icon: typeof Home; label: string; section: SidebarSection }[] = [
+  { icon: Home, label: 'ホーム', section: 'home' },
+  { icon: Folder, label: 'マイドライブ', section: 'drive' },
+  { icon: Star, label: 'お気に入り', section: 'favorites' },
+  { icon: Clock, label: '最近使用', section: 'recent' },
+  { icon: Trash2, label: 'ゴミ箱', section: 'trash' },
 ]
 
-function SidebarNav({ onItemClick }: { onItemClick?: () => void }) {
+function SidebarNav({
+  activeSection,
+  onNavigate,
+  onItemClick,
+}: {
+  activeSection?: SidebarSection
+  onNavigate?: (section: SidebarSection) => void
+  onItemClick?: () => void
+}) {
   return (
     <ul className="flex flex-col gap-0.5">
-      {sidebarItems.map(({ icon: Icon, label }) => (
+      {sidebarItems.map(({ icon: Icon, label, section }) => (
         <li key={label}>
           <button
             type="button"
-            onClick={onItemClick}
-            className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm hover:bg-muted transition-colors text-left"
+            onClick={() => { onNavigate?.(section); onItemClick?.() }}
+            className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-colors text-left ${
+              activeSection === section ? 'bg-muted font-medium' : 'hover:bg-muted'
+            }`}
           >
             <Icon className="size-4 shrink-0 text-muted-foreground" />
             {label}
@@ -43,10 +57,14 @@ function SidebarNav({ onItemClick }: { onItemClick?: () => void }) {
   )
 }
 
+interface BreadcrumbItem {
+  id: string | null
+  name: string
+}
+
 function App() {
   const [sheetOpen, setSheetOpen] = useState(false)
   const touchStartX = useRef(0)
-
   const touchStartY = useRef(0)
 
   useEffect(() => {
@@ -61,7 +79,6 @@ function App() {
       if (!touch) return
       const dx = touch.clientX - touchStartX.current
       const dy = touch.clientY - touchStartY.current
-      // 左端 30px 以内から始まり、横移動が縦移動より大きく 60px 以上右スワイプで開く
       if (touchStartX.current < 30 && dx > 60 && Math.abs(dx) > Math.abs(dy)) {
         setSheetOpen(true)
       }
@@ -73,7 +90,9 @@ function App() {
       document.removeEventListener('touchend', onTouchEnd)
     }
   }, [])
+
   const [files, setFiles] = useState<FileItem[]>([])
+  const [folders, setFolders] = useState<FolderItem[]>([])
   const [loading, setLoading] = useState(true)
   const [uploadItems, setUploadItems] = useState<UploadItem[]>([])
   const [previewFileId, setPreviewFileId] = useState<string | null>(null)
@@ -81,22 +100,33 @@ function App() {
   const [deleting, setDeleting] = useState(false)
   const [view, setView] = useState<'grid' | 'list'>('grid')
 
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null)
+  const [breadcrumb, setBreadcrumb] = useState<BreadcrumbItem[]>([{ id: null, name: 'マイドライブ' }])
+  const [createFolderOpen, setCreateFolderOpen] = useState(false)
+  const [moveTargetFileId, setMoveTargetFileId] = useState<string | null>(null)
+  const [activeSection, setActiveSection] = useState<SidebarSection>('home')
+
   const refreshFiles = useCallback(async () => {
     try {
-      const data = await fetchMyFiles()
-      setFiles(data.files)
+      const [fileData, folderData] = await Promise.all([
+        fetchMyFiles(1, 50, currentFolderId),
+        fetchFolders(currentFolderId, 1, 100),
+      ])
+      setFiles(fileData.files)
+      setFolders(folderData.folders)
     } catch {
-      // エラー時はファイル一覧を空のままにする
+      setFiles([])
+      setFolders([])
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [currentFolderId])
 
   useEffect(() => {
+    setLoading(true)
     refreshFiles()
   }, [refreshFiles])
 
-  // 全件完了したらファイル一覧を更新し、エラーなければ3秒後に閉じる
   useEffect(() => {
     if (uploadItems.length === 0) return
     const allSettled = uploadItems.every((i) => i.status !== 'uploading')
@@ -136,7 +166,7 @@ function App() {
     for (const item of newItems) {
       uploadFileWithProgress(item.file, (progress) => {
         updateItem(item.id, { progress })
-      })
+      }, currentFolderId ?? undefined)
         .then(() => updateItem(item.id, { status: 'done', progress: 100 }))
         .catch((err: unknown) =>
           updateItem(item.id, {
@@ -154,7 +184,7 @@ function App() {
       await deleteFile(deleteTargetId)
       await refreshFiles()
     } catch {
-      // エラー時は何もしない（一覧は更新しない）
+      // エラー時は何もしない
     } finally {
       setDeleting(false)
       setDeleteTargetId(null)
@@ -168,6 +198,27 @@ function App() {
     })
   }
 
+  const handleSidebarNavigate = useCallback((section: SidebarSection) => {
+    setActiveSection(section)
+    if (section === 'home' || section === 'drive') {
+      setCurrentFolderId(null)
+      setBreadcrumb([{ id: null, name: 'マイドライブ' }])
+    }
+  }, [])
+
+  const handleFolderOpen = useCallback((folder: FolderItem) => {
+    setCurrentFolderId(folder.id)
+    setBreadcrumb((prev) => [...prev, { id: folder.id, name: folder.name }])
+  }, [])
+
+  const handleBreadcrumbNavigate = useCallback((id: string | null) => {
+    setCurrentFolderId(id)
+    setBreadcrumb((prev) => {
+      const idx = prev.findIndex((b) => b.id === id)
+      return idx >= 0 ? prev.slice(0, idx + 1) : prev
+    })
+  }, [])
+
   const uploading = uploadItems.some((i) => i.status === 'uploading')
 
   return (
@@ -176,7 +227,7 @@ function App() {
         {/* Desktop sidebar */}
         <aside className="hidden md:block w-52 shrink-0">
           <nav className="bg-card text-card-foreground rounded-xl ring-1 ring-foreground/10 p-2">
-            <SidebarNav />
+            <SidebarNav activeSection={activeSection} onNavigate={handleSidebarNavigate} />
           </nav>
         </aside>
 
@@ -194,24 +245,39 @@ function App() {
                   <SheetTitle>HyperDrive</SheetTitle>
                 </SheetHeader>
                 <div className="px-2">
-                  <SidebarNav onItemClick={() => setSheetOpen(false)} />
+                  <SidebarNav
+                    activeSection={activeSection}
+                    onNavigate={handleSidebarNavigate}
+                    onItemClick={() => setSheetOpen(false)}
+                  />
                 </div>
               </SheetContent>
             </Sheet>
 
             <div className="flex-1 min-w-0">
-              <ToolbarDefault onFileSelect={handleFileSelect} uploading={uploading} view={view} onViewChange={setView} />
+              <ToolbarDefault
+                onFileSelect={handleFileSelect}
+                uploading={uploading}
+                view={view}
+                onViewChange={setView}
+                onCreateFolder={() => setCreateFolderOpen(true)}
+                breadcrumb={breadcrumb}
+                onBreadcrumbNavigate={handleBreadcrumbNavigate}
+              />
             </div>
           </div>
 
           <div className="bg-card text-card-foreground rounded-xl ring-1 ring-foreground/10 mx-1.5 min-h-96">
             <MainContentsDefault
               files={files}
+              folders={folders}
               loading={loading}
               view={view}
               onFileSelect={handleFileSelect}
               onPreview={setPreviewFileId}
               onDelete={setDeleteTargetId}
+              onMove={setMoveTargetFileId}
+              onFolderOpen={handleFolderOpen}
             />
           </div>
         </div>
@@ -220,6 +286,20 @@ function App() {
       <UploadProgress items={uploadItems} onClose={handleCloseProgress} />
 
       <FilePreviewDialog fileId={previewFileId} onClose={() => setPreviewFileId(null)} />
+
+      <CreateFolderDialog
+        open={createFolderOpen}
+        currentFolderId={currentFolderId}
+        onClose={() => setCreateFolderOpen(false)}
+        onCreated={() => refreshFiles()}
+      />
+
+      <MoveToFolderDialog
+        open={moveTargetFileId !== null}
+        fileId={moveTargetFileId}
+        onClose={() => setMoveTargetFileId(null)}
+        onMoved={() => refreshFiles()}
+      />
 
       <AlertDialog open={deleteTargetId !== null} onOpenChange={(open) => { if (!open) setDeleteTargetId(null) }}>
         <AlertDialogContent>
