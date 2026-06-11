@@ -23,13 +23,15 @@ export default function MoveToFolderDialog({ open, fileId, onClose, onMoved }: P
 
   useEffect(() => {
     if (!open) return
+    let active = true
     setSelected(null)
     setError(null)
     setFetching(true)
     fetchFolders(null, 1, 100)
-      .then((data) => setFolders(data.folders))
-      .catch(() => setError('フォルダー一覧の取得に失敗しました'))
-      .finally(() => setFetching(false))
+      .then((data) => { if (active) setFolders(data.folders) })
+      .catch(() => { if (active) setError('フォルダー一覧の取得に失敗しました') })
+      .finally(() => { if (active) setFetching(false) })
+    return () => { active = false }
   }, [open])
 
   async function handleMove() {
