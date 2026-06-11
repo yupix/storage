@@ -1,81 +1,76 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState } from 'react'
+import { Sun, Moon, Monitor } from 'lucide-react'
+import { Button } from './ui/button'
 
-type ThemeMode = "light" | "dark" | "auto";
+type ThemeMode = 'light' | 'dark' | 'auto'
 
 function getInitialMode(): ThemeMode {
-  if (typeof window === "undefined") {
-    return "auto";
-  }
-
-  const stored = window.localStorage.getItem("theme");
-  if (stored === "light" || stored === "dark" || stored === "auto") {
-    return stored;
-  }
-
-  return "auto";
+  if (typeof window === 'undefined') return 'auto'
+  const stored = window.localStorage.getItem('theme')
+  if (stored === 'light' || stored === 'dark' || stored === 'auto') return stored
+  return 'auto'
 }
 
 function applyThemeMode(mode: ThemeMode) {
-  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-  const resolved = mode === "auto" ? (prefersDark ? "dark" : "light") : mode;
-
-  document.documentElement.classList.remove("light", "dark");
-  document.documentElement.classList.add(resolved);
-
-  if (mode === "auto") {
-    document.documentElement.removeAttribute("data-theme");
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+  const resolved = mode === 'auto' ? (prefersDark ? 'dark' : 'light') : mode
+  document.documentElement.classList.remove('light', 'dark')
+  document.documentElement.classList.add(resolved)
+  if (mode === 'auto') {
+    document.documentElement.removeAttribute('data-theme')
   } else {
-    document.documentElement.setAttribute("data-theme", mode);
+    document.documentElement.setAttribute('data-theme', mode)
   }
+  document.documentElement.style.colorScheme = resolved
+}
 
-  document.documentElement.style.colorScheme = resolved;
+const icons: Record<ThemeMode, typeof Sun> = {
+  light: Sun,
+  dark: Moon,
+  auto: Monitor,
+}
+
+const labels: Record<ThemeMode, string> = {
+  light: 'ライトモード',
+  dark: 'ダークモード',
+  auto: 'システム設定に合わせる',
 }
 
 export default function ThemeToggle() {
-  const [mode, setMode] = useState<ThemeMode>("auto");
+  const [mode, setMode] = useState<ThemeMode>('auto')
 
   useEffect(() => {
-    const initialMode = getInitialMode();
-    setMode(initialMode);
-    applyThemeMode(initialMode);
-  }, []);
+    const initialMode = getInitialMode()
+    setMode(initialMode)
+    applyThemeMode(initialMode)
+  }, [])
 
   useEffect(() => {
-    if (mode !== "auto") {
-      return;
-    }
-
-    const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const onChange = () => applyThemeMode("auto");
-
-    media.addEventListener("change", onChange);
-    return () => {
-      media.removeEventListener("change", onChange);
-    };
-  }, [mode]);
+    if (mode !== 'auto') return
+    const media = window.matchMedia('(prefers-color-scheme: dark)')
+    const onChange = () => applyThemeMode('auto')
+    media.addEventListener('change', onChange)
+    return () => media.removeEventListener('change', onChange)
+  }, [mode])
 
   function toggleMode() {
-    const nextMode: ThemeMode =
-      mode === "light" ? "dark" : mode === "dark" ? "auto" : "light";
-    setMode(nextMode);
-    applyThemeMode(nextMode);
-    window.localStorage.setItem("theme", nextMode);
+    const next: ThemeMode = mode === 'light' ? 'dark' : mode === 'dark' ? 'auto' : 'light'
+    setMode(next)
+    applyThemeMode(next)
+    window.localStorage.setItem('theme', next)
   }
 
-  const label =
-    mode === "auto"
-      ? "Theme mode: auto (system). Click to switch to light mode."
-      : `Theme mode: ${mode}. Click to switch mode.`;
+  const Icon = icons[mode]
 
   return (
-    <button
-      type="button"
+    <Button
+      variant="ghost"
+      size="icon-sm"
       onClick={toggleMode}
-      aria-label={label}
-      title={label}
-      className="mx-5 bg-blue-500 px-5 py-2.5 rounded-lg text-white font-semibold transition hover:bg-blue-600 cursor-pointer"
+      title={labels[mode]}
+      aria-label={labels[mode]}
     >
-      {mode === "auto" ? "テーマ" : mode === "dark" ? "Dark" : "Light"}
-    </button>
-  );
+      <Icon className="size-4" />
+    </Button>
+  )
 }
