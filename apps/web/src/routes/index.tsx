@@ -6,6 +6,7 @@ import UploadProgress from '../components/UploadProgress'
 import FilePreviewDialog from '../components/FilePreviewDialog'
 import CreateFolderDialog from '../components/CreateFolderDialog'
 import MoveToFolderDialog from '../components/MoveToFolderDialog'
+import RenameDialog from '../components/RenameDialog'
 import { Home, Folder, Star, Trash2, Clock, Menu } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '../components/ui/sheet'
@@ -13,7 +14,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '../components/ui/alert-dialog'
-import { fetchMyFiles, fetchFolders, uploadFileWithProgress, createUploadItem, deleteFile } from '../lib/files'
+import { fetchMyFiles, fetchFolders, uploadFileWithProgress, createUploadItem, deleteFile, toggleFavorite } from '../lib/files'
 import type { FileItem, FolderItem, UploadItem } from '../lib/files'
 
 export const Route = createFileRoute('/')({ component: App })
@@ -106,21 +107,31 @@ function App() {
   const [moveTargetFileId, setMoveTargetFileId] = useState<string | null>(null)
   const [activeSection, setActiveSection] = useState<SidebarSection>('home')
 
+  // 名前変更ダイアログ
+  const [renameTarget, setRenameTarget] = useState<{ id: string; name: string } | null>(null)
+
   const refreshFiles = useCallback(async () => {
     try {
-      const [fileData, folderData] = await Promise.all([
-        fetchMyFiles(1, 50, currentFolderId),
-        fetchFolders(currentFolderId, 1, 100),
-      ])
-      setFiles(fileData.files)
-      setFolders(folderData.folders)
+      const isFavoriteSection = activeSection === 'favorites'
+      if (isFavoriteSection) {
+        const fileData = await fetchMyFiles(1, 50, null, true)
+        setFiles(fileData.files)
+        setFolders([])
+      } else {
+        const [fileData, folderData] = await Promise.all([
+          fetchMyFiles(1, 50, currentFolderId),
+          fetchFolders(currentFolderId, 1, 100),
+        ])
+        setFiles(fileData.files)
+        setFolders(folderData.folders)
+      }
     } catch {
       setFiles([])
       setFolders([])
     } finally {
       setLoading(false)
     }
-  }, [currentFolderId])
+  }, [currentFolderId, activeSection])
 
   useEffect(() => {
     setLoading(true)
@@ -219,6 +230,19 @@ function App() {
     })
   }, [])
 
+  const handleToggleFavorite = useCallback(async (id: string, current: boolean) => {
+    const next = !current
+    setFiles((prev) => prev.map((f) => f.id === id ? { ...f, is_favorite: next } : f))
+    try {
+      await toggleFavorite(id, next)
+      if (activeSection === 'favorites' && !next) {
+        setFiles((prev) => prev.filter((f) => f.id !== id))
+      }
+    } catch {
+      setFiles((prev) => prev.map((f) => f.id === id ? { ...f, is_favorite: current } : f))
+    }
+  }, [activeSection])
+
   const uploading = uploadItems.some((i) => i.status === 'uploading')
 
   return (
@@ -277,6 +301,8 @@ function App() {
               onPreview={setPreviewFileId}
               onDelete={setDeleteTargetId}
               onMove={setMoveTargetFileId}
+              onRename={(id, name) => setRenameTarget({ id, name })}
+              onToggleFavorite={handleToggleFavorite}
               onFolderOpen={handleFolderOpen}
             />
           </div>
@@ -299,6 +325,14 @@ function App() {
         fileId={moveTargetFileId}
         onClose={() => setMoveTargetFileId(null)}
         onMoved={() => refreshFiles()}
+      />
+
+      <RenameDialog
+        open={renameTarget !== null}
+        fileId={renameTarget?.id ?? null}
+        currentName={renameTarget?.name ?? ''}
+        onClose={() => setRenameTarget(null)}
+        onRenamed={() => refreshFiles()}
       />
 
       <AlertDialog open={deleteTargetId !== null} onOpenChange={(open) => { if (!open) setDeleteTargetId(null) }}>
