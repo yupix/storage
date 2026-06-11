@@ -7,6 +7,7 @@ import FilePreviewDialog from '../components/FilePreviewDialog'
 import CreateFolderDialog from '../components/CreateFolderDialog'
 import MoveToFolderDialog from '../components/MoveToFolderDialog'
 import RenameDialog from '../components/RenameDialog'
+import DeleteFolderDialog from '../components/DeleteFolderDialog'
 import { Home, Folder, Star, Trash2, Clock, Menu } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '../components/ui/sheet'
@@ -14,7 +15,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '../components/ui/alert-dialog'
-import { fetchMyFiles, fetchFolders, uploadFileWithProgress, createUploadItem, deleteFile, toggleFavorite } from '../lib/files'
+import { fetchMyFiles, fetchFolders, uploadFileWithProgress, createUploadItem, deleteFile, toggleFavorite, renameFile, renameFolder } from '../lib/files'
 import type { FileItem, FolderItem, UploadItem } from '../lib/files'
 
 export const Route = createFileRoute('/')({ component: App })
@@ -107,8 +108,9 @@ function App() {
   const [moveTargetFileId, setMoveTargetFileId] = useState<string | null>(null)
   const [activeSection, setActiveSection] = useState<SidebarSection>('home')
 
-  // 名前変更ダイアログ
-  const [renameTarget, setRenameTarget] = useState<{ id: string; name: string } | null>(null)
+  const [renameTarget, setRenameTarget] = useState<{ id: string; name: string; kind: 'file' | 'folder' } | null>(null)
+  const [deleteFolderTargetId, setDeleteFolderTargetId] = useState<string | null>(null)
+  const [moveFolderTargetId, setMoveFolderTargetId] = useState<string | null>(null)
 
   const refreshFiles = useCallback(async () => {
     try {
@@ -301,9 +303,12 @@ function App() {
               onPreview={setPreviewFileId}
               onDelete={setDeleteTargetId}
               onMove={setMoveTargetFileId}
-              onRename={(id, name) => setRenameTarget({ id, name })}
+              onRename={(id, name) => setRenameTarget({ id, name, kind: 'file' })}
               onToggleFavorite={handleToggleFavorite}
               onFolderOpen={handleFolderOpen}
+              onFolderDelete={setDeleteFolderTargetId}
+              onFolderMove={setMoveFolderTargetId}
+              onFolderRename={(id, name) => setRenameTarget({ id, name, kind: 'folder' })}
             />
           </div>
         </div>
@@ -327,12 +332,32 @@ function App() {
         onMoved={() => refreshFiles()}
       />
 
+      <MoveToFolderDialog
+        open={moveFolderTargetId !== null}
+        folderId={moveFolderTargetId}
+        onClose={() => setMoveFolderTargetId(null)}
+        onMoved={() => refreshFiles()}
+      />
+
       <RenameDialog
         open={renameTarget !== null}
-        fileId={renameTarget?.id ?? null}
         currentName={renameTarget?.name ?? ''}
         onClose={() => setRenameTarget(null)}
-        onRenamed={() => refreshFiles()}
+        onSubmit={async (name) => {
+          if (!renameTarget) return
+          if (renameTarget.kind === 'file') {
+            await renameFile(renameTarget.id, name)
+          } else {
+            await renameFolder(renameTarget.id, name)
+          }
+          refreshFiles()
+        }}
+      />
+
+      <DeleteFolderDialog
+        folderId={deleteFolderTargetId}
+        onClose={() => setDeleteFolderTargetId(null)}
+        onDeleted={() => refreshFiles()}
       />
 
       <AlertDialog open={deleteTargetId !== null} onOpenChange={(open) => { if (!open) setDeleteTargetId(null) }}>
