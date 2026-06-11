@@ -88,20 +88,12 @@ async fn compute_folder_sizes<C: ConnectionTrait>(
         return Ok(HashMap::new());
     }
 
-    // $1 に UUID の配列を渡し、再帰 CTE でサブフォルダーも含めた合計を計算する
-    let placeholders: String = folder_ids
-        .iter()
-        .enumerate()
-        .map(|(i, _)| format!("${}", i + 1))
-        .collect::<Vec<_>>()
-        .join(", ");
-
-    let sql = format!(
-        r#"
+    // UUID 配列を $1::uuid[] として渡すことでクエリプランのキャッシュ効率を高める
+    let sql = r#"
         WITH RECURSIVE tree AS (
             SELECT id, id AS root_id
             FROM folders
-            WHERE id IN ({placeholders}) AND is_deleted = false
+            WHERE id = ANY($1::uuid[]) AND is_deleted = false
             UNION ALL
             SELECT f.id, t.root_id
             FROM folders f
@@ -112,11 +104,18 @@ async fn compute_folder_sizes<C: ConnectionTrait>(
         FROM tree t
         LEFT JOIN files fi ON fi.folder_id = t.id AND fi.is_deleted = false
         GROUP BY t.root_id
-        "#
-    );
+    "#;
 
-    let values: Vec<sea_orm::Value> = folder_ids.iter().map(|id| (*id).into()).collect();
-    let stmt = Statement::from_sql_and_values(DatabaseBackend::Postgres, &sql, values);
+    let array_value = sea_orm::Value::Array(
+        sea_orm::sea_query::ArrayType::Uuid,
+        Some(Box::new(
+            folder_ids
+                .iter()
+                .map(|id| sea_orm::Value::Uuid(Some(*id)))
+                .collect(),
+        )),
+    );
+    let stmt = Statement::from_sql_and_values(DatabaseBackend::Postgres, sql, [array_value]);
     let rows = FolderSize::find_by_statement(stmt).all(db).await?;
 
     let mut map = HashMap::new();
