@@ -1,19 +1,19 @@
-export interface FileItem {
-  id: string
-  name: string
-  size: number
-  updated_at: string
-  sender_id: string
-}
+import { apiClient } from '../api/client'
+import type { components } from '../api/schema'
 
-export interface FileDetail extends FileItem {
-  file_type: string
-  url: string
-  url_expires_in: number
-}
+export type FileItem = components['schemas']['FileResponse']
+export type FileDetail = components['schemas']['FileDetailResponse']
+export type FolderItem = components['schemas']['FolderResponse']
 
 export interface PaginatedFiles {
   files: FileItem[]
+  total: number
+  page: number
+  limit: number
+}
+
+export interface PaginatedFolders {
+  folders: FolderItem[]
   total: number
   page: number
   limit: number
@@ -28,10 +28,36 @@ export interface UploadItem {
   error?: string
 }
 
-export async function fetchMyFiles(page = 1, limit = 50): Promise<PaginatedFiles> {
-  const res = await fetch(`/v1/files/mine?page=${page}&limit=${limit}`)
-  if (!res.ok) throw new Error('ファイル一覧の取得に失敗しました')
-  return res.json()
+export async function fetchMyFiles(page = 1, limit = 50, folderId?: string | null): Promise<PaginatedFiles> {
+  const { data, error } = await apiClient.GET('/v1/files/mine', {
+    params: { query: { page, limit, ...(folderId ? { folder_id: folderId } : {}) } },
+  })
+  if (error || !data) throw new Error('ファイル一覧の取得に失敗しました')
+  return data
+}
+
+export async function fetchFolders(folderId?: string | null, page = 1, limit = 100): Promise<PaginatedFolders> {
+  const { data, error } = await apiClient.GET('/v1/folders', {
+    params: { query: { page, limit, ...(folderId ? { folder_id: folderId } : {}) } },
+  })
+  if (error || !data) throw new Error('フォルダー一覧の取得に失敗しました')
+  return data
+}
+
+export async function createFolder(name: string, folderId?: string | null): Promise<FolderItem> {
+  const { data, error } = await apiClient.POST('/v1/folders', {
+    body: { name, ...(folderId ? { folder_id: folderId } : {}) },
+  })
+  if (error || !data) throw new Error('フォルダーの作成に失敗しました')
+  return data
+}
+
+export async function moveFile(fileId: string, folderId: string | null): Promise<void> {
+  const { error } = await apiClient.PATCH('/v1/files/{id}', {
+    params: { path: { id: fileId } },
+    body: { folder_id: folderId },
+  })
+  if (error) throw new Error('ファイルの移動に失敗しました')
 }
 
 // /v1/ パスの絶対 URL をフロントエンド経由の相対パスに変換する。
@@ -47,15 +73,18 @@ function toProxiedUrl(url: string): string {
 }
 
 export async function fetchFileDetail(id: string): Promise<FileDetail> {
-  const res = await fetch(`/v1/files/${id}`)
-  if (!res.ok) throw new Error('ファイル情報の取得に失敗しました')
-  const data = await res.json() as FileDetail
+  const { data, error } = await apiClient.GET('/v1/files/{id}', {
+    params: { path: { id } },
+  })
+  if (error || !data) throw new Error('ファイル情報の取得に失敗しました')
   return { ...data, url: toProxiedUrl(data.url) }
 }
 
 export async function deleteFile(id: string): Promise<void> {
-  const res = await fetch(`/v1/files/${id}`, { method: 'DELETE' })
-  if (!res.ok) throw new Error('ファイルの削除に失敗しました')
+  const { error } = await apiClient.DELETE('/v1/files/{id}', {
+    params: { path: { id } },
+  })
+  if (error) throw new Error('ファイルの削除に失敗しました')
 }
 
 export function uploadFileWithProgress(
