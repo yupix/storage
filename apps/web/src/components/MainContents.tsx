@@ -22,13 +22,53 @@ function fileIcon(name: string) {
   return File
 }
 
-interface FileCardProps {
+interface FileItemActionsProps {
   file: FileItem
   onPreview: (id: string) => void
   onDelete: (id: string) => void
 }
 
-function FileCard({ file, onPreview, onDelete }: FileCardProps) {
+function FileContextMenuContent({ file, onPreview, onDelete }: FileItemActionsProps) {
+  return (
+    <ContextMenuContent>
+      <ContextMenuItem onSelect={() => onPreview(file.id)}>
+        <Info className="mr-2 size-4" />
+        プレビュー
+      </ContextMenuItem>
+      <ContextMenuItem>
+        <Download className="mr-2 size-4" />
+        ダウンロード
+      </ContextMenuItem>
+      <ContextMenuItem>
+        <SquarePen className="mr-2 size-4" />
+        名前変更
+      </ContextMenuItem>
+      <ContextMenuItem>
+        <Share2 className="mr-2 size-4" />
+        共有
+      </ContextMenuItem>
+      <ContextMenuItem>
+        <MoveRight className="mr-2 size-4" />
+        移動
+      </ContextMenuItem>
+      <ContextMenuItem>
+        <Star className="mr-2 size-4" />
+        お気に入り
+      </ContextMenuItem>
+      <ContextMenuItem>
+        <Lock className="mr-2 size-4" />
+        ロック
+      </ContextMenuItem>
+      <ContextMenuSeparator />
+      <ContextMenuItem variant="destructive" onSelect={() => onDelete(file.id)}>
+        <Trash2 className="mr-2 size-4" />
+        削除
+      </ContextMenuItem>
+    </ContextMenuContent>
+  )
+}
+
+function FileCard({ file, onPreview, onDelete }: FileItemActionsProps) {
   const Icon = fileIcon(file.name)
   const date = file.updated_at ? new Date(file.updated_at).toLocaleDateString('ja-JP') : ''
 
@@ -61,41 +101,37 @@ function FileCard({ file, onPreview, onDelete }: FileCardProps) {
           </CardContent>
         </Card>
       </ContextMenuTrigger>
-      <ContextMenuContent>
-        <ContextMenuItem onSelect={() => onPreview(file.id)}>
-          <Info className="mr-2 size-4" />
-          プレビュー
-        </ContextMenuItem>
-        <ContextMenuItem>
-          <Download className="mr-2 size-4" />
-          ダウンロード
-        </ContextMenuItem>
-        <ContextMenuItem>
-          <SquarePen className="mr-2 size-4" />
-          名前変更
-        </ContextMenuItem>
-        <ContextMenuItem>
-          <Share2 className="mr-2 size-4" />
-          共有
-        </ContextMenuItem>
-        <ContextMenuItem>
-          <MoveRight className="mr-2 size-4" />
-          移動
-        </ContextMenuItem>
-        <ContextMenuItem>
-          <Star className="mr-2 size-4" />
-          お気に入り
-        </ContextMenuItem>
-        <ContextMenuItem>
-          <Lock className="mr-2 size-4" />
-          ロック
-        </ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuItem variant="destructive" onSelect={() => onDelete(file.id)}>
-          <Trash2 className="mr-2 size-4" />
-          削除
-        </ContextMenuItem>
-      </ContextMenuContent>
+      <FileContextMenuContent file={file} onPreview={onPreview} onDelete={onDelete} />
+    </ContextMenu>
+  )
+}
+
+function FileRow({ file, onPreview, onDelete }: FileItemActionsProps) {
+  const Icon = fileIcon(file.name)
+  const date = file.updated_at ? new Date(file.updated_at).toLocaleDateString('ja-JP') : ''
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger>
+        <div
+          className="flex items-center gap-3 px-3 py-2 hover:bg-muted/50 cursor-pointer transition-colors border-b border-border/50 last:border-0"
+          onClick={() => onPreview(file.id)}
+        >
+          <Icon className="size-5 shrink-0 text-muted-foreground" />
+          <p className="flex-1 text-sm truncate min-w-0" title={file.name}>{file.name}</p>
+          <p className="text-xs text-muted-foreground w-20 text-right shrink-0">{formatFileSize(file.size)}</p>
+          <p className="text-xs text-muted-foreground w-24 text-right shrink-0 hidden sm:block">{date}</p>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            className="shrink-0"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <EllipsisVertical className="size-4" />
+          </Button>
+        </div>
+      </ContextMenuTrigger>
+      <FileContextMenuContent file={file} onPreview={onPreview} onDelete={onDelete} />
     </ContextMenu>
   )
 }
@@ -103,6 +139,7 @@ function FileCard({ file, onPreview, onDelete }: FileCardProps) {
 interface MainContentsProps {
   files: FileItem[]
   loading?: boolean
+  view?: 'grid' | 'list'
   onFileSelect?: (e: React.ChangeEvent<HTMLInputElement>) => void
   onPreview?: (id: string) => void
   onDelete?: (id: string) => void
@@ -110,8 +147,21 @@ interface MainContentsProps {
 
 export const SecondaryContents = () => <div />
 
-export default function MainContentsDefault({ files, loading, onFileSelect, onPreview, onDelete }: MainContentsProps) {
+export default function MainContentsDefault({ files, loading, view = 'grid', onFileSelect, onPreview, onDelete }: MainContentsProps) {
+  const noop = () => {}
+  const handlePreview = onPreview ?? noop
+  const handleDelete = onDelete ?? noop
+
   if (loading) {
+    if (view === 'list') {
+      return (
+        <div className="flex flex-col gap-1 p-3">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="rounded-lg bg-muted/50 animate-pulse h-9" />
+          ))}
+        </div>
+      )
+    }
     return (
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 p-3">
         {Array.from({ length: 8 }).map((_, i) => (
@@ -150,14 +200,36 @@ export default function MainContentsDefault({ files, loading, onFileSelect, onPr
     )
   }
 
+  if (view === 'list') {
+    return (
+      <div className="p-2">
+        <div className="flex items-center gap-3 px-3 py-1.5 border-b border-border text-xs text-muted-foreground font-medium">
+          <span className="size-5 shrink-0" />
+          <span className="flex-1">名前</span>
+          <span className="w-20 text-right shrink-0">サイズ</span>
+          <span className="w-24 text-right shrink-0 hidden sm:block">更新日</span>
+          <span className="size-6 shrink-0" />
+        </div>
+        {files.map((file) => (
+          <FileRow
+            key={file.id}
+            file={file}
+            onPreview={handlePreview}
+            onDelete={handleDelete}
+          />
+        ))}
+      </div>
+    )
+  }
+
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 p-3">
       {files.map((file) => (
         <FileCard
           key={file.id}
           file={file}
-          onPreview={onPreview ?? (() => {})}
-          onDelete={onDelete ?? (() => {})}
+          onPreview={handlePreview}
+          onDelete={handleDelete}
         />
       ))}
     </div>

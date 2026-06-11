@@ -51,6 +51,7 @@ function App() {
   const [previewFileId, setPreviewFileId] = useState<string | null>(null)
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [view, setView] = useState<'grid' | 'list'>('grid')
 
   const refreshFiles = useCallback(async () => {
     try {
@@ -171,7 +172,7 @@ function App() {
             </Sheet>
 
             <div className="flex-1 min-w-0">
-              <ToolbarDefault onFileSelect={handleFileSelect} uploading={uploading} />
+              <ToolbarDefault onFileSelect={handleFileSelect} uploading={uploading} view={view} onViewChange={setView} />
             </div>
           </div>
 
@@ -179,6 +180,7 @@ function App() {
             <MainContentsDefault
               files={files}
               loading={loading}
+              view={view}
               onFileSelect={handleFileSelect}
               onPreview={setPreviewFileId}
               onDelete={setDeleteTargetId}
