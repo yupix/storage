@@ -47,14 +47,24 @@ function App() {
   const [sheetOpen, setSheetOpen] = useState(false)
   const touchStartX = useRef(0)
 
+  const touchStartY = useRef(0)
+
   useEffect(() => {
     const onTouchStart = (e: TouchEvent) => {
-      touchStartX.current = e.touches[0].clientX
+      const touch = e.touches[0]
+      if (!touch) return
+      touchStartX.current = touch.clientX
+      touchStartY.current = touch.clientY
     }
     const onTouchEnd = (e: TouchEvent) => {
-      const dx = e.changedTouches[0].clientX - touchStartX.current
-      // 左端 30px 以内から始まり 60px 以上右にスワイプしたら開く
-      if (touchStartX.current < 30 && dx > 60) setSheetOpen(true)
+      const touch = e.changedTouches[0]
+      if (!touch) return
+      const dx = touch.clientX - touchStartX.current
+      const dy = touch.clientY - touchStartY.current
+      // 左端 30px 以内から始まり、横移動が縦移動より大きく 60px 以上右スワイプで開く
+      if (touchStartX.current < 30 && dx > 60 && Math.abs(dx) > Math.abs(dy)) {
+        setSheetOpen(true)
+      }
     }
     document.addEventListener('touchstart', onTouchStart, { passive: true })
     document.addEventListener('touchend', onTouchEnd, { passive: true })
