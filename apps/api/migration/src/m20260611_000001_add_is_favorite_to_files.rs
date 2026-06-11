@@ -21,8 +21,10 @@ impl MigrationTrait for Migration {
         manager
             .create_index(
                 Index::create()
-                    .name("idx-files-is_favorite")
+                    .name("idx-files-author_is_deleted_is_favorite")
                     .table(Files::Table)
+                    .col(Files::AuthorId)
+                    .col(Files::IsDeleted)
                     .col(Files::IsFavorite)
                     .to_owned(),
             )
@@ -32,6 +34,15 @@ impl MigrationTrait for Migration {
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_index(
+                Index::drop()
+                    .name("idx-files-author_is_deleted_is_favorite")
+                    .table(Files::Table)
+                    .to_owned(),
+            )
+            .await?;
+
         manager
             .alter_table(
                 Table::alter()
@@ -48,5 +59,7 @@ impl MigrationTrait for Migration {
 #[derive(Iden)]
 enum Files {
     Table,
+    AuthorId,
+    IsDeleted,
     IsFavorite,
 }
