@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import ToolbarDefault from '../components/ToolbarDefault'
 import MainContentsDefault from '#/components/MainContents'
 import UploadProgress from '../components/UploadProgress'
@@ -43,7 +43,6 @@ function App() {
   const [files, setFiles] = useState<FileItem[]>([])
   const [loading, setLoading] = useState(true)
   const [uploadItems, setUploadItems] = useState<UploadItem[]>([])
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const refreshFiles = useCallback(async () => {
     try {
@@ -89,16 +88,12 @@ function App() {
     [],
   )
 
-  const handleUploadClick = () => {
-    fileInputRef.current?.click()
-  }
-
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = e.target.files
-    if (!selected || selected.length === 0) return
-    e.target.value = ''
+    const selected = Array.from(e.target.files ?? [])
+    e.currentTarget.value = ''
+    if (selected.length === 0) return
 
-    const newItems = Array.from(selected).map(createUploadItem)
+    const newItems = selected.map(createUploadItem)
     setUploadItems((prev) => [...prev, ...newItems])
 
     for (const item of newItems) {
@@ -126,14 +121,6 @@ function App() {
 
   return (
     <main className="px-2 sm:px-4 pb-8 bg-background min-h-[calc(100vh-4rem)]">
-      <input
-        ref={fileInputRef}
-        type="file"
-        multiple
-        className="hidden"
-        onChange={handleFileSelect}
-      />
-
       <div className="flex gap-2 pt-2">
         {/* Desktop sidebar */}
         <aside className="hidden md:block w-52 shrink-0">
@@ -162,7 +149,7 @@ function App() {
             </Sheet>
 
             <div className="flex-1 min-w-0">
-              <ToolbarDefault onUpload={handleUploadClick} uploading={uploading} />
+              <ToolbarDefault onFileSelect={handleFileSelect} uploading={uploading} />
             </div>
           </div>
 
@@ -170,7 +157,7 @@ function App() {
             <MainContentsDefault
               files={files}
               loading={loading}
-              onUpload={handleUploadClick}
+              onFileSelect={handleFileSelect}
             />
           </div>
         </div>

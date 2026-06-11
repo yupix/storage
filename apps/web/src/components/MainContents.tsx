@@ -1,3 +1,4 @@
+import type React from 'react'
 import {
   FileText, EllipsisVertical, Download, SquarePen, Trash2, Share2,
   Star, MoveRight, Lock, Info, CloudUpload, File, ImageIcon, Video, Music,
@@ -96,12 +97,12 @@ function FileCard({ file }: FileCardProps) {
 interface MainContentsProps {
   files: FileItem[]
   loading?: boolean
-  onUpload?: () => void
+  onFileSelect?: (e: React.ChangeEvent<HTMLInputElement>) => void
 }
 
 export const SecondaryContents = () => <div />
 
-export default function MainContentsDefault({ files, loading, onUpload }: MainContentsProps) {
+export default function MainContentsDefault({ files, loading, onFileSelect }: MainContentsProps) {
   if (loading) {
     return (
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 p-3">
@@ -125,11 +126,14 @@ export default function MainContentsDefault({ files, loading, onUpload }: MainCo
               ファイルをアップロードして始めましょう
             </EmptyDescription>
           </EmptyHeader>
-          {onUpload && (
+          {onFileSelect && (
             <EmptyContent>
-              <Button onClick={onUpload}>
-                <CloudUpload className="mr-2 size-4" />
-                ファイルをアップロード
+              <Button asChild>
+                <label className="cursor-pointer">
+                  <CloudUpload className="mr-2 size-4" />
+                  ファイルをアップロード
+                  <input type="file" multiple className="sr-only" onChange={onFileSelect} />
+                </label>
               </Button>
             </EmptyContent>
           )}
