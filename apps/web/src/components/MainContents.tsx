@@ -1,7 +1,7 @@
 import type React from 'react'
 import {
   EllipsisVertical, Download, SquarePen, Trash2, Share2,
-  Star, MoveRight, Lock, Info, CloudUpload,
+  Star, MoveRight, Lock, Info, CloudUpload, Folder,
 } from 'lucide-react'
 import { FileIcon, defaultStyles } from 'react-file-icon'
 import type { FileIconProps } from 'react-file-icon'
@@ -16,7 +16,7 @@ import {
 } from './ui/dropdown-menu'
 import { Button } from './ui/button'
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from './ui/empty'
-import type { FileItem } from '../lib/files'
+import type { FileItem, FolderItem } from '../lib/files'
 import { formatFileSize } from '../lib/files'
 
 function FileTypeIcon({ name, size = 40 }: { name: string; size?: number }) {
@@ -33,9 +33,10 @@ interface FileItemActionsProps {
   file: FileItem
   onPreview: (id: string) => void
   onDelete: (id: string) => void
+  onMove: (id: string) => void
 }
 
-function FileDropdownMenuContent({ file, onPreview, onDelete }: FileItemActionsProps) {
+function FileDropdownMenuContent({ file, onPreview, onDelete, onMove }: FileItemActionsProps) {
   return (
     <DropdownMenuContent align="end">
       <DropdownMenuItem onSelect={() => onPreview(file.id)}>
@@ -54,7 +55,7 @@ function FileDropdownMenuContent({ file, onPreview, onDelete }: FileItemActionsP
         <Share2 className="mr-2 size-4" />
         共有
       </DropdownMenuItem>
-      <DropdownMenuItem>
+      <DropdownMenuItem onSelect={() => onMove(file.id)}>
         <MoveRight className="mr-2 size-4" />
         移動
       </DropdownMenuItem>
@@ -75,7 +76,7 @@ function FileDropdownMenuContent({ file, onPreview, onDelete }: FileItemActionsP
   )
 }
 
-function FileContextMenuContent({ file, onPreview, onDelete }: FileItemActionsProps) {
+function FileContextMenuContent({ file, onPreview, onDelete, onMove }: FileItemActionsProps) {
   return (
     <ContextMenuContent>
       <ContextMenuItem onSelect={() => onPreview(file.id)}>
@@ -94,7 +95,7 @@ function FileContextMenuContent({ file, onPreview, onDelete }: FileItemActionsPr
         <Share2 className="mr-2 size-4" />
         共有
       </ContextMenuItem>
-      <ContextMenuItem>
+      <ContextMenuItem onSelect={() => onMove(file.id)}>
         <MoveRight className="mr-2 size-4" />
         移動
       </ContextMenuItem>
@@ -115,7 +116,7 @@ function FileContextMenuContent({ file, onPreview, onDelete }: FileItemActionsPr
   )
 }
 
-function FileCard({ file, onPreview, onDelete }: FileItemActionsProps) {
+function FileCard({ file, onPreview, onDelete, onMove }: FileItemActionsProps) {
   const date = file.updated_at ? new Date(file.updated_at).toLocaleDateString('ja-JP') : ''
 
   return (
@@ -143,7 +144,7 @@ function FileCard({ file, onPreview, onDelete }: FileItemActionsProps) {
                     <EllipsisVertical className="size-4" />
                   </Button>
                 </DropdownMenuTrigger>
-                <FileDropdownMenuContent file={file} onPreview={onPreview} onDelete={onDelete} />
+                <FileDropdownMenuContent file={file} onPreview={onPreview} onDelete={onDelete} onMove={onMove} />
               </DropdownMenu>
             </div>
             <p className="text-xs text-muted-foreground mt-0.5">
@@ -152,12 +153,12 @@ function FileCard({ file, onPreview, onDelete }: FileItemActionsProps) {
           </CardContent>
         </Card>
       </ContextMenuTrigger>
-      <FileContextMenuContent file={file} onPreview={onPreview} onDelete={onDelete} />
+      <FileContextMenuContent file={file} onPreview={onPreview} onDelete={onDelete} onMove={onMove} />
     </ContextMenu>
   )
 }
 
-function FileRow({ file, onPreview, onDelete }: FileItemActionsProps) {
+function FileRow({ file, onPreview, onDelete, onMove }: FileItemActionsProps) {
   const date = file.updated_at ? new Date(file.updated_at).toLocaleDateString('ja-JP') : ''
 
   return (
@@ -182,30 +183,85 @@ function FileRow({ file, onPreview, onDelete }: FileItemActionsProps) {
                 <EllipsisVertical className="size-4" />
               </Button>
             </DropdownMenuTrigger>
-            <FileDropdownMenuContent file={file} onPreview={onPreview} onDelete={onDelete} />
+            <FileDropdownMenuContent file={file} onPreview={onPreview} onDelete={onDelete} onMove={onMove} />
           </DropdownMenu>
         </div>
       </ContextMenuTrigger>
-      <FileContextMenuContent file={file} onPreview={onPreview} onDelete={onDelete} />
+      <FileContextMenuContent file={file} onPreview={onPreview} onDelete={onDelete} onMove={onMove} />
     </ContextMenu>
+  )
+}
+
+interface FolderCardProps {
+  folder: FolderItem
+  onOpen: (folder: FolderItem) => void
+}
+
+function FolderCard({ folder, onOpen }: FolderCardProps) {
+  const date = folder.updated_at ? new Date(folder.updated_at).toLocaleDateString('ja-JP') : ''
+  return (
+    <Card
+      size="sm"
+      className="cursor-pointer hover:ring-primary/40 transition-shadow"
+      onClick={() => onOpen(folder)}
+    >
+      <div className="flex items-center justify-center h-24 bg-muted/50 rounded-t-xl">
+        <Folder className="size-12 text-muted-foreground" />
+      </div>
+      <CardContent className="pt-2 pb-3">
+        <p className="text-sm font-medium truncate" title={folder.name}>{folder.name}</p>
+        <p className="text-xs text-muted-foreground mt-0.5">{date}</p>
+      </CardContent>
+    </Card>
+  )
+}
+
+function FolderRow({ folder, onOpen }: FolderCardProps) {
+  const date = folder.updated_at ? new Date(folder.updated_at).toLocaleDateString('ja-JP') : ''
+  return (
+    <div
+      className="flex items-center gap-3 px-3 py-2 hover:bg-muted/50 cursor-pointer transition-colors border-b border-border/50 last:border-0"
+      onClick={() => onOpen(folder)}
+    >
+      <Folder className="size-5 shrink-0 text-muted-foreground" />
+      <p className="flex-1 text-sm truncate min-w-0 font-medium" title={folder.name}>{folder.name}</p>
+      <p className="text-xs text-muted-foreground w-20 text-right shrink-0">—</p>
+      <p className="text-xs text-muted-foreground w-24 text-right shrink-0 hidden sm:block">{date}</p>
+      <span className="size-6 shrink-0" />
+    </div>
   )
 }
 
 interface MainContentsProps {
   files: FileItem[]
+  folders?: FolderItem[]
   loading?: boolean
   view?: 'grid' | 'list'
   onFileSelect?: (e: React.ChangeEvent<HTMLInputElement>) => void
   onPreview?: (id: string) => void
   onDelete?: (id: string) => void
+  onMove?: (id: string) => void
+  onFolderOpen?: (folder: FolderItem) => void
 }
 
 export const SecondaryContents = () => <div />
 
-export default function MainContentsDefault({ files, loading, view = 'grid', onFileSelect, onPreview, onDelete }: MainContentsProps) {
+export default function MainContentsDefault({
+  files,
+  folders = [],
+  loading,
+  view = 'grid',
+  onFileSelect,
+  onPreview,
+  onDelete,
+  onMove,
+  onFolderOpen,
+}: MainContentsProps) {
   const noop = () => {}
   const handlePreview = onPreview ?? noop
   const handleDelete = onDelete ?? noop
+  const handleMove = onMove ?? noop
+  const handleFolderOpen = onFolderOpen ?? noop
 
   if (loading) {
     if (view === 'list') {
@@ -226,7 +282,7 @@ export default function MainContentsDefault({ files, loading, view = 'grid', onF
     )
   }
 
-  if (files.length === 0) {
+  if (files.length === 0 && folders.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-64 p-6">
         <Empty>
@@ -265,12 +321,16 @@ export default function MainContentsDefault({ files, loading, view = 'grid', onF
           <span className="w-24 text-right shrink-0 hidden sm:block">更新日</span>
           <span className="size-6 shrink-0" />
         </div>
+        {folders.map((folder) => (
+          <FolderRow key={folder.id} folder={folder} onOpen={handleFolderOpen} />
+        ))}
         {files.map((file) => (
           <FileRow
             key={file.id}
             file={file}
             onPreview={handlePreview}
             onDelete={handleDelete}
+            onMove={handleMove}
           />
         ))}
       </div>
@@ -279,12 +339,16 @@ export default function MainContentsDefault({ files, loading, view = 'grid', onF
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 p-3">
+      {folders.map((folder) => (
+        <FolderCard key={folder.id} folder={folder} onOpen={handleFolderOpen} />
+      ))}
       {files.map((file) => (
         <FileCard
           key={file.id}
           file={file}
           onPreview={handlePreview}
           onDelete={handleDelete}
+          onMove={handleMove}
         />
       ))}
     </div>
