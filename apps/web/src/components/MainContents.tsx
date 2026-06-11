@@ -24,16 +24,22 @@ function fileIcon(name: string) {
 
 interface FileCardProps {
   file: FileItem
+  onPreview: (id: string) => void
+  onDelete: (id: string) => void
 }
 
-function FileCard({ file }: FileCardProps) {
+function FileCard({ file, onPreview, onDelete }: FileCardProps) {
   const Icon = fileIcon(file.name)
   const date = file.updated_at ? new Date(file.updated_at).toLocaleDateString('ja-JP') : ''
 
   return (
     <ContextMenu>
       <ContextMenuTrigger>
-        <Card size="sm" className="cursor-pointer hover:ring-primary/40 transition-shadow">
+        <Card
+          size="sm"
+          className="cursor-pointer hover:ring-primary/40 transition-shadow"
+          onClick={() => onPreview(file.id)}
+        >
           <div className="flex items-center justify-center h-24 bg-muted/50 rounded-t-xl">
             <Icon className="size-12 text-muted-foreground" />
           </div>
@@ -56,6 +62,10 @@ function FileCard({ file }: FileCardProps) {
         </Card>
       </ContextMenuTrigger>
       <ContextMenuContent>
+        <ContextMenuItem onSelect={() => onPreview(file.id)}>
+          <Info className="mr-2 size-4" />
+          プレビュー
+        </ContextMenuItem>
         <ContextMenuItem>
           <Download className="mr-2 size-4" />
           ダウンロード
@@ -80,12 +90,8 @@ function FileCard({ file }: FileCardProps) {
           <Lock className="mr-2 size-4" />
           ロック
         </ContextMenuItem>
-        <ContextMenuItem>
-          <Info className="mr-2 size-4" />
-          情報
-        </ContextMenuItem>
         <ContextMenuSeparator />
-        <ContextMenuItem variant="destructive">
+        <ContextMenuItem variant="destructive" onSelect={() => onDelete(file.id)}>
           <Trash2 className="mr-2 size-4" />
           削除
         </ContextMenuItem>
@@ -98,11 +104,13 @@ interface MainContentsProps {
   files: FileItem[]
   loading?: boolean
   onFileSelect?: (e: React.ChangeEvent<HTMLInputElement>) => void
+  onPreview?: (id: string) => void
+  onDelete?: (id: string) => void
 }
 
 export const SecondaryContents = () => <div />
 
-export default function MainContentsDefault({ files, loading, onFileSelect }: MainContentsProps) {
+export default function MainContentsDefault({ files, loading, onFileSelect, onPreview, onDelete }: MainContentsProps) {
   if (loading) {
     return (
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 p-3">
@@ -145,7 +153,12 @@ export default function MainContentsDefault({ files, loading, onFileSelect }: Ma
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 p-3">
       {files.map((file) => (
-        <FileCard key={file.id} file={file} />
+        <FileCard
+          key={file.id}
+          file={file}
+          onPreview={onPreview ?? (() => {})}
+          onDelete={onDelete ?? (() => {})}
+        />
       ))}
     </div>
   )
