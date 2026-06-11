@@ -1,3 +1,4 @@
+import type React from 'react'
 import { Button } from './ui/button'
 import {
   Folder,
@@ -68,14 +69,28 @@ export const ToolbarSelected = () => {
   )
 }
 
-export default function ToolbarDefault() {
+interface ToolbarDefaultProps {
+  onFileSelect?: (e: React.ChangeEvent<HTMLInputElement>) => void
+  uploading?: boolean
+}
+
+export default function ToolbarDefault({ onFileSelect, uploading }: ToolbarDefaultProps) {
   return (
     <div className="bg-card text-card-foreground h-12 mx-1.5 my-2 px-3 rounded-lg flex items-center gap-1 ring-1 ring-foreground/10 overflow-x-auto">
       <Button variant="ghost" size="icon-sm" title="フォルダー作成">
         <Folder />
       </Button>
-      <Button variant="ghost" size="icon-sm" title="アップロード">
-        <CloudUpload />
+      <Button asChild variant="ghost" size="icon-sm" title="アップロード" disabled={uploading}>
+        <label className={uploading ? 'pointer-events-none' : 'cursor-pointer'}>
+          <CloudUpload />
+          <input
+            type="file"
+            multiple
+            className="sr-only"
+            disabled={uploading}
+            onChange={onFileSelect}
+          />
+        </label>
       </Button>
       <Button variant="ghost" size="icon-sm" title="共有">
         <Share2 />

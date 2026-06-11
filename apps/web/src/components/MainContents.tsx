@@ -1,33 +1,45 @@
-import { FileText, EllipsisVertical, Download, SquarePen, Trash2, Share2, Star, MoveRight, Lock, Info } from 'lucide-react'
+import type React from 'react'
 import {
-  Card,
-  CardContent,
-} from './ui/card'
+  FileText, EllipsisVertical, Download, SquarePen, Trash2, Share2,
+  Star, MoveRight, Lock, Info, CloudUpload, File, ImageIcon, Video, Music,
+} from 'lucide-react'
+import { Card, CardContent } from './ui/card'
 import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
+  ContextMenu, ContextMenuContent, ContextMenuItem,
+  ContextMenuSeparator, ContextMenuTrigger,
 } from './ui/context-menu'
 import { Button } from './ui/button'
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from './ui/empty'
+import type { FileItem } from '../lib/files'
+import { formatFileSize } from '../lib/files'
 
-interface FileCardProps {
-  name: string
-  updatedAt?: string
+function fileIcon(name: string) {
+  const ext = name.split('.').pop()?.toLowerCase() ?? ''
+  if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'svg'].includes(ext)) return ImageIcon
+  if (['mp4', 'mov', 'avi', 'mkv', 'webm'].includes(ext)) return Video
+  if (['mp3', 'wav', 'ogg', 'flac', 'm4a'].includes(ext)) return Music
+  if (['pdf', 'doc', 'docx', 'txt', 'md'].includes(ext)) return FileText
+  return File
 }
 
-function FileCard({ name, updatedAt }: FileCardProps) {
+interface FileCardProps {
+  file: FileItem
+}
+
+function FileCard({ file }: FileCardProps) {
+  const Icon = fileIcon(file.name)
+  const date = file.updated_at ? new Date(file.updated_at).toLocaleDateString('ja-JP') : ''
+
   return (
     <ContextMenu>
       <ContextMenuTrigger>
         <Card size="sm" className="cursor-pointer hover:ring-primary/40 transition-shadow">
           <div className="flex items-center justify-center h-24 bg-muted/50 rounded-t-xl">
-            <FileText className="size-12 text-muted-foreground" />
+            <Icon className="size-12 text-muted-foreground" />
           </div>
           <CardContent className="pt-2 pb-3">
             <div className="flex items-center justify-between gap-1">
-              <p className="text-sm font-medium truncate flex-1">{name}</p>
+              <p className="text-sm font-medium truncate flex-1" title={file.name}>{file.name}</p>
               <Button
                 variant="ghost"
                 size="icon-xs"
@@ -37,9 +49,9 @@ function FileCard({ name, updatedAt }: FileCardProps) {
                 <EllipsisVertical className="size-4" />
               </Button>
             </div>
-            {updatedAt && (
-              <p className="text-xs text-muted-foreground mt-0.5">{updatedAt}</p>
-            )}
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {formatFileSize(file.size)}{date ? ` · ${date}` : ''}
+            </p>
           </CardContent>
         </Card>
       </ContextMenuTrigger>
@@ -82,22 +94,58 @@ function FileCard({ name, updatedAt }: FileCardProps) {
   )
 }
 
-export const SecondaryContents = () => {
-  return <div />
+interface MainContentsProps {
+  files: FileItem[]
+  loading?: boolean
+  onFileSelect?: (e: React.ChangeEvent<HTMLInputElement>) => void
 }
 
-export default function MainContentsDefault() {
-  const mockFiles = [
-    { name: 'ファイル名.txt', updatedAt: '2026/06/01' },
-    { name: 'ドキュメント.pdf', updatedAt: '2026/05/28' },
-    { name: 'レポート最終版.docx', updatedAt: '2026/05/20' },
-    { name: 'プレゼン資料.pptx', updatedAt: '2026/05/15' },
-  ]
+export const SecondaryContents = () => <div />
+
+export default function MainContentsDefault({ files, loading, onFileSelect }: MainContentsProps) {
+  if (loading) {
+    return (
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 p-3">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className="rounded-xl bg-muted/50 animate-pulse h-36" />
+        ))}
+      </div>
+    )
+  }
+
+  if (files.length === 0) {
+    return (
+      <div className="flex items-center justify-center min-h-64 p-6">
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia>
+              <CloudUpload className="size-10 text-muted-foreground" />
+            </EmptyMedia>
+            <EmptyTitle>ファイルがありません</EmptyTitle>
+            <EmptyDescription>
+              ファイルをアップロードして始めましょう
+            </EmptyDescription>
+          </EmptyHeader>
+          {onFileSelect && (
+            <EmptyContent>
+              <Button asChild>
+                <label className="cursor-pointer">
+                  <CloudUpload className="mr-2 size-4" />
+                  ファイルをアップロード
+                  <input type="file" multiple className="sr-only" onChange={onFileSelect} />
+                </label>
+              </Button>
+            </EmptyContent>
+          )}
+        </Empty>
+      </div>
+    )
+  }
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 p-3">
-      {mockFiles.map((file) => (
-        <FileCard key={file.name} name={file.name} updatedAt={file.updatedAt} />
+      {files.map((file) => (
+        <FileCard key={file.id} file={file} />
       ))}
     </div>
   )
