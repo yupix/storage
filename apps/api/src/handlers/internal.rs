@@ -64,10 +64,8 @@ pub async fn download_file(
     let body = axum::body::Body::from_stream(stream);
 
     let mut headers = HeaderMap::new();
-    headers.insert(
-        header::CONTENT_DISPOSITION,
-        HeaderValue::from_static("inline"),
-    );
+    headers.insert(header::CONTENT_DISPOSITION, HeaderValue::from_static("inline"));
+    headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static("*"));
     if let Ok(val) = HeaderValue::from_str(&params.ct) {
         headers.insert(header::CONTENT_TYPE, val);
     }
