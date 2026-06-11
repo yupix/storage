@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import ToolbarDefault from '../components/ToolbarDefault'
 import MainContentsDefault from '#/components/MainContents'
 import UploadProgress from '../components/UploadProgress'
@@ -45,6 +45,24 @@ function SidebarNav({ onItemClick }: { onItemClick?: () => void }) {
 
 function App() {
   const [sheetOpen, setSheetOpen] = useState(false)
+  const touchStartX = useRef(0)
+
+  useEffect(() => {
+    const onTouchStart = (e: TouchEvent) => {
+      touchStartX.current = e.touches[0].clientX
+    }
+    const onTouchEnd = (e: TouchEvent) => {
+      const dx = e.changedTouches[0].clientX - touchStartX.current
+      // 左端 30px 以内から始まり 60px 以上右にスワイプしたら開く
+      if (touchStartX.current < 30 && dx > 60) setSheetOpen(true)
+    }
+    document.addEventListener('touchstart', onTouchStart, { passive: true })
+    document.addEventListener('touchend', onTouchEnd, { passive: true })
+    return () => {
+      document.removeEventListener('touchstart', onTouchStart)
+      document.removeEventListener('touchend', onTouchEnd)
+    }
+  }, [])
   const [files, setFiles] = useState<FileItem[]>([])
   const [loading, setLoading] = useState(true)
   const [uploadItems, setUploadItems] = useState<UploadItem[]>([])
