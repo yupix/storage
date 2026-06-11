@@ -117,13 +117,18 @@ export async function deleteFile(id: string): Promise<void> {
   if (error) throw new Error('ファイルの削除に失敗しました')
 }
 
-export function downloadFile(id: string, name: string): void {
+export async function downloadFile(id: string, name: string): Promise<void> {
+  const res = await fetch(`/v1/files/${id}/view`)
+  if (!res.ok) throw new Error('ダウンロードに失敗しました')
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
-  a.href = `/v1/files/${id}/view`
+  a.href = url
   a.download = name
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
+  URL.revokeObjectURL(url)
 }
 
 export function uploadFileWithProgress(
