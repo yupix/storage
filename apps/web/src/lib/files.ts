@@ -28,9 +28,21 @@ export interface UploadItem {
   error?: string
 }
 
-export async function fetchMyFiles(page = 1, limit = 50, folderId?: string | null): Promise<PaginatedFiles> {
+export async function fetchMyFiles(
+  page = 1,
+  limit = 50,
+  folderId?: string | null,
+  isFavorite?: boolean,
+): Promise<PaginatedFiles> {
   const { data, error } = await apiClient.GET('/v1/files/mine', {
-    params: { query: { page, limit, ...(folderId ? { folder_id: folderId } : {}) } },
+    params: {
+      query: {
+        page,
+        limit,
+        ...(folderId ? { folder_id: folderId } : {}),
+        ...(isFavorite !== undefined ? { is_favorite: isFavorite } : {}),
+      },
+    },
   })
   if (error || !data) throw new Error('ファイル一覧の取得に失敗しました')
   return data
@@ -60,6 +72,24 @@ export async function moveFile(fileId: string, folderId: string | null): Promise
   if (error) throw new Error('ファイルの移動に失敗しました')
 }
 
+export async function renameFile(id: string, name: string): Promise<FileItem> {
+  const { data, error } = await apiClient.PATCH('/v1/files/{id}', {
+    params: { path: { id } },
+    body: { filename: name },
+  })
+  if (error || !data) throw new Error('ファイル名の変更に失敗しました')
+  return data
+}
+
+export async function toggleFavorite(id: string, isFavorite: boolean): Promise<FileItem> {
+  const { data, error } = await apiClient.PATCH('/v1/files/{id}', {
+    params: { path: { id } },
+    body: { is_favorite: isFavorite },
+  })
+  if (error || !data) throw new Error('お気に入りの更新に失敗しました')
+  return data
+}
+
 // /v1/ パスの絶対 URL をフロントエンド経由の相対パスに変換する。
 // Coder 等の環境では API ポートに直接アクセスできないため、
 // TanStack Start のサーバーハンドラーを経由してプロキシする。
@@ -85,6 +115,15 @@ export async function deleteFile(id: string): Promise<void> {
     params: { path: { id } },
   })
   if (error) throw new Error('ファイルの削除に失敗しました')
+}
+
+export function downloadFile(id: string, name: string): void {
+  const a = document.createElement('a')
+  a.href = `/v1/files/${id}/view`
+  a.download = name
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
 }
 
 export function uploadFileWithProgress(
