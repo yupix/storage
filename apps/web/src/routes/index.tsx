@@ -233,11 +233,11 @@ function App() {
   const handleToggleFavorite = useCallback(async (id: string, current: boolean) => {
     const next = !current
     setFiles((prev) => prev.map((f) => f.id === id ? { ...f, is_favorite: next } : f))
-    if (activeSection === 'favorites' && !next) {
-      setFiles((prev) => prev.filter((f) => f.id !== id))
-    }
     try {
       await toggleFavorite(id, next)
+      if (activeSection === 'favorites' && !next) {
+        setFiles((prev) => prev.filter((f) => f.id !== id))
+      }
     } catch {
       setFiles((prev) => prev.map((f) => f.id === id ? { ...f, is_favorite: current } : f))
     }
