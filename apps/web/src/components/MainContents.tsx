@@ -1,8 +1,10 @@
 import type React from 'react'
 import {
-  FileText, EllipsisVertical, Download, SquarePen, Trash2, Share2,
-  Star, MoveRight, Lock, Info, CloudUpload, File, ImageIcon, Video, Music,
+  EllipsisVertical, Download, SquarePen, Trash2, Share2,
+  Star, MoveRight, Lock, Info, CloudUpload,
 } from 'lucide-react'
+import { FileIcon, defaultStyles } from 'react-file-icon'
+import type { FileIconProps } from 'react-file-icon'
 import { Card, CardContent } from './ui/card'
 import {
   ContextMenu, ContextMenuContent, ContextMenuItem,
@@ -17,13 +19,14 @@ import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyCont
 import type { FileItem } from '../lib/files'
 import { formatFileSize } from '../lib/files'
 
-function fileIcon(name: string) {
+function FileTypeIcon({ name, size = 40 }: { name: string; size?: number }) {
   const ext = name.split('.').pop()?.toLowerCase() ?? ''
-  if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'svg'].includes(ext)) return ImageIcon
-  if (['mp4', 'mov', 'avi', 'mkv', 'webm'].includes(ext)) return Video
-  if (['mp3', 'wav', 'ogg', 'flac', 'm4a'].includes(ext)) return Music
-  if (['pdf', 'doc', 'docx', 'txt', 'md'].includes(ext)) return FileText
-  return File
+  const style = (defaultStyles as Record<string, FileIconProps>)[ext] ?? {}
+  return (
+    <div style={{ width: size, height: size }}>
+      <FileIcon extension={ext} {...style} />
+    </div>
+  )
 }
 
 interface FileItemActionsProps {
@@ -113,7 +116,6 @@ function FileContextMenuContent({ file, onPreview, onDelete }: FileItemActionsPr
 }
 
 function FileCard({ file, onPreview, onDelete }: FileItemActionsProps) {
-  const Icon = fileIcon(file.name)
   const date = file.updated_at ? new Date(file.updated_at).toLocaleDateString('ja-JP') : ''
 
   return (
@@ -125,7 +127,7 @@ function FileCard({ file, onPreview, onDelete }: FileItemActionsProps) {
           onClick={() => onPreview(file.id)}
         >
           <div className="flex items-center justify-center h-24 bg-muted/50 rounded-t-xl">
-            <Icon className="size-12 text-muted-foreground" />
+            <FileTypeIcon name={file.name} size={48} />
           </div>
           <CardContent className="pt-2 pb-3">
             <div className="flex items-center justify-between gap-1">
@@ -156,7 +158,6 @@ function FileCard({ file, onPreview, onDelete }: FileItemActionsProps) {
 }
 
 function FileRow({ file, onPreview, onDelete }: FileItemActionsProps) {
-  const Icon = fileIcon(file.name)
   const date = file.updated_at ? new Date(file.updated_at).toLocaleDateString('ja-JP') : ''
 
   return (
@@ -166,7 +167,7 @@ function FileRow({ file, onPreview, onDelete }: FileItemActionsProps) {
           className="flex items-center gap-3 px-3 py-2 hover:bg-muted/50 cursor-pointer transition-colors border-b border-border/50 last:border-0"
           onClick={() => onPreview(file.id)}
         >
-          <Icon className="size-5 shrink-0 text-muted-foreground" />
+          <FileTypeIcon name={file.name} size={20} />
           <p className="flex-1 text-sm truncate min-w-0" title={file.name}>{file.name}</p>
           <p className="text-xs text-muted-foreground w-20 text-right shrink-0">{formatFileSize(file.size)}</p>
           <p className="text-xs text-muted-foreground w-24 text-right shrink-0 hidden sm:block">{date}</p>
