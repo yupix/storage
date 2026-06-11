@@ -133,9 +133,14 @@ impl StorageDriver for LocalDriver {
     }
 
     async fn get_download_url(&self, key: &str, expires_in: Duration) -> Result<String> {
-        // HMAC-SHA256 で key + 有効期限タイムスタンプに署名
-        // 生成例: {base_url}/v1/internal/download?key={key}&exp={unix_ts}&sig={hmac}
-        todo!()
+        let exp = (Utc::now() + expires_in).timestamp() as u64;
+        let sig = self.sign(key, exp);
+        // key はパーセントエンコーディングしてクエリパラメータに安全に埋め込む
+        let encoded_key = urlencoding::encode(key);
+        Ok(format!(
+            "{}/v1/internal/download?key={encoded_key}&exp={exp}&sig={sig}",
+            self.base_url
+        ))
     }
 }
 ```
