@@ -112,10 +112,10 @@ impl StorageDriver for LocalDriver {
             tokio::fs::create_dir_all(parent).await?;
         }
         // 同一ファイルシステムなら rename（移動）で済ませてディスク I/O を最小化。
-        // クロスデバイスなど rename が失敗した場合のみ copy + 元ファイル削除にフォールバック。
+        // クロスデバイスなど rename が失敗した場合は copy のみ行い、
+        // 一時ファイルの削除は呼び出し元の NamedTempFile ドロップ（RAII）に委ねる。
         if tokio::fs::rename(path, &dest).await.is_err() {
             tokio::fs::copy(path, &dest).await?;
-            tokio::fs::remove_file(path).await.ok();
         }
         Ok(())
     }

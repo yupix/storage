@@ -55,8 +55,9 @@ impl StorageDriver for LocalDriver {
             tokio::fs::create_dir_all(parent).await?;
         }
         if tokio::fs::rename(path, &dest).await.is_err() {
+            // rename 失敗時（クロスデバイス等）は copy のみ行い、
+            // 一時ファイルの削除は呼び出し元の NamedTempFile ドロップに委ねる。
             tokio::fs::copy(path, &dest).await?;
-            tokio::fs::remove_file(path).await.ok();
         }
         Ok(())
     }
