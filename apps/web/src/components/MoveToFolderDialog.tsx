@@ -95,7 +95,7 @@ export default function MoveToFolderDialog({ open, fileId, onClose, onMoved }: P
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={moving}>キャンセル</Button>
-          <Button onClick={handleMove} disabled={moving || fetching}>
+          <Button onClick={handleMove} disabled={moving || fetching || !fileId}>
             {moving ? '移動中...' : '移動'}
           </Button>
         </DialogFooter>
