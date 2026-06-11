@@ -8,6 +8,10 @@ import {
   ContextMenu, ContextMenuContent, ContextMenuItem,
   ContextMenuSeparator, ContextMenuTrigger,
 } from './ui/context-menu'
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuSeparator, DropdownMenuTrigger,
+} from './ui/dropdown-menu'
 import { Button } from './ui/button'
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from './ui/empty'
 import type { FileItem } from '../lib/files'
@@ -26,6 +30,46 @@ interface FileItemActionsProps {
   file: FileItem
   onPreview: (id: string) => void
   onDelete: (id: string) => void
+}
+
+function FileDropdownMenuContent({ file, onPreview, onDelete }: FileItemActionsProps) {
+  return (
+    <DropdownMenuContent align="end">
+      <DropdownMenuItem onSelect={() => onPreview(file.id)}>
+        <Info className="mr-2 size-4" />
+        プレビュー
+      </DropdownMenuItem>
+      <DropdownMenuItem>
+        <Download className="mr-2 size-4" />
+        ダウンロード
+      </DropdownMenuItem>
+      <DropdownMenuItem>
+        <SquarePen className="mr-2 size-4" />
+        名前変更
+      </DropdownMenuItem>
+      <DropdownMenuItem>
+        <Share2 className="mr-2 size-4" />
+        共有
+      </DropdownMenuItem>
+      <DropdownMenuItem>
+        <MoveRight className="mr-2 size-4" />
+        移動
+      </DropdownMenuItem>
+      <DropdownMenuItem>
+        <Star className="mr-2 size-4" />
+        お気に入り
+      </DropdownMenuItem>
+      <DropdownMenuItem>
+        <Lock className="mr-2 size-4" />
+        ロック
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem variant="destructive" onSelect={() => onDelete(file.id)}>
+        <Trash2 className="mr-2 size-4" />
+        削除
+      </DropdownMenuItem>
+    </DropdownMenuContent>
+  )
 }
 
 function FileContextMenuContent({ file, onPreview, onDelete }: FileItemActionsProps) {
@@ -86,14 +130,19 @@ function FileCard({ file, onPreview, onDelete }: FileItemActionsProps) {
           <CardContent className="pt-2 pb-3">
             <div className="flex items-center justify-between gap-1">
               <p className="text-sm font-medium truncate flex-1" title={file.name}>{file.name}</p>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                className="shrink-0"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <EllipsisVertical className="size-4" />
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    className="shrink-0"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <EllipsisVertical className="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <FileDropdownMenuContent file={file} onPreview={onPreview} onDelete={onDelete} />
+              </DropdownMenu>
             </div>
             <p className="text-xs text-muted-foreground mt-0.5">
               {formatFileSize(file.size)}{date ? ` · ${date}` : ''}
@@ -121,14 +170,19 @@ function FileRow({ file, onPreview, onDelete }: FileItemActionsProps) {
           <p className="flex-1 text-sm truncate min-w-0" title={file.name}>{file.name}</p>
           <p className="text-xs text-muted-foreground w-20 text-right shrink-0">{formatFileSize(file.size)}</p>
           <p className="text-xs text-muted-foreground w-24 text-right shrink-0 hidden sm:block">{date}</p>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            className="shrink-0"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <EllipsisVertical className="size-4" />
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                className="shrink-0"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <EllipsisVertical className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <FileDropdownMenuContent file={file} onPreview={onPreview} onDelete={onDelete} />
+          </DropdownMenu>
         </div>
       </ContextMenuTrigger>
       <FileContextMenuContent file={file} onPreview={onPreview} onDelete={onDelete} />
