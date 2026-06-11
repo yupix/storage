@@ -1,7 +1,7 @@
 use axum::{
     Json,
     extract::{Multipart, Path, Query, State},
-    http::StatusCode,
+    http::{StatusCode, Uri, header},
     response::IntoResponse,
 };
 use chrono::Utc;
@@ -29,6 +29,7 @@ fn file_to_response(file: files::Model) -> FileResponse {
     FileResponse {
         id: file.id.to_string(),
         name: file.filename,
+        file_type: file.file_type,
         size: file.filesize,
         updated_at: file.updated_at.map(|dt| dt.to_string()).unwrap_or_default(),
         sender_id: file.author_id.to_string(),
@@ -330,6 +331,48 @@ pub async fn get_file(
         url,
         url_expires_in: 3600,
     }))
+}
+
+#[utoipa::path(
+    get,
+    path = "/{id}/view",
+    params(("id" = Uuid, Path, description = "ファイルID")),
+    responses(
+        (status = 302, description = "署名付きURLへリダイレクト"),
+        (status = 401, description = "未認証"),
+        (status = 403, description = "アクセス権限なし"),
+        (status = 404, description = "ファイルが見つかりません"),
+    )
+)]
+pub async fn view_file(
+    State(state): State<AppState>,
+    current_user: CurrentUser,
+    Path(file_id): Path<Uuid>,
+) -> Result<impl IntoResponse, AuthError> {
+    let file = files::Entity::find_by_id(file_id)
+        .filter(files::Column::IsDeleted.eq(false))
+        .one(&state.db)
+        .await?
+        .ok_or(AuthError::NotFound)?;
+
+    if file.author_id != current_user.id {
+        check_file_permission(&state.db, file.id, file.author_id, current_user.id, false).await?;
+    }
+
+    let url = state
+        .storage
+        .get_download_url(&file.url, &file.file_type, Duration::from_secs(3600))
+        .await
+        .map_err(|e| AuthError::Internal(e))?;
+
+    // localhost URL はプロキシ経由にするためパス部分だけにする
+    let redirect_to = url.parse::<Uri>()
+        .ok()
+        .filter(|u| matches!(u.host(), Some("localhost") | Some("127.0.0.1")))
+        .and_then(|u| u.path_and_query().map(|pq| pq.to_string()))
+        .unwrap_or(url);
+
+    Ok((StatusCode::FOUND, [(header::LOCATION, redirect_to)]))
 }
 
 #[utoipa::path(

@@ -13,6 +13,7 @@ pub struct FileListQuery {
 pub struct FileResponse {
     pub id: String,
     pub name: String,
+    pub file_type: String,
     pub size: i64,
     pub updated_at: String,
     pub sender_id: String,
