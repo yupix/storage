@@ -8,22 +8,23 @@ import {
 } from './ui/dialog'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
-import { renameFile } from '../lib/files'
 
 interface RenameDialogProps {
   open: boolean
-  fileId: string | null
   currentName: string
   onClose: () => void
-  onRenamed: () => void
+  onSubmit: (name: string) => Promise<void>
+  title?: string
+  placeholder?: string
 }
 
 export default function RenameDialog({
   open,
-  fileId,
   currentName,
   onClose,
-  onRenamed,
+  onSubmit,
+  title = '名前変更',
+  placeholder = '新しい名前',
 }: RenameDialogProps) {
   const [name, setName] = useState(currentName)
   const [submitting, setSubmitting] = useState(false)
@@ -38,17 +39,15 @@ export default function RenameDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!fileId) return
     const trimmed = name.trim()
     if (!trimmed) {
-      setError('ファイル名を入力してください')
+      setError('名前を入力してください')
       return
     }
     setSubmitting(true)
     setError(null)
     try {
-      await renameFile(fileId, trimmed)
-      onRenamed()
+      await onSubmit(trimmed)
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : '名前変更に失敗しました')
@@ -61,14 +60,14 @@ export default function RenameDialog({
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose() }}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>名前変更</DialogTitle>
+          <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <div className="py-2">
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="新しいファイル名"
+              placeholder={placeholder}
               autoFocus
               disabled={submitting}
             />
