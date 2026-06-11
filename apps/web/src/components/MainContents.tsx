@@ -378,7 +378,7 @@ function FolderCard({ folder, onOpen, onDelete, onMove, onRename }: FolderItemAc
               </DropdownMenu>
             </div>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {formatFileSize(folder.total_size)}{date ? ` · ${date}` : ''}
+              {formatFileSize(folder.total_size ?? 0)}{date ? ` · ${date}` : ''}
             </p>
           </CardContent>
         </Card>
@@ -405,7 +405,7 @@ function FolderRow({ folder, onOpen, onDelete, onMove, onRename }: FolderItemAct
         >
           <Folder className="size-5 shrink-0 text-muted-foreground" />
           <p className="flex-1 text-sm truncate min-w-0 font-medium" title={folder.name}>{folder.name}</p>
-          <p className="text-xs text-muted-foreground w-20 text-right shrink-0">{formatFileSize(folder.total_size)}</p>
+          <p className="text-xs text-muted-foreground w-20 text-right shrink-0">{formatFileSize(folder.total_size ?? 0)}</p>
           <p className="text-xs text-muted-foreground w-24 text-right shrink-0 hidden sm:block">{date}</p>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
