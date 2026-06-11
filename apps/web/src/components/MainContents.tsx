@@ -1,4 +1,5 @@
 import type React from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   EllipsisVertical, Download, SquarePen, Trash2, Share2,
   Star, MoveRight, Lock, Info, CloudUpload, Folder,
@@ -29,6 +30,45 @@ function FileTypeIcon({ name, size = 40 }: { name: string; size?: number }) {
   )
 }
 
+function ImageThumbnail({ fileId, name }: { fileId: string; name: string }) {
+  const [loaded, setLoaded] = useState(false)
+  const [error, setError] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setVisible(true); observer.disconnect() } },
+      { rootMargin: '200px' },
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
+  const showIcon = !visible || !loaded || error
+
+  return (
+    <div ref={ref} className="h-full w-full">
+      {visible && !error && (
+        <img
+          src={`/v1/files/${fileId}/view`}
+          alt={name}
+          className={`h-full w-full object-cover rounded-t-xl transition-opacity ${loaded ? 'opacity-100' : 'opacity-0'}`}
+          onLoad={() => setLoaded(true)}
+          onError={() => setError(true)}
+        />
+      )}
+      {showIcon && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <FileTypeIcon name={name} size={48} />
+        </div>
+      )}
+    </div>
+  )
+}
+
 interface FileItemActionsProps {
   file: FileItem
   onPreview: (id: string) => void
@@ -38,7 +78,7 @@ interface FileItemActionsProps {
 
 function FileDropdownMenuContent({ file, onPreview, onDelete, onMove }: FileItemActionsProps) {
   return (
-    <DropdownMenuContent align="end">
+    <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
       <DropdownMenuItem onSelect={() => onPreview(file.id)}>
         <Info className="mr-2 size-4" />
         プレビュー
@@ -78,7 +118,7 @@ function FileDropdownMenuContent({ file, onPreview, onDelete, onMove }: FileItem
 
 function FileContextMenuContent({ file, onPreview, onDelete, onMove }: FileItemActionsProps) {
   return (
-    <ContextMenuContent>
+    <ContextMenuContent onClick={(e) => e.stopPropagation()}>
       <ContextMenuItem onSelect={() => onPreview(file.id)}>
         <Info className="mr-2 size-4" />
         プレビュー
@@ -118,6 +158,7 @@ function FileContextMenuContent({ file, onPreview, onDelete, onMove }: FileItemA
 
 function FileCard({ file, onPreview, onDelete, onMove }: FileItemActionsProps) {
   const date = file.updated_at ? new Date(file.updated_at).toLocaleDateString('ja-JP') : ''
+  const isImage = file.file_type.startsWith('image/')
 
   return (
     <ContextMenu>
@@ -127,8 +168,11 @@ function FileCard({ file, onPreview, onDelete, onMove }: FileItemActionsProps) {
           className="cursor-pointer hover:ring-primary/40 transition-shadow"
           onClick={() => onPreview(file.id)}
         >
-          <div className="flex items-center justify-center h-24 bg-muted/50 rounded-t-xl">
-            <FileTypeIcon name={file.name} size={48} />
+          <div className="relative flex items-center justify-center h-24 bg-muted/50 rounded-t-xl overflow-hidden">
+            {isImage
+              ? <ImageThumbnail fileId={file.id} name={file.name} />
+              : <FileTypeIcon name={file.name} size={48} />
+            }
           </div>
           <CardContent className="pt-2 pb-3">
             <div className="flex items-center justify-between gap-1">
