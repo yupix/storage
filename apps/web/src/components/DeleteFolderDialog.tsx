@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialog, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from './ui/alert-dialog'
+import { Button } from './ui/button'
 import { deleteFolder } from '../lib/files'
 
 interface Props {
@@ -80,9 +81,9 @@ export default function DeleteFolderDialog({ folderId, onClose, onDeleted }: Pro
 
         <AlertDialogFooter>
           <AlertDialogCancel disabled={deleting}>キャンセル</AlertDialogCancel>
-          <AlertDialogAction onClick={handleConfirm} disabled={deleting}>
+          <Button variant="destructive" onClick={handleConfirm} disabled={deleting}>
             {deleting ? '削除中...' : '削除'}
-          </AlertDialogAction>
+          </Button>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
