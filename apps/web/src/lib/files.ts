@@ -34,10 +34,23 @@ export async function fetchMyFiles(page = 1, limit = 50): Promise<PaginatedFiles
   return res.json()
 }
 
+// /v1/ パスの絶対 URL をフロントエンド経由の相対パスに変換する。
+// Coder 等の環境では API ポートに直接アクセスできないため、
+// TanStack Start のサーバーハンドラーを経由してプロキシする。
+// S3 の署名付き URL（外部ドメイン）はそのまま返す。
+function toProxiedUrl(url: string): string {
+  try {
+    const parsed = new URL(url)
+    if (parsed.pathname.startsWith('/v1/')) return parsed.pathname + parsed.search
+  } catch { /* ignore */ }
+  return url
+}
+
 export async function fetchFileDetail(id: string): Promise<FileDetail> {
   const res = await fetch(`/v1/files/${id}`)
   if (!res.ok) throw new Error('ファイル情報の取得に失敗しました')
-  return res.json()
+  const data = await res.json() as FileDetail
+  return { ...data, url: toProxiedUrl(data.url) }
 }
 
 export async function deleteFile(id: string): Promise<void> {
