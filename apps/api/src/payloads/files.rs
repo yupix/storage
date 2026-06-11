@@ -7,6 +7,7 @@ pub struct FileListQuery {
     pub folder_id: Option<Uuid>,
     pub page: Option<u64>,
     pub limit: Option<u64>,
+    pub is_favorite: Option<bool>,
 }
 
 #[derive(Debug, Serialize, utoipa::ToSchema)]
@@ -17,6 +18,7 @@ pub struct FileResponse {
     pub size: i64,
     pub updated_at: String,
     pub sender_id: String,
+    pub is_favorite: bool,
 }
 
 #[derive(Debug, Serialize, utoipa::ToSchema)]
@@ -35,6 +37,7 @@ pub struct FileDetailResponse {
     pub size: i64,
     pub updated_at: String,
     pub sender_id: String,
+    pub is_favorite: bool,
     /// RustFS 署名付き URL（有効期限あり）
     pub url: String,
     /// URL の有効期限（秒）
@@ -47,6 +50,7 @@ pub struct UpdateFileRequest {
     /// null を渡すとルートへ移動。省略時は変更なし
     #[serde(default, deserialize_with = "deserialize_optional_field")]
     pub folder_id: Option<Option<Uuid>>,
+    pub is_favorite: Option<bool>,
 }
 
 pub fn deserialize_optional_field<'de, D>(

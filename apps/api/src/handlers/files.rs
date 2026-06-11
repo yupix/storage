@@ -33,6 +33,7 @@ fn file_to_response(file: files::Model) -> FileResponse {
         size: file.filesize,
         updated_at: file.updated_at.map(|dt| dt.to_string()).unwrap_or_default(),
         sender_id: file.author_id.to_string(),
+        is_favorite: file.is_favorite,
     }
 }
 
@@ -95,10 +96,15 @@ pub async fn get_files(
         .order_by_desc(files::Column::UpdatedAt)
         .order_by_asc(files::Column::Id);
 
-    selector = match query.folder_id {
-        Some(fid) => selector.filter(files::Column::FolderId.eq(fid)),
-        None => selector.filter(files::Column::FolderId.is_null()),
-    };
+    if let Some(is_fav) = query.is_favorite {
+        selector = selector.filter(files::Column::IsFavorite.eq(is_fav));
+        // お気に入りフィルター時はフォルダーによる絞り込みをしない
+    } else {
+        selector = match query.folder_id {
+            Some(fid) => selector.filter(files::Column::FolderId.eq(fid)),
+            None => selector.filter(files::Column::FolderId.is_null()),
+        };
+    }
 
     let paginator = selector.paginate(&state.db, limit);
     let total = paginator.num_items().await?;
@@ -259,6 +265,7 @@ pub async fn upload_file(
             ocr_text: Set(None),
             created_at: Set(Some(now)),
             updated_at: Set(Some(now)),
+            is_favorite: Set(false),
         }
         .insert(&txn)
         .await
@@ -328,6 +335,7 @@ pub async fn get_file(
         size: file.filesize,
         updated_at: file.updated_at.map(|dt| dt.to_string()).unwrap_or_default(),
         sender_id: file.author_id.to_string(),
+        is_favorite: file.is_favorite,
         url,
         url_expires_in: 3600,
     }))
@@ -394,9 +402,9 @@ pub async fn update_file(
     Path(file_id): Path<Uuid>,
     Json(payload): Json<UpdateFileRequest>,
 ) -> Result<Json<FileResponse>, AuthError> {
-    if payload.filename.is_none() && payload.folder_id.is_none() {
+    if payload.filename.is_none() && payload.folder_id.is_none() && payload.is_favorite.is_none() {
         return Err(AuthError::InvalidInput(
-            "filename と folder_id の両方が省略されています".into(),
+            "filename と folder_id と is_favorite の全てが省略されています".into(),
         ));
     }
 
@@ -423,6 +431,9 @@ pub async fn update_file(
     }
     if let Some(fid) = payload.folder_id {
         active.folder_id = Set(fid);
+    }
+    if let Some(is_fav) = payload.is_favorite {
+        active.is_favorite = Set(is_fav);
     }
     active.updated_at = Set(Some(now));
 

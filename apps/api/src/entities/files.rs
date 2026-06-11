@@ -22,6 +22,7 @@ pub struct Model {
     pub ocr_text: Option<String>,
     pub created_at: Option<DateTimeWithTimeZone>,
     pub updated_at: Option<DateTimeWithTimeZone>,
+    pub is_favorite: bool,
     #[sea_orm(has_many)]
     pub file_permissions: HasMany<super::file_permissions::Entity>,
     #[sea_orm(
