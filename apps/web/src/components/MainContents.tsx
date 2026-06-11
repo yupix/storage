@@ -356,6 +356,7 @@ function FolderCard({ folder, onOpen, onDelete, onMove, onRename }: FolderItemAc
           <CardContent className="pt-2 pb-3">
             <div className="flex items-center justify-between gap-1">
               <p className="text-sm font-medium truncate flex-1" title={folder.name}>{folder.name}</p>
+
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -376,7 +377,9 @@ function FolderCard({ folder, onOpen, onDelete, onMove, onRename }: FolderItemAc
                 />
               </DropdownMenu>
             </div>
-            <p className="text-xs text-muted-foreground mt-0.5">{date}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {formatFileSize(folder.total_size)}{date ? ` · ${date}` : ''}
+            </p>
           </CardContent>
         </Card>
       </ContextMenuTrigger>
@@ -402,7 +405,7 @@ function FolderRow({ folder, onOpen, onDelete, onMove, onRename }: FolderItemAct
         >
           <Folder className="size-5 shrink-0 text-muted-foreground" />
           <p className="flex-1 text-sm truncate min-w-0 font-medium" title={folder.name}>{folder.name}</p>
-          <p className="text-xs text-muted-foreground w-20 text-right shrink-0">—</p>
+          <p className="text-xs text-muted-foreground w-20 text-right shrink-0">{formatFileSize(folder.total_size)}</p>
           <p className="text-xs text-muted-foreground w-24 text-right shrink-0 hidden sm:block">{date}</p>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
