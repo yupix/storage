@@ -4,7 +4,6 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
-use aws_sdk_s3::primitives::ByteStream;
 use chrono::Utc;
 use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, ColumnTrait, DatabaseConnection, EntityTrait,
@@ -18,6 +17,7 @@ use tokio::io::AsyncWriteExt;
 
 use crate::entities::{file_permissions, files, folders, users};
 use crate::extractors::CurrentUser;
+use crate::utils::storage::StorageDriver;
 use crate::payloads::files::{
     EmptyTrashResponse, FileDetailResponse, FileListQuery, FileResponse, PaginatedFileResponse,
     UpdateFileRequest, UploadFileRequest,
@@ -215,13 +215,9 @@ pub async fn upload_file(
     let file_id = Uuid::new_v4();
     let storage_key = format!("{}/{}", current_user.id, file_id);
 
-    let stream = ByteStream::from_path(ff.tmp.path())
-        .await
-        .map_err(|e| AuthError::Internal(anyhow::anyhow!("bytestream: {e}")))?;
-
     state
         .storage
-        .upload(&storage_key, stream, &mime)
+        .upload(&storage_key, ff.tmp.path(), &mime)
         .await
         .map_err(|e| AuthError::Internal(e))?;
 
@@ -320,7 +316,7 @@ pub async fn get_file(
 
     let url = state
         .storage
-        .presigned_get_url(&file.url, Duration::from_secs(3600))
+        .get_download_url(&file.url, Duration::from_secs(3600))
         .await
         .map_err(|e| AuthError::Internal(e))?;
 

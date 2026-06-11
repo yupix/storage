@@ -112,10 +112,10 @@ impl StorageDriver for LocalDriver {
             tokio::fs::create_dir_all(parent).await?;
         }
         // 同一ファイルシステムなら rename（移動）で済ませてディスク I/O を最小化。
-        // クロスデバイスなど rename が失敗した場合のみ copy + 元ファイル削除にフォールバック。
+        // クロスデバイスなど rename が失敗した場合は copy のみ行い、
+        // 一時ファイルの削除は呼び出し元の NamedTempFile ドロップ（RAII）に委ねる。
         if tokio::fs::rename(path, &dest).await.is_err() {
             tokio::fs::copy(path, &dest).await?;
-            tokio::fs::remove_file(path).await.ok();
         }
         Ok(())
     }
@@ -133,9 +133,14 @@ impl StorageDriver for LocalDriver {
     }
 
     async fn get_download_url(&self, key: &str, expires_in: Duration) -> Result<String> {
-        // HMAC-SHA256 で key + 有効期限タイムスタンプに署名
-        // 生成例: {base_url}/v1/internal/download?key={key}&exp={unix_ts}&sig={hmac}
-        todo!()
+        let exp = (Utc::now() + expires_in).timestamp() as u64;
+        let sig = self.sign(key, exp);
+        // key はパーセントエンコーディングしてクエリパラメータに安全に埋め込む
+        let encoded_key = urlencoding::encode(key);
+        Ok(format!(
+            "{}/v1/internal/download?key={encoded_key}&exp={exp}&sig={sig}",
+            self.base_url
+        ))
     }
 }
 ```
@@ -147,7 +152,7 @@ impl StorageDriver for LocalDriver {
 - `exp` の UNIX タイムスタンプを確認し、期限切れなら 410 Gone を返す
 - `sig` を `HMAC-SHA256(key + ":" + exp, secret)` で検証し、不一致なら 403 を返す
 - `key` のパスコンポーネントを検証し、`..` や絶対パスを含まないことを確認する
-- 結合後のパス（`base_path.join(key)`）を `canonicalize` し、`base_path` 配下に収まっていることを `starts_with` で確認する（パス・トラバーサル対策）
+- 結合後のパス（`base_path.join(key)`）を `canonicalize` し、`base_path` 自体も事前に `canonicalize` した上で `starts_with` で比較する（`base_path` にシンボリックリンクや相対パスが含まれる場合のパス・トラバーサル対策。`canonicalize` はファイルが存在しない場合エラーになるため 404 を返す）
 - 検証通過後、`base_path / key` を `Content-Disposition: attachment` でストリーミング配信
 
 このエンドポイントは**セッション認証不要**（署名が認可を代替）。URL を知っていれば期限内は誰でもダウンロードできるため、S3 の署名付き URL と同等の挙動となる。
@@ -182,19 +187,30 @@ impl StorageDriver for Storage {
 
 ```env
 # バックエンドを明示指定（省略時は自動検出）
-STORAGE_DRIVER=s3      # "s3" | "local"
+# STORAGE_DRIVER=s3      # "s3" | "local"
 
-# S3 バックエンド設定（現行の RUSTFS_* をそのまま維持し後方互換を保つ）
-RUSTFS_ENDPOINT=http://localhost:9000
-RUSTFS_ACCESS_KEY=minioadmin
-RUSTFS_SECRET_KEY=minioadmin
-RUSTFS_BUCKET=hyperdrive
-RUSTFS_FORCE_PATH_STYLE=true
+# S3 バックエンド設定（すべて設定されている場合に自動選択）
+# S3_ENDPOINT=http://localhost:9000
+# S3_ACCESS_KEY=minioadmin
+# S3_SECRET_KEY=minioadmin
+# S3_BUCKET=hyperdrive
+# S3_FORCE_PATH_STYLE=true
 
 # ローカルバックエンド設定
 LOCAL_STORAGE_PATH=./data/uploads
 LOCAL_BASE_URL=http://localhost:3400
-LOCAL_SIGNED_URL_SECRET=<32バイト以上のランダム文字列>
+LOCAL_SIGNED_URL_SECRET=<32文字以上のランダム文字列>
+```
+
+#### ローカル開発用 `.env`（S3 なし）
+
+```env
+DATABASE_URL=postgres://coder@localhost/coder?host=/var/run/postgresql
+REDIS_URL=redis://localhost:6379
+
+LOCAL_STORAGE_PATH=./data/uploads
+LOCAL_BASE_URL=http://localhost:3400
+LOCAL_SIGNED_URL_SECRET=local-dev-secret-change-this-in-production
 ```
 
 ### 自動検出ロジック
@@ -204,12 +220,12 @@ STORAGE_DRIVER が設定されている
   → 指定されたバックエンドを使用（不正値はエラー）
 
 STORAGE_DRIVER が未設定
-  → RUSTFS_ENDPOINT, RUSTFS_ACCESS_KEY, RUSTFS_SECRET_KEY, RUSTFS_BUCKET が
+  → S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET が
      すべて設定されている → S3 バックエンド
   → いずれか欠けている → ローカルバックエンド（警告ログを出力）
 ```
 
-`LOCAL_SIGNED_URL_SECRET` 未設定でローカルバックエンドを選択した場合はサーバー起動時にエラーとする（セキュリティ上必須）。
+`LOCAL_SIGNED_URL_SECRET` 未設定、または 32 文字未満でローカルバックエンドを選択した場合はサーバー起動時にエラーとする（セキュリティ上必須）。`build_storage()` 内でドライバー選択後に即座に検証する。
 
 ### Settings 構造体の変更
 
@@ -225,15 +241,15 @@ pub struct Settings {
     pub storage_driver: Option<String>,   // "s3" | "local" | None（自動検出）
 
     // S3 設定（すべて Optional に）
-    pub rustfs_endpoint: Option<String>,
-    pub rustfs_access_key: Option<String>,
-    pub rustfs_secret_key: Option<String>,
-    pub rustfs_bucket: Option<String>,
+    pub s3_endpoint: Option<String>,
+    pub s3_access_key: Option<String>,
+    pub s3_secret_key: Option<String>,
+    pub s3_bucket: Option<String>,
     #[serde(default = "default_true")]
-    pub rustfs_force_path_style: bool,
+    pub s3_force_path_style: bool,
 
     // ローカル設定
-    #[serde(default = "default_local_path")]
+    #[serde(default = "default_local_storage_path")]
     pub local_storage_path: String,
     pub local_base_url: Option<String>,
     pub local_signed_url_secret: Option<String>,
@@ -302,15 +318,13 @@ let url = state.storage.get_download_url(&file.url, Duration::from_secs(3600)).a
 
 ## 移行計画
 
-| フェーズ | 内容 |
-|----------|------|
-| 1 | `StorageDriver` トレイトを定義し `S3Driver` を実装（機能変更なし、リファクタリングのみ） |
-| 2 | `LocalDriver` を実装・ローカルダウンロードエンドポイントを追加 |
-| 3 | 自動検出ロジックを実装・`Settings` を更新 |
-| 4 | `upload_file` / `get_file` ハンドラーの呼び出し箇所を新 API に変更 |
-| 5 | 既存のテストが通ることを確認・E2E テストを追加 |
-
-フェーズ 1 完了時点でリグレッションなし（S3 のみを使う既存環境は影響ゼロ）。
+| フェーズ | 内容 | 状態 |
+|----------|------|------|
+| 1 | `StorageDriver` トレイトを定義し `S3Driver` を実装（リファクタリングのみ） | ✅ 完了 |
+| 2 | `LocalDriver` を実装・ローカルダウンロードエンドポイントを追加 | ✅ 完了 |
+| 3 | 自動検出ロジックを実装・`Settings` を更新 | ✅ 完了 |
+| 4 | `upload_file` / `get_file` ハンドラーの呼び出し箇所を新 API に変更 | ✅ 完了 |
+| 5 | 既存のテストが通ることを確認・E2E テストを追加 | 未着手 |
 
 ---
 
