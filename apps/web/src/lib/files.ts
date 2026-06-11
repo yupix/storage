@@ -65,7 +65,7 @@ export function uploadFileWithProgress(
     xhr.addEventListener('error', () => reject(new Error('ネットワークエラーが発生しました')))
     xhr.addEventListener('abort', () => reject(new Error('キャンセルされました')))
 
-    xhr.open('POST', '/v1/files/')
+    xhr.open('POST', '/v1/files')
     xhr.send(form)
   })
 }
