@@ -18,23 +18,35 @@ import type { FileItem, FolderItem, UploadItem } from '../lib/files'
 
 export const Route = createFileRoute('/')({ component: App })
 
-const sidebarItems = [
-  { icon: Home, label: 'ホーム' },
-  { icon: Folder, label: 'マイドライブ' },
-  { icon: Star, label: 'お気に入り' },
-  { icon: Clock, label: '最近使用' },
-  { icon: Trash2, label: 'ゴミ箱' },
+type SidebarSection = 'home' | 'drive' | 'favorites' | 'recent' | 'trash'
+
+const sidebarItems: { icon: typeof Home; label: string; section: SidebarSection }[] = [
+  { icon: Home, label: 'ホーム', section: 'home' },
+  { icon: Folder, label: 'マイドライブ', section: 'drive' },
+  { icon: Star, label: 'お気に入り', section: 'favorites' },
+  { icon: Clock, label: '最近使用', section: 'recent' },
+  { icon: Trash2, label: 'ゴミ箱', section: 'trash' },
 ]
 
-function SidebarNav({ onItemClick }: { onItemClick?: () => void }) {
+function SidebarNav({
+  activeSection,
+  onNavigate,
+  onItemClick,
+}: {
+  activeSection?: SidebarSection
+  onNavigate?: (section: SidebarSection) => void
+  onItemClick?: () => void
+}) {
   return (
     <ul className="flex flex-col gap-0.5">
-      {sidebarItems.map(({ icon: Icon, label }) => (
+      {sidebarItems.map(({ icon: Icon, label, section }) => (
         <li key={label}>
           <button
             type="button"
-            onClick={onItemClick}
-            className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm hover:bg-muted transition-colors text-left"
+            onClick={() => { onNavigate?.(section); onItemClick?.() }}
+            className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-colors text-left ${
+              activeSection === section ? 'bg-muted font-medium' : 'hover:bg-muted'
+            }`}
           >
             <Icon className="size-4 shrink-0 text-muted-foreground" />
             {label}
@@ -92,6 +104,7 @@ function App() {
   const [breadcrumb, setBreadcrumb] = useState<BreadcrumbItem[]>([{ id: null, name: 'マイドライブ' }])
   const [createFolderOpen, setCreateFolderOpen] = useState(false)
   const [moveTargetFileId, setMoveTargetFileId] = useState<string | null>(null)
+  const [activeSection, setActiveSection] = useState<SidebarSection>('home')
 
   const refreshFiles = useCallback(async () => {
     try {
@@ -184,6 +197,14 @@ function App() {
     })
   }
 
+  const handleSidebarNavigate = useCallback((section: SidebarSection) => {
+    setActiveSection(section)
+    if (section === 'home' || section === 'drive') {
+      setCurrentFolderId(null)
+      setBreadcrumb([{ id: null, name: 'マイドライブ' }])
+    }
+  }, [])
+
   const handleFolderOpen = useCallback((folder: FolderItem) => {
     setCurrentFolderId(folder.id)
     setBreadcrumb((prev) => [...prev, { id: folder.id, name: folder.name }])
@@ -205,7 +226,7 @@ function App() {
         {/* Desktop sidebar */}
         <aside className="hidden md:block w-52 shrink-0">
           <nav className="bg-card text-card-foreground rounded-xl ring-1 ring-foreground/10 p-2">
-            <SidebarNav />
+            <SidebarNav activeSection={activeSection} onNavigate={handleSidebarNavigate} />
           </nav>
         </aside>
 
@@ -223,7 +244,11 @@ function App() {
                   <SheetTitle>HyperDrive</SheetTitle>
                 </SheetHeader>
                 <div className="px-2">
-                  <SidebarNav onItemClick={() => setSheetOpen(false)} />
+                  <SidebarNav
+                    activeSection={activeSection}
+                    onNavigate={handleSidebarNavigate}
+                    onItemClick={() => setSheetOpen(false)}
+                  />
                 </div>
               </SheetContent>
             </Sheet>
