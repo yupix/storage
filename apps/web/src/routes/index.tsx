@@ -115,7 +115,8 @@ function App() {
       setFiles(fileData.files)
       setFolders(folderData.folders)
     } catch {
-      // エラー時は一覧を空のままにする
+      setFiles([])
+      setFolders([])
     } finally {
       setLoading(false)
     }
