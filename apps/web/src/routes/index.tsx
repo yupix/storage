@@ -231,16 +231,15 @@ function App() {
   }, [])
 
   const handleToggleFavorite = useCallback(async (id: string, current: boolean) => {
+    const next = !current
+    setFiles((prev) => prev.map((f) => f.id === id ? { ...f, is_favorite: next } : f))
+    if (activeSection === 'favorites' && !next) {
+      setFiles((prev) => prev.filter((f) => f.id !== id))
+    }
     try {
-      const updated = await toggleFavorite(id, !current)
-      // 楽観的にリストを更新する
-      setFiles((prev) => prev.map((f) => f.id === id ? { ...f, is_favorite: updated.is_favorite } : f))
-      // お気に入りセクションで解除した場合は一覧から除去
-      if (activeSection === 'favorites' && !updated.is_favorite) {
-        setFiles((prev) => prev.filter((f) => f.id !== id))
-      }
+      await toggleFavorite(id, next)
     } catch {
-      // エラー時は何もしない
+      setFiles((prev) => prev.map((f) => f.id === id ? { ...f, is_favorite: current } : f))
     }
   }, [activeSection])
 
