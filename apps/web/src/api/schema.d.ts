@@ -246,6 +246,11 @@ export interface components {
             id: string;
             name: string;
             owner: components["schemas"]["OwnerInfo"];
+            /**
+             * Format: int64
+             * @description フォルダー内のファイルの合計サイズ（バイト、再帰的）
+             */
+            total_size: number;
             /** Format: date-time */
             updated_at: string;
         };
