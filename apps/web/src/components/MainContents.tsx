@@ -280,43 +280,159 @@ function FileRow({
   )
 }
 
-interface FolderCardProps {
+interface FolderItemActionsProps {
   folder: FolderItem
   onOpen: (folder: FolderItem) => void
+  onDelete: (id: string) => void
+  onMove: (id: string) => void
+  onRename: (id: string, currentName: string) => void
 }
 
-function FolderCard({ folder, onOpen }: FolderCardProps) {
-  const date = folder.updated_at ? new Date(folder.updated_at).toLocaleDateString('ja-JP') : ''
+function FolderDropdownMenuContent({
+  folder, onOpen, onDelete, onMove, onRename,
+}: FolderItemActionsProps) {
   return (
-    <Card
-      size="sm"
-      className="cursor-pointer hover:ring-primary/40 transition-shadow"
-      onClick={() => onOpen(folder)}
-    >
-      <div className="flex items-center justify-center h-24 bg-muted/50 rounded-t-xl">
-        <Folder className="size-12 text-muted-foreground" />
-      </div>
-      <CardContent className="pt-2 pb-3">
-        <p className="text-sm font-medium truncate" title={folder.name}>{folder.name}</p>
-        <p className="text-xs text-muted-foreground mt-0.5">{date}</p>
-      </CardContent>
-    </Card>
+    <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+      <DropdownMenuItem onSelect={() => onOpen(folder)}>
+        <Folder className="mr-2 size-4" />
+        開く
+      </DropdownMenuItem>
+      <DropdownMenuItem onSelect={() => onRename(folder.id, folder.name)}>
+        <SquarePen className="mr-2 size-4" />
+        名前変更
+      </DropdownMenuItem>
+      <DropdownMenuItem onSelect={() => onMove(folder.id)}>
+        <MoveRight className="mr-2 size-4" />
+        移動
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem variant="destructive" onSelect={() => onDelete(folder.id)}>
+        <Trash2 className="mr-2 size-4" />
+        削除
+      </DropdownMenuItem>
+    </DropdownMenuContent>
   )
 }
 
-function FolderRow({ folder, onOpen }: FolderCardProps) {
+function FolderContextMenuContent({
+  folder, onOpen, onDelete, onMove, onRename,
+}: FolderItemActionsProps) {
+  return (
+    <ContextMenuContent onClick={(e) => e.stopPropagation()}>
+      <ContextMenuItem onSelect={() => onOpen(folder)}>
+        <Folder className="mr-2 size-4" />
+        開く
+      </ContextMenuItem>
+      <ContextMenuItem onSelect={() => onRename(folder.id, folder.name)}>
+        <SquarePen className="mr-2 size-4" />
+        名前変更
+      </ContextMenuItem>
+      <ContextMenuItem onSelect={() => onMove(folder.id)}>
+        <MoveRight className="mr-2 size-4" />
+        移動
+      </ContextMenuItem>
+      <ContextMenuSeparator />
+      <ContextMenuItem variant="destructive" onSelect={() => onDelete(folder.id)}>
+        <Trash2 className="mr-2 size-4" />
+        削除
+      </ContextMenuItem>
+    </ContextMenuContent>
+  )
+}
+
+function FolderCard({ folder, onOpen, onDelete, onMove, onRename }: FolderItemActionsProps) {
   const date = folder.updated_at ? new Date(folder.updated_at).toLocaleDateString('ja-JP') : ''
   return (
-    <div
-      className="flex items-center gap-3 px-3 py-2 hover:bg-muted/50 cursor-pointer transition-colors border-b border-border/50 last:border-0"
-      onClick={() => onOpen(folder)}
-    >
-      <Folder className="size-5 shrink-0 text-muted-foreground" />
-      <p className="flex-1 text-sm truncate min-w-0 font-medium" title={folder.name}>{folder.name}</p>
-      <p className="text-xs text-muted-foreground w-20 text-right shrink-0">—</p>
-      <p className="text-xs text-muted-foreground w-24 text-right shrink-0 hidden sm:block">{date}</p>
-      <span className="size-6 shrink-0" />
-    </div>
+    <ContextMenu>
+      <ContextMenuTrigger>
+        <Card
+          size="sm"
+          className="cursor-pointer hover:ring-primary/40 transition-shadow"
+          onClick={() => onOpen(folder)}
+        >
+          <div className="flex items-center justify-center h-24 bg-muted/50 rounded-t-xl">
+            <Folder className="size-12 text-muted-foreground" />
+          </div>
+          <CardContent className="pt-2 pb-3">
+            <div className="flex items-center justify-between gap-1">
+              <p className="text-sm font-medium truncate flex-1" title={folder.name}>{folder.name}</p>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    className="shrink-0"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <EllipsisVertical className="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <FolderDropdownMenuContent
+                  folder={folder}
+                  onOpen={onOpen}
+                  onDelete={onDelete}
+                  onMove={onMove}
+                  onRename={onRename}
+                />
+              </DropdownMenu>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">{date}</p>
+          </CardContent>
+        </Card>
+      </ContextMenuTrigger>
+      <FolderContextMenuContent
+        folder={folder}
+        onOpen={onOpen}
+        onDelete={onDelete}
+        onMove={onMove}
+        onRename={onRename}
+      />
+    </ContextMenu>
+  )
+}
+
+function FolderRow({ folder, onOpen, onDelete, onMove, onRename }: FolderItemActionsProps) {
+  const date = folder.updated_at ? new Date(folder.updated_at).toLocaleDateString('ja-JP') : ''
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger>
+        <div
+          className="flex items-center gap-3 px-3 py-2 hover:bg-muted/50 cursor-pointer transition-colors border-b border-border/50 last:border-0"
+          onClick={() => onOpen(folder)}
+        >
+          <Folder className="size-5 shrink-0 text-muted-foreground" />
+          <p className="flex-1 text-sm truncate min-w-0 font-medium" title={folder.name}>{folder.name}</p>
+          <p className="text-xs text-muted-foreground w-20 text-right shrink-0">—</p>
+          <p className="text-xs text-muted-foreground w-24 text-right shrink-0 hidden sm:block">{date}</p>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                className="shrink-0"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <EllipsisVertical className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <FolderDropdownMenuContent
+              folder={folder}
+              onOpen={onOpen}
+              onDelete={onDelete}
+              onMove={onMove}
+              onRename={onRename}
+            />
+          </DropdownMenu>
+        </div>
+      </ContextMenuTrigger>
+      <FolderContextMenuContent
+        folder={folder}
+        onOpen={onOpen}
+        onDelete={onDelete}
+        onMove={onMove}
+        onRename={onRename}
+      />
+    </ContextMenu>
   )
 }
 
@@ -332,6 +448,9 @@ interface MainContentsProps {
   onRename?: (id: string, currentName: string) => void
   onToggleFavorite?: (id: string, current: boolean) => void
   onFolderOpen?: (folder: FolderItem) => void
+  onFolderDelete?: (id: string) => void
+  onFolderMove?: (id: string) => void
+  onFolderRename?: (id: string, currentName: string) => void
 }
 
 export const SecondaryContents = () => <div />
@@ -348,6 +467,9 @@ export default function MainContentsDefault({
   onRename,
   onToggleFavorite,
   onFolderOpen,
+  onFolderDelete,
+  onFolderMove,
+  onFolderRename,
 }: MainContentsProps) {
   const noop = () => {}
   const handlePreview = onPreview ?? noop
@@ -356,6 +478,9 @@ export default function MainContentsDefault({
   const handleRename = onRename ?? noop
   const handleToggleFavorite = onToggleFavorite ?? noop
   const handleFolderOpen = onFolderOpen ?? noop
+  const handleFolderDelete = onFolderDelete ?? noop
+  const handleFolderMove = onFolderMove ?? noop
+  const handleFolderRename = onFolderRename ?? noop
 
   if (loading) {
     if (view === 'list') {
@@ -416,7 +541,14 @@ export default function MainContentsDefault({
           <span className="size-6 shrink-0" />
         </div>
         {folders.map((folder) => (
-          <FolderRow key={folder.id} folder={folder} onOpen={handleFolderOpen} />
+          <FolderRow
+            key={folder.id}
+            folder={folder}
+            onOpen={handleFolderOpen}
+            onDelete={handleFolderDelete}
+            onMove={handleFolderMove}
+            onRename={handleFolderRename}
+          />
         ))}
         {files.map((file) => (
           <FileRow
@@ -436,7 +568,14 @@ export default function MainContentsDefault({
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 p-3">
       {folders.map((folder) => (
-        <FolderCard key={folder.id} folder={folder} onOpen={handleFolderOpen} />
+        <FolderCard
+          key={folder.id}
+          folder={folder}
+          onOpen={handleFolderOpen}
+          onDelete={handleFolderDelete}
+          onMove={handleFolderMove}
+          onRename={handleFolderRename}
+        />
       ))}
       {files.map((file) => (
         <FileCard

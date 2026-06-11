@@ -64,6 +64,31 @@ export async function createFolder(name: string, folderId?: string | null): Prom
   return data
 }
 
+export async function deleteFolder(id: string, toHome = false): Promise<void> {
+  const { error } = await apiClient.DELETE('/v1/folders/{id}', {
+    params: { path: { id }, query: { to_home: toHome } },
+  })
+  if (error) throw new Error('フォルダーの削除に失敗しました')
+}
+
+export async function renameFolder(id: string, name: string): Promise<FolderItem> {
+  const { data, error } = await apiClient.PATCH('/v1/folders/{id}', {
+    params: { path: { id } },
+    body: { name },
+  })
+  if (error || !data) throw new Error('フォルダー名の変更に失敗しました')
+  return data
+}
+
+export async function moveFolder(id: string, folderId: string | null): Promise<FolderItem> {
+  const { data, error } = await apiClient.PATCH('/v1/folders/{id}', {
+    params: { path: { id } },
+    body: { folder_id: folderId },
+  })
+  if (error || !data) throw new Error('フォルダーの移動に失敗しました')
+  return data
+}
+
 export async function moveFile(fileId: string, folderId: string | null): Promise<void> {
   const { error } = await apiClient.PATCH('/v1/files/{id}', {
     params: { path: { id: fileId } },
