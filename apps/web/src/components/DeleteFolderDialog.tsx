@@ -14,21 +14,33 @@ interface Props {
 export default function DeleteFolderDialog({ folderId, onClose, onDeleted }: Props) {
   const [toHome, setToHome] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  async function handleConfirm() {
-    if (!folderId) return
-    setDeleting(true)
-    try {
-      await deleteFolder(folderId, toHome)
-      onDeleted()
-    } finally {
-      setDeleting(false)
+  function handleOpenChange(open: boolean) {
+    if (!open) {
+      setToHome(false)
+      setError(null)
       onClose()
     }
   }
 
+  async function handleConfirm() {
+    if (!folderId) return
+    setDeleting(true)
+    setError(null)
+    try {
+      await deleteFolder(folderId, toHome)
+      onDeleted()
+      onClose()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '削除に失敗しました')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   return (
-    <AlertDialog open={folderId !== null} onOpenChange={(open) => { if (!open) onClose() }}>
+    <AlertDialog open={folderId !== null} onOpenChange={handleOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>フォルダーを削除しますか？</AlertDialogTitle>
@@ -63,6 +75,8 @@ export default function DeleteFolderDialog({ folderId, onClose, onDeleted }: Pro
             </span>
           </button>
         </div>
+
+        {error && <p className="text-sm text-destructive">{error}</p>}
 
         <AlertDialogFooter>
           <AlertDialogCancel disabled={deleting}>キャンセル</AlertDialogCancel>
