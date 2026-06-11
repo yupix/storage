@@ -3,6 +3,7 @@ use serde::Deserialize;
 use validator::Validate;
 
 #[derive(Debug, Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct ListFoldersQuery {
     pub folder_id: Option<Uuid>,
     pub page: Option<u64>,
@@ -10,6 +11,7 @@ pub struct ListFoldersQuery {
 }
 
 #[derive(Debug, Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct DeleteFolderQuery {
     pub to_home: Option<bool>,
 }

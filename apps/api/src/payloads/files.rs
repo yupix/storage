@@ -2,6 +2,7 @@ use sea_orm::prelude::Uuid;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct FileListQuery {
     pub folder_id: Option<Uuid>,
     pub page: Option<u64>,
