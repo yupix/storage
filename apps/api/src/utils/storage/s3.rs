@@ -66,7 +66,7 @@ impl StorageDriver for S3Driver {
         Ok(())
     }
 
-    async fn get_download_url(&self, key: &str, expires_in: Duration) -> Result<String> {
+    async fn get_download_url(&self, key: &str, _content_type: &str, expires_in: Duration) -> Result<String> {
         let config = PresigningConfig::expires_in(expires_in)
             .map_err(|e| anyhow::anyhow!("presigning config: {e}"))?;
         let presigned = self.inner
