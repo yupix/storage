@@ -71,7 +71,7 @@ export default function DeleteFolderDialog({ folderId, onClose, onDeleted }: Pro
           >
             <span className="text-sm font-medium">中身をマイドライブへ移動して削除</span>
             <span className="text-xs text-muted-foreground">
-              直下のファイルをマイドライブのルートへ移動してからフォルダーを削除します
+              直下のファイル・サブフォルダーをマイドライブのルートへ移動してからフォルダーを削除します
             </span>
           </button>
         </div>
