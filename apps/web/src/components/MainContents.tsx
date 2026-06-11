@@ -18,7 +18,7 @@ import {
 import { Button } from './ui/button'
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from './ui/empty'
 import type { FileItem, FolderItem } from '../lib/files'
-import { formatFileSize } from '../lib/files'
+import { formatFileSize, downloadFile } from '../lib/files'
 
 function FileTypeIcon({ name, size = 40 }: { name: string; size?: number }) {
   const ext = name.split('.').pop()?.toLowerCase() ?? ''
@@ -74,20 +74,24 @@ interface FileItemActionsProps {
   onPreview: (id: string) => void
   onDelete: (id: string) => void
   onMove: (id: string) => void
+  onRename: (id: string, currentName: string) => void
+  onToggleFavorite: (id: string, current: boolean) => void
 }
 
-function FileDropdownMenuContent({ file, onPreview, onDelete, onMove }: FileItemActionsProps) {
+function FileDropdownMenuContent({
+  file, onPreview, onDelete, onMove, onRename, onToggleFavorite,
+}: FileItemActionsProps) {
   return (
     <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
       <DropdownMenuItem onSelect={() => onPreview(file.id)}>
         <Info className="mr-2 size-4" />
         プレビュー
       </DropdownMenuItem>
-      <DropdownMenuItem>
+      <DropdownMenuItem onSelect={() => downloadFile(file.id, file.name)}>
         <Download className="mr-2 size-4" />
         ダウンロード
       </DropdownMenuItem>
-      <DropdownMenuItem>
+      <DropdownMenuItem onSelect={() => onRename(file.id, file.name)}>
         <SquarePen className="mr-2 size-4" />
         名前変更
       </DropdownMenuItem>
@@ -99,9 +103,9 @@ function FileDropdownMenuContent({ file, onPreview, onDelete, onMove }: FileItem
         <MoveRight className="mr-2 size-4" />
         移動
       </DropdownMenuItem>
-      <DropdownMenuItem>
-        <Star className="mr-2 size-4" />
-        お気に入り
+      <DropdownMenuItem onSelect={() => onToggleFavorite(file.id, file.is_favorite)}>
+        <Star className={`mr-2 size-4 ${file.is_favorite ? 'fill-yellow-400 text-yellow-400' : ''}`} />
+        {file.is_favorite ? 'お気に入り解除' : 'お気に入り'}
       </DropdownMenuItem>
       <DropdownMenuItem>
         <Lock className="mr-2 size-4" />
@@ -116,18 +120,20 @@ function FileDropdownMenuContent({ file, onPreview, onDelete, onMove }: FileItem
   )
 }
 
-function FileContextMenuContent({ file, onPreview, onDelete, onMove }: FileItemActionsProps) {
+function FileContextMenuContent({
+  file, onPreview, onDelete, onMove, onRename, onToggleFavorite,
+}: FileItemActionsProps) {
   return (
     <ContextMenuContent onClick={(e) => e.stopPropagation()}>
       <ContextMenuItem onSelect={() => onPreview(file.id)}>
         <Info className="mr-2 size-4" />
         プレビュー
       </ContextMenuItem>
-      <ContextMenuItem>
+      <ContextMenuItem onSelect={() => downloadFile(file.id, file.name)}>
         <Download className="mr-2 size-4" />
         ダウンロード
       </ContextMenuItem>
-      <ContextMenuItem>
+      <ContextMenuItem onSelect={() => onRename(file.id, file.name)}>
         <SquarePen className="mr-2 size-4" />
         名前変更
       </ContextMenuItem>
@@ -139,9 +145,9 @@ function FileContextMenuContent({ file, onPreview, onDelete, onMove }: FileItemA
         <MoveRight className="mr-2 size-4" />
         移動
       </ContextMenuItem>
-      <ContextMenuItem>
-        <Star className="mr-2 size-4" />
-        お気に入り
+      <ContextMenuItem onSelect={() => onToggleFavorite(file.id, file.is_favorite)}>
+        <Star className={`mr-2 size-4 ${file.is_favorite ? 'fill-yellow-400 text-yellow-400' : ''}`} />
+        {file.is_favorite ? 'お気に入り解除' : 'お気に入り'}
       </ContextMenuItem>
       <ContextMenuItem>
         <Lock className="mr-2 size-4" />
@@ -156,7 +162,9 @@ function FileContextMenuContent({ file, onPreview, onDelete, onMove }: FileItemA
   )
 }
 
-function FileCard({ file, onPreview, onDelete, onMove }: FileItemActionsProps) {
+function FileCard({
+  file, onPreview, onDelete, onMove, onRename, onToggleFavorite,
+}: FileItemActionsProps) {
   const date = file.updated_at ? new Date(file.updated_at).toLocaleDateString('ja-JP') : ''
   const isImage = file.file_type.startsWith('image/')
 
@@ -173,6 +181,11 @@ function FileCard({ file, onPreview, onDelete, onMove }: FileItemActionsProps) {
               ? <ImageThumbnail fileId={file.id} name={file.name} />
               : <FileTypeIcon name={file.name} size={48} />
             }
+            {file.is_favorite && (
+              <div className="absolute top-1 right-1">
+                <Star className="size-3.5 fill-yellow-400 text-yellow-400 drop-shadow" />
+              </div>
+            )}
           </div>
           <CardContent className="pt-2 pb-3">
             <div className="flex items-center justify-between gap-1">
@@ -188,7 +201,14 @@ function FileCard({ file, onPreview, onDelete, onMove }: FileItemActionsProps) {
                     <EllipsisVertical className="size-4" />
                   </Button>
                 </DropdownMenuTrigger>
-                <FileDropdownMenuContent file={file} onPreview={onPreview} onDelete={onDelete} onMove={onMove} />
+                <FileDropdownMenuContent
+                  file={file}
+                  onPreview={onPreview}
+                  onDelete={onDelete}
+                  onMove={onMove}
+                  onRename={onRename}
+                  onToggleFavorite={onToggleFavorite}
+                />
               </DropdownMenu>
             </div>
             <p className="text-xs text-muted-foreground mt-0.5">
@@ -197,12 +217,21 @@ function FileCard({ file, onPreview, onDelete, onMove }: FileItemActionsProps) {
           </CardContent>
         </Card>
       </ContextMenuTrigger>
-      <FileContextMenuContent file={file} onPreview={onPreview} onDelete={onDelete} onMove={onMove} />
+      <FileContextMenuContent
+        file={file}
+        onPreview={onPreview}
+        onDelete={onDelete}
+        onMove={onMove}
+        onRename={onRename}
+        onToggleFavorite={onToggleFavorite}
+      />
     </ContextMenu>
   )
 }
 
-function FileRow({ file, onPreview, onDelete, onMove }: FileItemActionsProps) {
+function FileRow({
+  file, onPreview, onDelete, onMove, onRename, onToggleFavorite,
+}: FileItemActionsProps) {
   const date = file.updated_at ? new Date(file.updated_at).toLocaleDateString('ja-JP') : ''
 
   return (
@@ -214,6 +243,7 @@ function FileRow({ file, onPreview, onDelete, onMove }: FileItemActionsProps) {
         >
           <FileTypeIcon name={file.name} size={20} />
           <p className="flex-1 text-sm truncate min-w-0" title={file.name}>{file.name}</p>
+          {file.is_favorite && <Star className="size-3.5 fill-yellow-400 text-yellow-400 shrink-0" />}
           <p className="text-xs text-muted-foreground w-20 text-right shrink-0">{formatFileSize(file.size)}</p>
           <p className="text-xs text-muted-foreground w-24 text-right shrink-0 hidden sm:block">{date}</p>
           <DropdownMenu>
@@ -227,11 +257,25 @@ function FileRow({ file, onPreview, onDelete, onMove }: FileItemActionsProps) {
                 <EllipsisVertical className="size-4" />
               </Button>
             </DropdownMenuTrigger>
-            <FileDropdownMenuContent file={file} onPreview={onPreview} onDelete={onDelete} onMove={onMove} />
+            <FileDropdownMenuContent
+              file={file}
+              onPreview={onPreview}
+              onDelete={onDelete}
+              onMove={onMove}
+              onRename={onRename}
+              onToggleFavorite={onToggleFavorite}
+            />
           </DropdownMenu>
         </div>
       </ContextMenuTrigger>
-      <FileContextMenuContent file={file} onPreview={onPreview} onDelete={onDelete} onMove={onMove} />
+      <FileContextMenuContent
+        file={file}
+        onPreview={onPreview}
+        onDelete={onDelete}
+        onMove={onMove}
+        onRename={onRename}
+        onToggleFavorite={onToggleFavorite}
+      />
     </ContextMenu>
   )
 }
@@ -285,6 +329,8 @@ interface MainContentsProps {
   onPreview?: (id: string) => void
   onDelete?: (id: string) => void
   onMove?: (id: string) => void
+  onRename?: (id: string, currentName: string) => void
+  onToggleFavorite?: (id: string, current: boolean) => void
   onFolderOpen?: (folder: FolderItem) => void
 }
 
@@ -299,12 +345,16 @@ export default function MainContentsDefault({
   onPreview,
   onDelete,
   onMove,
+  onRename,
+  onToggleFavorite,
   onFolderOpen,
 }: MainContentsProps) {
   const noop = () => {}
   const handlePreview = onPreview ?? noop
   const handleDelete = onDelete ?? noop
   const handleMove = onMove ?? noop
+  const handleRename = onRename ?? noop
+  const handleToggleFavorite = onToggleFavorite ?? noop
   const handleFolderOpen = onFolderOpen ?? noop
 
   if (loading) {
@@ -375,6 +425,8 @@ export default function MainContentsDefault({
             onPreview={handlePreview}
             onDelete={handleDelete}
             onMove={handleMove}
+            onRename={handleRename}
+            onToggleFavorite={handleToggleFavorite}
           />
         ))}
       </div>
@@ -393,6 +445,8 @@ export default function MainContentsDefault({
           onPreview={handlePreview}
           onDelete={handleDelete}
           onMove={handleMove}
+          onRename={handleRename}
+          onToggleFavorite={handleToggleFavorite}
         />
       ))}
     </div>
