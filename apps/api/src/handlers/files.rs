@@ -316,7 +316,7 @@ pub async fn get_file(
 
     let url = state
         .storage
-        .get_download_url(&file.url, Duration::from_secs(3600))
+        .get_download_url(&file.url, &file.file_type, Duration::from_secs(3600))
         .await
         .map_err(|e| AuthError::Internal(e))?;
 

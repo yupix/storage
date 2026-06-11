@@ -16,6 +16,7 @@ use crate::{
 pub struct DownloadParams {
     pub key: String,
     pub exp: u64,
+    pub ct: String,
     pub sig: String,
 }
 
@@ -33,7 +34,7 @@ pub async fn download_file(
         return (StatusCode::GONE, HeaderMap::new(), axum::body::Body::empty());
     }
 
-    if !local.verify_signature(&params.key, params.exp, &params.sig) {
+    if !local.verify_signature(&params.key, params.exp, &params.ct, &params.sig) {
         return (StatusCode::FORBIDDEN, HeaderMap::new(), axum::body::Body::empty());
     }
 
@@ -42,7 +43,6 @@ pub async fn download_file(
         Err(_) => return (StatusCode::BAD_REQUEST, HeaderMap::new(), axum::body::Body::empty()),
     };
 
-    // パス・トラバーサル確認（canonicalize でシンボリックリンクも解決）
     let canonical_base = match tokio::fs::canonicalize(&local.base_path).await {
         Ok(p) => p,
         Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, HeaderMap::new(), axum::body::Body::empty()),
@@ -64,10 +64,11 @@ pub async fn download_file(
     let body = axum::body::Body::from_stream(stream);
 
     let mut headers = HeaderMap::new();
-    headers.insert(
-        header::CONTENT_DISPOSITION,
-        HeaderValue::from_static("attachment"),
-    );
+    headers.insert(header::CONTENT_DISPOSITION, HeaderValue::from_static("inline"));
+    headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static("*"));
+    if let Ok(val) = HeaderValue::from_str(&params.ct) {
+        headers.insert(header::CONTENT_TYPE, val);
+    }
 
     (StatusCode::OK, headers, body)
 }

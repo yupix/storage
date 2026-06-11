@@ -3,10 +3,15 @@ import { useState, useEffect, useCallback } from 'react'
 import ToolbarDefault from '../components/ToolbarDefault'
 import MainContentsDefault from '#/components/MainContents'
 import UploadProgress from '../components/UploadProgress'
+import FilePreviewDialog from '../components/FilePreviewDialog'
 import { Home, Folder, Star, Trash2, Clock, Menu } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '../components/ui/sheet'
-import { fetchMyFiles, uploadFileWithProgress, createUploadItem } from '../lib/files'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '../components/ui/alert-dialog'
+import { fetchMyFiles, uploadFileWithProgress, createUploadItem, deleteFile } from '../lib/files'
 import type { FileItem, UploadItem } from '../lib/files'
 
 export const Route = createFileRoute('/')({ component: App })
@@ -43,6 +48,9 @@ function App() {
   const [files, setFiles] = useState<FileItem[]>([])
   const [loading, setLoading] = useState(true)
   const [uploadItems, setUploadItems] = useState<UploadItem[]>([])
+  const [previewFileId, setPreviewFileId] = useState<string | null>(null)
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const refreshFiles = useCallback(async () => {
     try {
@@ -110,6 +118,20 @@ function App() {
     }
   }
 
+  const handleConfirmDelete = useCallback(async () => {
+    if (!deleteTargetId) return
+    setDeleting(true)
+    try {
+      await deleteFile(deleteTargetId)
+      await refreshFiles()
+    } catch {
+      // エラー時は何もしない（一覧は更新しない）
+    } finally {
+      setDeleting(false)
+      setDeleteTargetId(null)
+    }
+  }, [deleteTargetId, refreshFiles])
+
   const handleCloseProgress = () => {
     setUploadItems((prev) => {
       prev.forEach((i) => { if (i.preview) URL.revokeObjectURL(i.preview) })
@@ -158,12 +180,33 @@ function App() {
               files={files}
               loading={loading}
               onFileSelect={handleFileSelect}
+              onPreview={setPreviewFileId}
+              onDelete={setDeleteTargetId}
             />
           </div>
         </div>
       </div>
 
       <UploadProgress items={uploadItems} onClose={handleCloseProgress} />
+
+      <FilePreviewDialog fileId={previewFileId} onClose={() => setPreviewFileId(null)} />
+
+      <AlertDialog open={deleteTargetId !== null} onOpenChange={(open) => { if (!open) setDeleteTargetId(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>ファイルを削除しますか？</AlertDialogTitle>
+            <AlertDialogDescription>
+              ゴミ箱に移動します。ゴミ箱から復元できます。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>キャンセル</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmDelete} disabled={deleting}>
+              {deleting ? '削除中...' : '削除'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </main>
   )
 }

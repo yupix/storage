@@ -25,17 +25,17 @@ impl LocalDriver {
         }
     }
 
-    fn sign(&self, key: &str, exp: u64) -> String {
+    fn sign(&self, key: &str, exp: u64, content_type: &str) -> String {
         let mut mac = HmacSha256::new_from_slice(self.secret.as_bytes())
             .expect("HMAC accepts any key length");
-        mac.update(format!("{key}:{exp}").as_bytes());
+        mac.update(format!("{key}:{exp}:{content_type}").as_bytes());
         hex::encode(mac.finalize().into_bytes())
     }
 
-    pub fn verify_signature(&self, key: &str, exp: u64, sig: &str) -> bool {
+    pub fn verify_signature(&self, key: &str, exp: u64, content_type: &str, sig: &str) -> bool {
         let mut mac = HmacSha256::new_from_slice(self.secret.as_bytes())
             .expect("HMAC accepts any key length");
-        mac.update(format!("{key}:{exp}").as_bytes());
+        mac.update(format!("{key}:{exp}:{content_type}").as_bytes());
         mac.verify_slice(&hex::decode(sig).unwrap_or_default()).is_ok()
     }
 
@@ -74,12 +74,13 @@ impl StorageDriver for LocalDriver {
         }
     }
 
-    async fn get_download_url(&self, key: &str, expires_in: Duration) -> Result<String> {
+    async fn get_download_url(&self, key: &str, content_type: &str, expires_in: Duration) -> Result<String> {
         let exp = (Utc::now() + expires_in).timestamp() as u64;
-        let sig = self.sign(key, exp);
+        let sig = self.sign(key, exp, content_type);
         let encoded_key = urlencoding::encode(key);
+        let encoded_ct = urlencoding::encode(content_type);
         Ok(format!(
-            "{}/v1/internal/download?key={encoded_key}&exp={exp}&sig={sig}",
+            "{}/v1/internal/download?key={encoded_key}&exp={exp}&ct={encoded_ct}&sig={sig}",
             self.base_url
         ))
     }
