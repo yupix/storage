@@ -71,6 +71,8 @@ interface ToolbarDefaultProps {
   onCreateFolder?: () => void
   breadcrumb?: BreadcrumbItem[]
   onBreadcrumbNavigate?: (id: string | null) => void
+  mode?: 'normal' | 'trash'
+  onEmptyTrash?: () => void
 }
 
 export default function ToolbarDefault({
@@ -81,47 +83,58 @@ export default function ToolbarDefault({
   onCreateFolder,
   breadcrumb = [],
   onBreadcrumbNavigate,
+  mode = 'normal',
+  onEmptyTrash,
 }: ToolbarDefaultProps) {
   return (
     <div className="bg-card text-card-foreground h-12 mx-1.5 my-2 px-3 rounded-lg flex items-center gap-1 ring-1 ring-foreground/10 overflow-x-auto">
-      <Button variant="ghost" size="icon-sm" title="フォルダー作成" onClick={onCreateFolder}>
-        <Folder />
-      </Button>
-      <Button asChild variant="ghost" size="icon-sm" title="アップロード" disabled={uploading}>
-        <label className={uploading ? 'pointer-events-none' : 'cursor-pointer'}>
-          <CloudUpload />
-          <input
-            type="file"
-            multiple
-            className="sr-only"
-            disabled={uploading}
-            onChange={onFileSelect}
-          />
-        </label>
-      </Button>
-      <Button variant="ghost" size="icon-sm" title="共有">
-        <Share2 />
-      </Button>
+      {mode === 'trash' ? (
+        <Button variant="ghost" size="sm" title="ゴミ箱を空にする" onClick={onEmptyTrash} className="text-destructive hover:text-destructive">
+          <Trash2 className="mr-1.5 size-4" />
+          ゴミ箱を空にする
+        </Button>
+      ) : (
+        <>
+          <Button variant="ghost" size="icon-sm" title="フォルダー作成" onClick={onCreateFolder}>
+            <Folder />
+          </Button>
+          <Button asChild variant="ghost" size="icon-sm" title="アップロード" disabled={uploading}>
+            <label className={uploading ? 'pointer-events-none' : 'cursor-pointer'}>
+              <CloudUpload />
+              <input
+                type="file"
+                multiple
+                className="sr-only"
+                disabled={uploading}
+                onChange={onFileSelect}
+              />
+            </label>
+          </Button>
+          <Button variant="ghost" size="icon-sm" title="共有">
+            <Share2 />
+          </Button>
 
-      {breadcrumb.length > 1 && (
-        <nav className="flex items-center gap-0.5 ml-2 overflow-x-auto shrink-0">
-          {breadcrumb.map((item, index) => (
-            <span key={item.id ?? 'root'} className="flex items-center gap-0.5">
-              {index > 0 && <ChevronRight className="size-3 text-muted-foreground shrink-0" />}
-              <button
-                type="button"
-                onClick={() => onBreadcrumbNavigate?.(item.id)}
-                className={`text-sm px-1 py-0.5 rounded hover:bg-muted transition-colors whitespace-nowrap ${
-                  index === breadcrumb.length - 1
-                    ? 'font-medium text-foreground pointer-events-none'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                {item.name}
-              </button>
-            </span>
-          ))}
-        </nav>
+          {breadcrumb.length > 1 && (
+            <nav className="flex items-center gap-0.5 ml-2 overflow-x-auto shrink-0">
+              {breadcrumb.map((item, index) => (
+                <span key={item.id ?? 'root'} className="flex items-center gap-0.5">
+                  {index > 0 && <ChevronRight className="size-3 text-muted-foreground shrink-0" />}
+                  <button
+                    type="button"
+                    onClick={() => onBreadcrumbNavigate?.(item.id)}
+                    className={`text-sm px-1 py-0.5 rounded hover:bg-muted transition-colors whitespace-nowrap ${
+                      index === breadcrumb.length - 1
+                        ? 'font-medium text-foreground pointer-events-none'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {item.name}
+                  </button>
+                </span>
+              ))}
+            </nav>
+          )}
+        </>
       )}
 
       <div className="ml-auto flex items-center gap-0.5 shrink-0">

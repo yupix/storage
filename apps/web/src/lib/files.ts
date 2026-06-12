@@ -142,6 +142,27 @@ export async function deleteFile(id: string): Promise<void> {
   if (error) throw new Error('ファイルの削除に失敗しました')
 }
 
+export async function fetchTrashFiles(page = 1, limit = 50): Promise<PaginatedFiles> {
+  const { data, error } = await apiClient.GET('/v1/files/trash', {
+    params: { query: { page, limit } },
+  })
+  if (error || !data) throw new Error('ゴミ箱ファイル一覧の取得に失敗しました')
+  return data
+}
+
+export async function restoreFile(id: string): Promise<FileItem> {
+  const { data, error } = await apiClient.POST('/v1/files/trash/{id}/restore', {
+    params: { path: { id } },
+  })
+  if (error || !data) throw new Error('ファイルの復元に失敗しました')
+  return data
+}
+
+export async function emptyTrash(): Promise<void> {
+  const { error } = await apiClient.DELETE('/v1/files/trash', {})
+  if (error) throw new Error('ゴミ箱を空にするのに失敗しました')
+}
+
 export async function downloadFile(id: string, name: string): Promise<void> {
   const res = await fetch(`/v1/files/${id}/view`)
   if (!res.ok) throw new Error('ダウンロードに失敗しました')

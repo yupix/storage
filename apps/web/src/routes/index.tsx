@@ -15,7 +15,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '../components/ui/alert-dialog'
-import { fetchMyFiles, fetchFolders, uploadFileWithProgress, createUploadItem, deleteFile, toggleFavorite, renameFile, renameFolder } from '../lib/files'
+import { fetchMyFiles, fetchFolders, uploadFileWithProgress, createUploadItem, deleteFile, toggleFavorite, renameFile, renameFolder, fetchTrashFiles, restoreFile, emptyTrash } from '../lib/files'
 import type { FileItem, FolderItem, UploadItem } from '../lib/files'
 
 export const Route = createFileRoute('/')({ component: App })
@@ -111,12 +111,17 @@ function App() {
   const [renameTarget, setRenameTarget] = useState<{ id: string; name: string; kind: 'file' | 'folder' } | null>(null)
   const [deleteFolderTargetId, setDeleteFolderTargetId] = useState<string | null>(null)
   const [moveFolderTargetId, setMoveFolderTargetId] = useState<string | null>(null)
+  const [emptyTrashOpen, setEmptyTrashOpen] = useState(false)
+  const [emptyingTrash, setEmptyingTrash] = useState(false)
 
   const refreshFiles = useCallback(async () => {
     try {
-      const isFavoriteSection = activeSection === 'favorites'
-      if (isFavoriteSection) {
+      if (activeSection === 'favorites') {
         const fileData = await fetchMyFiles(1, 50, null, true)
+        setFiles(fileData.files)
+        setFolders([])
+      } else if (activeSection === 'trash') {
+        const fileData = await fetchTrashFiles(1, 50)
         setFiles(fileData.files)
         setFolders([])
       } else {
@@ -211,6 +216,28 @@ function App() {
     })
   }
 
+  const handleRestore = useCallback(async (id: string) => {
+    try {
+      await restoreFile(id)
+      await refreshFiles()
+    } catch {
+      // エラー時は何もしない
+    }
+  }, [refreshFiles])
+
+  const handleConfirmEmptyTrash = useCallback(async () => {
+    setEmptyingTrash(true)
+    try {
+      await emptyTrash()
+      await refreshFiles()
+    } catch {
+      // エラー時は何もしない
+    } finally {
+      setEmptyingTrash(false)
+      setEmptyTrashOpen(false)
+    }
+  }, [refreshFiles])
+
   const handleSidebarNavigate = useCallback((section: SidebarSection) => {
     setActiveSection(section)
     if (section === 'home' || section === 'drive') {
@@ -289,6 +316,8 @@ function App() {
                 onCreateFolder={() => setCreateFolderOpen(true)}
                 breadcrumb={breadcrumb}
                 onBreadcrumbNavigate={handleBreadcrumbNavigate}
+                mode={activeSection === 'trash' ? 'trash' : 'normal'}
+                onEmptyTrash={() => setEmptyTrashOpen(true)}
               />
             </div>
           </div>
@@ -299,16 +328,18 @@ function App() {
               folders={folders}
               loading={loading}
               view={view}
-              onFileSelect={handleFileSelect}
-              onPreview={setPreviewFileId}
-              onDelete={setDeleteTargetId}
-              onMove={setMoveTargetFileId}
-              onRename={(id, name) => setRenameTarget({ id, name, kind: 'file' })}
-              onToggleFavorite={handleToggleFavorite}
-              onFolderOpen={handleFolderOpen}
-              onFolderDelete={setDeleteFolderTargetId}
-              onFolderMove={setMoveFolderTargetId}
-              onFolderRename={(id, name) => setRenameTarget({ id, name, kind: 'folder' })}
+              mode={activeSection === 'trash' ? 'trash' : 'normal'}
+              onFileSelect={activeSection === 'trash' ? undefined : handleFileSelect}
+              onPreview={activeSection === 'trash' ? undefined : setPreviewFileId}
+              onDelete={activeSection === 'trash' ? undefined : setDeleteTargetId}
+              onMove={activeSection === 'trash' ? undefined : setMoveTargetFileId}
+              onRename={activeSection === 'trash' ? undefined : (id, name) => setRenameTarget({ id, name, kind: 'file' })}
+              onToggleFavorite={activeSection === 'trash' ? undefined : handleToggleFavorite}
+              onRestore={activeSection === 'trash' ? handleRestore : undefined}
+              onFolderOpen={activeSection === 'trash' ? undefined : handleFolderOpen}
+              onFolderDelete={activeSection === 'trash' ? undefined : setDeleteFolderTargetId}
+              onFolderMove={activeSection === 'trash' ? undefined : setMoveFolderTargetId}
+              onFolderRename={activeSection === 'trash' ? undefined : (id, name) => setRenameTarget({ id, name, kind: 'folder' })}
             />
           </div>
         </div>
@@ -372,6 +403,23 @@ function App() {
             <AlertDialogCancel disabled={deleting}>キャンセル</AlertDialogCancel>
             <AlertDialogAction onClick={handleConfirmDelete} disabled={deleting}>
               {deleting ? '削除中...' : '削除'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={emptyTrashOpen} onOpenChange={(open) => { if (!open) setEmptyTrashOpen(false) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>ゴミ箱を空にしますか？</AlertDialogTitle>
+            <AlertDialogDescription>
+              ゴミ箱内のすべてのファイルを完全に削除します。この操作は取り消せません。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={emptyingTrash}>キャンセル</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmEmptyTrash} disabled={emptyingTrash}>
+              {emptyingTrash ? '削除中...' : 'すべて削除'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
