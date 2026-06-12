@@ -637,6 +637,52 @@ pub async fn restore_file(
 
 #[utoipa::path(
     delete,
+    path = "/trash/{id}",
+    params(("id" = Uuid, Path, description = "完全削除するファイルID")),
+    responses(
+        (status = 204, description = "完全削除しました"),
+        (status = 400, description = "ゴミ箱にないファイル"),
+        (status = 401, description = "未認証"),
+        (status = 403, description = "アクセス権限なし"),
+        (status = 404, description = "ファイルが見つかりません"),
+    )
+)]
+pub async fn purge_file(
+    State(state): State<AppState>,
+    current_user: CurrentUser,
+    Path(file_id): Path<Uuid>,
+) -> Result<StatusCode, AuthError> {
+    let txn = state.db.begin().await?;
+
+    // restore_file との競合を直列化するため SELECT FOR UPDATE で取得
+    let file = files::Entity::find_by_id(file_id)
+        .lock(LockType::Update)
+        .one(&txn)
+        .await?
+        .ok_or(AuthError::NotFound)?;
+
+    if file.author_id != current_user.id {
+        let _ = txn.rollback().await;
+        return Err(AuthError::Forbidden);
+    }
+    if !file.is_deleted {
+        let _ = txn.rollback().await;
+        return Err(AuthError::InvalidInput("ファイルはゴミ箱にありません".into()));
+    }
+
+    let url = file.url.clone();
+    files::Entity::delete_by_id(file_id).exec(&txn).await?;
+    txn.commit().await?;
+
+    if let Err(e) = state.storage.delete(&url).await {
+        tracing::warn!("ストレージ削除失敗 key={}: {e}", url);
+    }
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[utoipa::path(
+    delete,
     path = "/trash",
     responses(
         (status = 204, description = "ゴミ箱を空にしました"),

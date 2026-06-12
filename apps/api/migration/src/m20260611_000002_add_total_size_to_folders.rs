@@ -1,5 +1,5 @@
 use sea_orm_migration::prelude::*;
-use sea_orm_migration::sea_orm::{DatabaseBackend, Statement, TransactionTrait};
+use sea_orm_migration::sea_orm::{ConnectionTrait, DatabaseBackend, Statement, TransactionTrait};
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;
@@ -46,7 +46,7 @@ impl MigrationTrait for Migration {
             FROM sizes s
             WHERE f.id = s.ancestor_id
         "#;
-        txn.execute(Statement::from_string(DatabaseBackend::Postgres, sql))
+        txn.execute_raw(Statement::from_string(DatabaseBackend::Postgres, sql))
             .await?;
         txn.commit().await?;
 
