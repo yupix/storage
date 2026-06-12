@@ -158,6 +158,13 @@ export async function restoreFile(id: string): Promise<FileItem> {
   return data
 }
 
+export async function permanentDeleteFile(id: string): Promise<void> {
+  const { error } = await apiClient.DELETE('/v1/files/trash/{id}', {
+    params: { path: { id } },
+  })
+  if (error) throw new Error('ファイルの完全削除に失敗しました')
+}
+
 export async function emptyTrash(): Promise<void> {
   const { error } = await apiClient.DELETE('/v1/files/trash', {})
   if (error) throw new Error('ゴミ箱を空にするのに失敗しました')

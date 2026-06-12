@@ -116,6 +116,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/files/trash/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["purge_file"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/files/trash/{id}/restore": {
         parameters: {
             query?: never;
@@ -653,6 +669,45 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
+                content?: never;
+            };
+        };
+    };
+    purge_file: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 完全削除するファイルID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 完全削除しました */
+            204: {
+                headers: { [name: string]: unknown };
+                content?: never;
+            };
+            /** @description ゴミ箱にないファイル */
+            400: {
+                headers: { [name: string]: unknown };
+                content?: never;
+            };
+            /** @description 未認証 */
+            401: {
+                headers: { [name: string]: unknown };
+                content?: never;
+            };
+            /** @description アクセス権限なし */
+            403: {
+                headers: { [name: string]: unknown };
+                content?: never;
+            };
+            /** @description ファイルが見つかりません */
+            404: {
+                headers: { [name: string]: unknown };
                 content?: never;
             };
         };

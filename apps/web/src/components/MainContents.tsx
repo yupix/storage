@@ -283,41 +283,50 @@ function FileRow({
 interface TrashFileItemActionsProps {
   file: FileItem
   onRestore: (id: string) => void
+  onPurge: (id: string) => void
 }
 
-function TrashFileDropdownMenuContent({ file, onRestore }: TrashFileItemActionsProps) {
+function TrashFileDropdownMenuContent({ file, onRestore, onPurge }: TrashFileItemActionsProps) {
   return (
     <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
       <DropdownMenuItem onSelect={() => onRestore(file.id)}>
         <RotateCcw className="mr-2 size-4" />
         復元
       </DropdownMenuItem>
-      <DropdownMenuSeparator />
       <DropdownMenuItem onSelect={() => downloadFile(file.id, file.name)}>
         <Download className="mr-2 size-4" />
         ダウンロード
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem variant="destructive" onSelect={() => onPurge(file.id)}>
+        <Trash2 className="mr-2 size-4" />
+        完全削除
       </DropdownMenuItem>
     </DropdownMenuContent>
   )
 }
 
-function TrashFileContextMenuContent({ file, onRestore }: TrashFileItemActionsProps) {
+function TrashFileContextMenuContent({ file, onRestore, onPurge }: TrashFileItemActionsProps) {
   return (
     <ContextMenuContent onClick={(e) => e.stopPropagation()}>
       <ContextMenuItem onSelect={() => onRestore(file.id)}>
         <RotateCcw className="mr-2 size-4" />
         復元
       </ContextMenuItem>
-      <ContextMenuSeparator />
       <ContextMenuItem onSelect={() => downloadFile(file.id, file.name)}>
         <Download className="mr-2 size-4" />
         ダウンロード
+      </ContextMenuItem>
+      <ContextMenuSeparator />
+      <ContextMenuItem variant="destructive" onSelect={() => onPurge(file.id)}>
+        <Trash2 className="mr-2 size-4" />
+        完全削除
       </ContextMenuItem>
     </ContextMenuContent>
   )
 }
 
-function TrashFileCard({ file, onRestore }: TrashFileItemActionsProps) {
+function TrashFileCard({ file, onRestore, onPurge }: TrashFileItemActionsProps) {
   const date = file.updated_at ? new Date(file.updated_at).toLocaleDateString('ja-JP') : ''
   const isImage = file.file_type.startsWith('image/')
   return (
@@ -339,7 +348,7 @@ function TrashFileCard({ file, onRestore }: TrashFileItemActionsProps) {
                     <EllipsisVertical className="size-4" />
                   </Button>
                 </DropdownMenuTrigger>
-                <TrashFileDropdownMenuContent file={file} onRestore={onRestore} />
+                <TrashFileDropdownMenuContent file={file} onRestore={onRestore} onPurge={onPurge} />
               </DropdownMenu>
             </div>
             <p className="text-xs text-muted-foreground mt-0.5">
@@ -348,12 +357,12 @@ function TrashFileCard({ file, onRestore }: TrashFileItemActionsProps) {
           </CardContent>
         </Card>
       </ContextMenuTrigger>
-      <TrashFileContextMenuContent file={file} onRestore={onRestore} />
+      <TrashFileContextMenuContent file={file} onRestore={onRestore} onPurge={onPurge} />
     </ContextMenu>
   )
 }
 
-function TrashFileRow({ file, onRestore }: TrashFileItemActionsProps) {
+function TrashFileRow({ file, onRestore, onPurge }: TrashFileItemActionsProps) {
   const date = file.updated_at ? new Date(file.updated_at).toLocaleDateString('ja-JP') : ''
   return (
     <ContextMenu>
@@ -369,11 +378,11 @@ function TrashFileRow({ file, onRestore }: TrashFileItemActionsProps) {
                 <EllipsisVertical className="size-4" />
               </Button>
             </DropdownMenuTrigger>
-            <TrashFileDropdownMenuContent file={file} onRestore={onRestore} />
+            <TrashFileDropdownMenuContent file={file} onRestore={onRestore} onPurge={onPurge} />
           </DropdownMenu>
         </div>
       </ContextMenuTrigger>
-      <TrashFileContextMenuContent file={file} onRestore={onRestore} />
+      <TrashFileContextMenuContent file={file} onRestore={onRestore} onPurge={onPurge} />
     </ContextMenu>
   )
 }
@@ -550,6 +559,7 @@ interface MainContentsProps {
   onRename?: (id: string, currentName: string) => void
   onToggleFavorite?: (id: string, current: boolean) => void
   onRestore?: (id: string) => void
+  onPurge?: (id: string) => void
   onFolderOpen?: (folder: FolderItem) => void
   onFolderDelete?: (id: string) => void
   onFolderMove?: (id: string) => void
@@ -571,6 +581,7 @@ export default function MainContentsDefault({
   onRename,
   onToggleFavorite,
   onRestore,
+  onPurge,
   onFolderOpen,
   onFolderDelete,
   onFolderMove,
@@ -583,6 +594,7 @@ export default function MainContentsDefault({
   const handleRename = onRename ?? noop
   const handleToggleFavorite = onToggleFavorite ?? noop
   const handleRestore = onRestore ?? noop
+  const handlePurge = onPurge ?? noop
   const handleFolderOpen = onFolderOpen ?? noop
   const handleFolderDelete = onFolderDelete ?? noop
   const handleFolderMove = onFolderMove ?? noop
@@ -654,7 +666,7 @@ export default function MainContentsDefault({
             <span className="size-6 shrink-0" />
           </div>
           {files.map((file) => (
-            <TrashFileRow key={file.id} file={file} onRestore={handleRestore} />
+            <TrashFileRow key={file.id} file={file} onRestore={handleRestore} onPurge={handlePurge} />
           ))}
         </div>
       )
@@ -662,7 +674,7 @@ export default function MainContentsDefault({
     return (
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 p-3">
         {files.map((file) => (
-          <TrashFileCard key={file.id} file={file} onRestore={handleRestore} />
+          <TrashFileCard key={file.id} file={file} onRestore={handleRestore} onPurge={handlePurge} />
         ))}
       </div>
     )

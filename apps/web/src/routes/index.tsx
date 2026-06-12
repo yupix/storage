@@ -15,7 +15,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '../components/ui/alert-dialog'
-import { fetchMyFiles, fetchFolders, uploadFileWithProgress, createUploadItem, deleteFile, toggleFavorite, renameFile, renameFolder, fetchTrashFiles, restoreFile, emptyTrash } from '../lib/files'
+import { fetchMyFiles, fetchFolders, uploadFileWithProgress, createUploadItem, deleteFile, toggleFavorite, renameFile, renameFolder, fetchTrashFiles, restoreFile, emptyTrash, permanentDeleteFile } from '../lib/files'
 import type { FileItem, FolderItem, UploadItem } from '../lib/files'
 
 export const Route = createFileRoute('/')({ component: App })
@@ -113,6 +113,8 @@ function App() {
   const [moveFolderTargetId, setMoveFolderTargetId] = useState<string | null>(null)
   const [emptyTrashOpen, setEmptyTrashOpen] = useState(false)
   const [emptyingTrash, setEmptyingTrash] = useState(false)
+  const [purgeTargetId, setPurgeTargetId] = useState<string | null>(null)
+  const [purging, setPurging] = useState(false)
 
   const refreshFiles = useCallback(async () => {
     try {
@@ -225,6 +227,20 @@ function App() {
     }
   }, [refreshFiles])
 
+  const handleConfirmPurge = useCallback(async () => {
+    if (!purgeTargetId) return
+    setPurging(true)
+    try {
+      await permanentDeleteFile(purgeTargetId)
+      await refreshFiles()
+    } catch {
+      // エラー時は何もしない
+    } finally {
+      setPurging(false)
+      setPurgeTargetId(null)
+    }
+  }, [purgeTargetId, refreshFiles])
+
   const handleConfirmEmptyTrash = useCallback(async () => {
     setEmptyingTrash(true)
     try {
@@ -336,6 +352,7 @@ function App() {
               onRename={activeSection === 'trash' ? undefined : (id, name) => setRenameTarget({ id, name, kind: 'file' })}
               onToggleFavorite={activeSection === 'trash' ? undefined : handleToggleFavorite}
               onRestore={activeSection === 'trash' ? handleRestore : undefined}
+              onPurge={activeSection === 'trash' ? setPurgeTargetId : undefined}
               onFolderOpen={activeSection === 'trash' ? undefined : handleFolderOpen}
               onFolderDelete={activeSection === 'trash' ? undefined : setDeleteFolderTargetId}
               onFolderMove={activeSection === 'trash' ? undefined : setMoveFolderTargetId}
@@ -403,6 +420,23 @@ function App() {
             <AlertDialogCancel disabled={deleting}>キャンセル</AlertDialogCancel>
             <AlertDialogAction onClick={handleConfirmDelete} disabled={deleting}>
               {deleting ? '削除中...' : '削除'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={purgeTargetId !== null} onOpenChange={(open) => { if (!open) setPurgeTargetId(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>ファイルを完全削除しますか？</AlertDialogTitle>
+            <AlertDialogDescription>
+              このファイルを完全に削除します。この操作は取り消せません。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={purging}>キャンセル</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmPurge} disabled={purging}>
+              {purging ? '削除中...' : '完全削除'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
