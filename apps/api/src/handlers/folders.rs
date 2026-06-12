@@ -420,23 +420,47 @@ async fn collect_deleted_descendant_ids<C: ConnectionTrait>(
     db: &C,
     root_id: Uuid,
     user_id: Uuid,
+    min_deleted_at: Option<DateTimeWithTimeZone>,
 ) -> Result<Vec<Uuid>, AuthError> {
-    let sql = r#"
-        WITH RECURSIVE descendants AS (
-            SELECT id FROM folders
-            WHERE folder_id = $1 AND owner_id = $2 AND is_deleted = true
-            UNION ALL
-            SELECT f.id FROM folders f
-            INNER JOIN descendants d ON f.folder_id = d.id
-            WHERE f.owner_id = $2 AND f.is_deleted = true
-        )
-        SELECT id FROM descendants
-    "#;
-    let stmt = Statement::from_sql_and_values(
-        sea_orm::DatabaseBackend::Postgres,
-        sql,
-        [root_id.into(), user_id.into()],
-    );
+    // min_deleted_at が指定されている場合、それ以前に個別削除された子孫は除外する。
+    // 親フォルダーと同時に削除された子孫のみ対象とすることで、ユーザーが
+    // 明示的に削除した子フォルダーを意図せず復元しないようにする。
+    let sql = match min_deleted_at {
+        Some(_) => r#"
+            WITH RECURSIVE descendants AS (
+                SELECT id FROM folders
+                WHERE folder_id = $1 AND owner_id = $2 AND is_deleted = true AND deleted_at >= $3
+                UNION ALL
+                SELECT f.id FROM folders f
+                INNER JOIN descendants d ON f.folder_id = d.id
+                WHERE f.owner_id = $2 AND f.is_deleted = true AND f.deleted_at >= $3
+            )
+            SELECT id FROM descendants
+        "#,
+        None => r#"
+            WITH RECURSIVE descendants AS (
+                SELECT id FROM folders
+                WHERE folder_id = $1 AND owner_id = $2 AND is_deleted = true
+                UNION ALL
+                SELECT f.id FROM folders f
+                INNER JOIN descendants d ON f.folder_id = d.id
+                WHERE f.owner_id = $2 AND f.is_deleted = true
+            )
+            SELECT id FROM descendants
+        "#,
+    };
+    let stmt = match min_deleted_at {
+        Some(ts) => Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            sql,
+            [root_id.into(), user_id.into(), ts.into()],
+        ),
+        None => Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            sql,
+            [root_id.into(), user_id.into()],
+        ),
+    };
     let rows = DescendantId::find_by_statement(stmt).all(db).await?;
     Ok(rows.into_iter().map(|r| r.id).collect())
 }
@@ -538,7 +562,7 @@ pub async fn restore_folder(
         }
     }
 
-    let descendant_ids = collect_deleted_descendant_ids(&txn, id, auth.user_id).await?;
+    let descendant_ids = collect_deleted_descendant_ids(&txn, id, auth.user_id, folder.deleted_at).await?;
     let mut all_folder_ids = vec![id];
     all_folder_ids.extend(descendant_ids);
 
@@ -637,7 +661,7 @@ pub async fn purge_folder(
         return Err(AuthError::InvalidInput("フォルダーはゴミ箱にありません".into()));
     }
 
-    let descendant_ids = collect_deleted_descendant_ids(&txn, id, auth.user_id).await?;
+    let descendant_ids = collect_deleted_descendant_ids(&txn, id, auth.user_id, None).await?;
     let mut all_folder_ids = vec![id];
     all_folder_ids.extend(descendant_ids);
 
