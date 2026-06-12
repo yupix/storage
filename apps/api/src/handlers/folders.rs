@@ -6,10 +6,8 @@ use axum::{
 use axum_valid::Valid;
 use chrono::Utc;
 use sea_orm::prelude::Uuid;
-use std::collections::HashMap;
-
 use sea_orm::{
-    ActiveModelTrait, ActiveValue::Set, ColumnTrait, ConnectionTrait, DatabaseBackend, EntityTrait,
+    ActiveModelTrait, ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait,
     FromQueryResult, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, Statement, TransactionTrait,
 };
 use sea_orm::sea_query::{Expr, LockType};
@@ -20,6 +18,7 @@ use crate::models::{FolderResponse, ListFoldersResponse};
 use crate::openapi::SessionAuthErrors;
 use crate::payloads::folders::{CreateFolderRequest, DeleteFolderQuery, ListFoldersQuery, UpdateFolderRequest};
 use crate::utils::auth::AuthError;
+use crate::utils::folder_size::adjust_folder_chain;
 use crate::AppState;
 
 fn trim_name(name: &str) -> Result<String, AuthError> {
@@ -72,59 +71,6 @@ struct DescendantId {
     id: Uuid,
 }
 
-#[derive(FromQueryResult)]
-struct FolderSize {
-    root_id: Uuid,
-    total_size: i64,
-}
-
-/// 複数フォルダーの再帰的ファイル合計サイズを一括取得する。
-/// 返り値: folder_id → total_size（バイト）のマップ。存在しないIDは 0 扱い。
-async fn compute_folder_sizes<C: ConnectionTrait>(
-    db: &C,
-    folder_ids: &[Uuid],
-) -> Result<HashMap<Uuid, i64>, AuthError> {
-    if folder_ids.is_empty() {
-        return Ok(HashMap::new());
-    }
-
-    // UUID 配列を $1::uuid[] として渡すことでクエリプランのキャッシュ効率を高める
-    let sql = r#"
-        WITH RECURSIVE tree AS (
-            SELECT id, id AS root_id
-            FROM folders
-            WHERE id = ANY($1::uuid[]) AND is_deleted = false
-            UNION ALL
-            SELECT f.id, t.root_id
-            FROM folders f
-            INNER JOIN tree t ON f.folder_id = t.id
-            WHERE f.is_deleted = false
-        )
-        SELECT t.root_id, COALESCE(SUM(fi.filesize), 0)::bigint AS total_size
-        FROM tree t
-        LEFT JOIN files fi ON fi.folder_id = t.id AND fi.is_deleted = false
-        GROUP BY t.root_id
-    "#;
-
-    let array_value = sea_orm::Value::Array(
-        sea_orm::sea_query::ArrayType::Uuid,
-        Some(Box::new(
-            folder_ids
-                .iter()
-                .map(|id| sea_orm::Value::Uuid(Some(*id)))
-                .collect(),
-        )),
-    );
-    let stmt = Statement::from_sql_and_values(DatabaseBackend::Postgres, sql, [array_value]);
-    let rows = FolderSize::find_by_statement(stmt).all(db).await?;
-
-    let mut map = HashMap::new();
-    for row in rows {
-        map.insert(row.root_id, row.total_size);
-    }
-    Ok(map)
-}
-
 async fn collect_descendant_ids<C: ConnectionTrait>(
     db: &C,
     root_id: Uuid,
@@ -143,7 +89,7 @@ async fn collect_descendant_ids<C: ConnectionTrait>(
     "#;
 
     let stmt = Statement::from_sql_and_values(
-        DatabaseBackend::Postgres,
+        sea_orm::DatabaseBackend::Postgres,
         sql,
         [root_id.into(), user_id.into()],
     );
@@ -235,12 +181,9 @@ pub async fn list_folders(
     let total = paginator.num_items().await?;
     let rows = paginator.fetch_page(page - 1).await?;
 
-    let folder_ids: Vec<Uuid> = rows.iter().map(|f| f.id).collect();
-    let sizes = compute_folder_sizes(&state.db, &folder_ids).await?;
-
     let folders_list = rows
         .iter()
-        .map(|f| FolderResponse::from_models(f, &owner, sizes.get(&f.id).copied().unwrap_or(0)))
+        .map(|f| FolderResponse::from_models(f, &owner))
         .collect();
 
     Ok(Json(ListFoldersResponse {
@@ -289,6 +232,7 @@ pub async fn create_folder(
         folder_id: Set(payload.folder_id),
         owner_id: Set(auth.user_id),
         is_deleted: Set(false),
+        total_size: Set(0),
         deleted_at: Set(None),
         created_at: Set(Some(now)),
         updated_at: Set(Some(now)),
@@ -299,7 +243,7 @@ pub async fn create_folder(
 
     Ok((
         StatusCode::CREATED,
-        Json(FolderResponse::from_models(&model, &owner, 0)),
+        Json(FolderResponse::from_models(&model, &owner)),
     ))
 }
 
@@ -320,9 +264,7 @@ pub async fn get_folder(
 ) -> Result<Json<FolderResponse>, AuthError> {
     let folder = get_owned_folder(&state.db, id, auth.user_id, false).await?;
     let owner = load_owner(&state.db, auth.user_id).await?;
-    let sizes = compute_folder_sizes(&state.db, &[id]).await?;
-    let total_size = sizes.get(&id).copied().unwrap_or(0);
-    Ok(Json(FolderResponse::from_models(&folder, &owner, total_size)))
+    Ok(Json(FolderResponse::from_models(&folder, &owner)))
 }
 
 #[utoipa::path(
@@ -391,6 +333,13 @@ pub async fn update_folder(
         }
     };
 
+    // フォルダーを移動する場合、旧親から total_size を引き、新親に加算する
+    if let Some(ref np) = new_parent {
+        let size = folder.total_size;
+        adjust_folder_chain(&txn, folder.folder_id, -size, now).await?;
+        adjust_folder_chain(&txn, *np, size, now).await?;
+    }
+
     let mut am: folders::ActiveModel = folder.clone().into();
     if let Some(name) = new_name {
         am.name = Set(name);
@@ -402,9 +351,7 @@ pub async fn update_folder(
     let folder = am.update(&txn).await?;
     txn.commit().await?;
 
-    let sizes = compute_folder_sizes(&state.db, &[id]).await?;
-    let total_size = sizes.get(&id).copied().unwrap_or(0);
-    Ok(Json(FolderResponse::from_models(&folder, &owner, total_size)))
+    Ok(Json(FolderResponse::from_models(&folder, &owner)))
 }
 
 #[utoipa::path(
@@ -431,7 +378,10 @@ pub async fn delete_folder(
     let txn = state.db.begin().await?;
 
     // アップロード/移動処理と同じフォルダー行を最初にロックして直列化する
-    get_owned_folder(&txn, id, auth.user_id, true).await?;
+    let folder = get_owned_folder(&txn, id, auth.user_id, true).await?;
+
+    // 親フォルダーの total_size からこのフォルダーの合計サイズ分を引く
+    adjust_folder_chain(&txn, folder.folder_id, -folder.total_size, now).await?;
 
     if to_home {
         folders::Entity::update_many()
