@@ -663,8 +663,6 @@ interface MainContentsProps {
   onFolderRename?: (id: string, currentName: string) => void
 }
 
-export const SecondaryContents = () => <div />
-
 export default function MainContentsDefault({
   files,
   folders = [],

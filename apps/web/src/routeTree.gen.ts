@@ -11,9 +11,17 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as LoginRouteImport } from './routes/login'
-import { Route as AboutRouteImport } from './routes/about'
+import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AppTrashRouteImport } from './routes/_app.trash'
+import { Route as AppRecentRouteImport } from './routes/_app.recent'
+import { Route as AppHomeRouteImport } from './routes/_app.home'
+import { Route as AppFavoritesRouteImport } from './routes/_app.favorites'
+import { Route as AppDriveRouteImport } from './routes/_app.drive'
+import { Route as AppAboutRouteImport } from './routes/_app.about'
+import { Route as AppDriveIndexRouteImport } from './routes/_app.drive.index'
 import { Route as DemoSentryTestingRouteImport } from './routes/demo/sentry.testing'
+import { Route as AppDriveFolderIdRouteImport } from './routes/_app.drive.$folderId'
 
 const RegisterRoute = RegisterRouteImport.update({
   id: '/register',
@@ -25,9 +33,8 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AboutRoute = AboutRouteImport.update({
-  id: '/about',
-  path: '/about',
+const AppRoute = AppRouteImport.update({
+  id: '/_app',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -35,51 +42,143 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppTrashRoute = AppTrashRouteImport.update({
+  id: '/trash',
+  path: '/trash',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppRecentRoute = AppRecentRouteImport.update({
+  id: '/recent',
+  path: '/recent',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppHomeRoute = AppHomeRouteImport.update({
+  id: '/home',
+  path: '/home',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppFavoritesRoute = AppFavoritesRouteImport.update({
+  id: '/favorites',
+  path: '/favorites',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDriveRoute = AppDriveRouteImport.update({
+  id: '/drive',
+  path: '/drive',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAboutRoute = AppAboutRouteImport.update({
+  id: '/about',
+  path: '/about',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDriveIndexRoute = AppDriveIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppDriveRoute,
+} as any)
 const DemoSentryTestingRoute = DemoSentryTestingRouteImport.update({
   id: '/demo/sentry/testing',
   path: '/demo/sentry/testing',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppDriveFolderIdRoute = AppDriveFolderIdRouteImport.update({
+  id: '/$folderId',
+  path: '/$folderId',
+  getParentRoute: () => AppDriveRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/about': typeof AboutRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/about': typeof AppAboutRoute
+  '/drive': typeof AppDriveRouteWithChildren
+  '/favorites': typeof AppFavoritesRoute
+  '/home': typeof AppHomeRoute
+  '/recent': typeof AppRecentRoute
+  '/trash': typeof AppTrashRoute
+  '/drive/$folderId': typeof AppDriveFolderIdRoute
   '/demo/sentry/testing': typeof DemoSentryTestingRoute
+  '/drive/': typeof AppDriveIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/about': typeof AboutRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/about': typeof AppAboutRoute
+  '/favorites': typeof AppFavoritesRoute
+  '/home': typeof AppHomeRoute
+  '/recent': typeof AppRecentRoute
+  '/trash': typeof AppTrashRoute
+  '/drive/$folderId': typeof AppDriveFolderIdRoute
   '/demo/sentry/testing': typeof DemoSentryTestingRoute
+  '/drive': typeof AppDriveIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/about': typeof AboutRoute
+  '/_app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/_app/about': typeof AppAboutRoute
+  '/_app/drive': typeof AppDriveRouteWithChildren
+  '/_app/favorites': typeof AppFavoritesRoute
+  '/_app/home': typeof AppHomeRoute
+  '/_app/recent': typeof AppRecentRoute
+  '/_app/trash': typeof AppTrashRoute
+  '/_app/drive/$folderId': typeof AppDriveFolderIdRoute
   '/demo/sentry/testing': typeof DemoSentryTestingRoute
+  '/_app/drive/': typeof AppDriveIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/about' | '/login' | '/register' | '/demo/sentry/testing'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/register'
+    | '/about'
+    | '/drive'
+    | '/favorites'
+    | '/home'
+    | '/recent'
+    | '/trash'
+    | '/drive/$folderId'
+    | '/demo/sentry/testing'
+    | '/drive/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/about' | '/login' | '/register' | '/demo/sentry/testing'
+  to:
+    | '/'
+    | '/login'
+    | '/register'
+    | '/about'
+    | '/favorites'
+    | '/home'
+    | '/recent'
+    | '/trash'
+    | '/drive/$folderId'
+    | '/demo/sentry/testing'
+    | '/drive'
   id:
     | '__root__'
     | '/'
-    | '/about'
+    | '/_app'
     | '/login'
     | '/register'
+    | '/_app/about'
+    | '/_app/drive'
+    | '/_app/favorites'
+    | '/_app/home'
+    | '/_app/recent'
+    | '/_app/trash'
+    | '/_app/drive/$folderId'
     | '/demo/sentry/testing'
+    | '/_app/drive/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AboutRoute: typeof AboutRoute
+  AppRoute: typeof AppRouteWithChildren
   LoginRoute: typeof LoginRoute
   RegisterRoute: typeof RegisterRoute
   DemoSentryTestingRoute: typeof DemoSentryTestingRoute
@@ -101,11 +200,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/about': {
-      id: '/about'
-      path: '/about'
-      fullPath: '/about'
-      preLoaderRoute: typeof AboutRouteImport
+    '/_app': {
+      id: '/_app'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -115,6 +214,55 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_app/trash': {
+      id: '/_app/trash'
+      path: '/trash'
+      fullPath: '/trash'
+      preLoaderRoute: typeof AppTrashRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/recent': {
+      id: '/_app/recent'
+      path: '/recent'
+      fullPath: '/recent'
+      preLoaderRoute: typeof AppRecentRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/home': {
+      id: '/_app/home'
+      path: '/home'
+      fullPath: '/home'
+      preLoaderRoute: typeof AppHomeRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/favorites': {
+      id: '/_app/favorites'
+      path: '/favorites'
+      fullPath: '/favorites'
+      preLoaderRoute: typeof AppFavoritesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/drive': {
+      id: '/_app/drive'
+      path: '/drive'
+      fullPath: '/drive'
+      preLoaderRoute: typeof AppDriveRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/about': {
+      id: '/_app/about'
+      path: '/about'
+      fullPath: '/about'
+      preLoaderRoute: typeof AppAboutRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/drive/': {
+      id: '/_app/drive/'
+      path: '/'
+      fullPath: '/drive/'
+      preLoaderRoute: typeof AppDriveIndexRouteImport
+      parentRoute: typeof AppDriveRoute
+    }
     '/demo/sentry/testing': {
       id: '/demo/sentry/testing'
       path: '/demo/sentry/testing'
@@ -122,12 +270,53 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DemoSentryTestingRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_app/drive/$folderId': {
+      id: '/_app/drive/$folderId'
+      path: '/$folderId'
+      fullPath: '/drive/$folderId'
+      preLoaderRoute: typeof AppDriveFolderIdRouteImport
+      parentRoute: typeof AppDriveRoute
+    }
   }
 }
 
+interface AppDriveRouteChildren {
+  AppDriveFolderIdRoute: typeof AppDriveFolderIdRoute
+  AppDriveIndexRoute: typeof AppDriveIndexRoute
+}
+
+const AppDriveRouteChildren: AppDriveRouteChildren = {
+  AppDriveFolderIdRoute: AppDriveFolderIdRoute,
+  AppDriveIndexRoute: AppDriveIndexRoute,
+}
+
+const AppDriveRouteWithChildren = AppDriveRoute._addFileChildren(
+  AppDriveRouteChildren,
+)
+
+interface AppRouteChildren {
+  AppAboutRoute: typeof AppAboutRoute
+  AppDriveRoute: typeof AppDriveRouteWithChildren
+  AppFavoritesRoute: typeof AppFavoritesRoute
+  AppHomeRoute: typeof AppHomeRoute
+  AppRecentRoute: typeof AppRecentRoute
+  AppTrashRoute: typeof AppTrashRoute
+}
+
+const AppRouteChildren: AppRouteChildren = {
+  AppAboutRoute: AppAboutRoute,
+  AppDriveRoute: AppDriveRouteWithChildren,
+  AppFavoritesRoute: AppFavoritesRoute,
+  AppHomeRoute: AppHomeRoute,
+  AppRecentRoute: AppRecentRoute,
+  AppTrashRoute: AppTrashRoute,
+}
+
+const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AboutRoute: AboutRoute,
+  AppRoute: AppRouteWithChildren,
   LoginRoute: LoginRoute,
   RegisterRoute: RegisterRoute,
   DemoSentryTestingRoute: DemoSentryTestingRoute,

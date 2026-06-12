@@ -35,7 +35,7 @@ export default function Header() {
   return (
     <header className="h-14 px-4 bg-background border-b border-border flex items-center gap-3">
       {/* ロゴ */}
-      <Link to="/" className="shrink-0 text-base font-bold tracking-tight hover:opacity-80 transition-opacity">
+      <Link to="/home" className="shrink-0 text-base font-bold tracking-tight hover:opacity-80 transition-opacity">
         HyperDrive
       </Link>
 

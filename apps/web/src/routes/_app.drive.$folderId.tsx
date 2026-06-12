@@ -1,0 +1,35 @@
+import { createFileRoute } from '@tanstack/react-router'
+import WorkspacePage from './-workspace/WorkspacePage'
+import {
+  loadDrive,
+  validateWorkspaceSearch,
+  WorkspaceError,
+  WorkspacePending,
+} from './-workspace/route-utils'
+
+export const Route = createFileRoute('/_app/drive/$folderId')({
+  ssr: false,
+  validateSearch: validateWorkspaceSearch,
+  loader: ({ params }) => loadDrive(params.folderId),
+  pendingComponent: WorkspacePending,
+  errorComponent: WorkspaceError,
+  component: FolderPage,
+})
+
+function FolderPage() {
+  const data = Route.useLoaderData()
+  const { folderId } = Route.useParams()
+  const { view } = Route.useSearch()
+  const navigate = Route.useNavigate()
+
+  return (
+    <WorkspacePage
+      initialFiles={data.files}
+      initialFolders={data.folders}
+      currentFolderId={folderId}
+      breadcrumb={data.breadcrumb}
+      view={view ?? 'grid'}
+      onViewChange={(nextView) => navigate({ search: { view: nextView } })}
+    />
+  )
+}

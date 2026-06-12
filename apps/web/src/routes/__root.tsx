@@ -1,6 +1,4 @@
 import { HeadContent, Outlet, Scripts, createRootRoute, redirect, useLocation } from '@tanstack/react-router'
-import Footer from '../components/Footer'
-import Header from '../components/Header'
 import { UserProvider } from '../lib/user-context'
 import { getUser } from '../lib/auth'
 
@@ -61,11 +59,5 @@ function RootLayout() {
     return <Outlet />
   }
 
-  return (
-    <UserProvider value={user}>
-      <Header />
-      <Outlet />
-      <Footer />
-    </UserProvider>
-  )
+  return <UserProvider value={user}><Outlet /></UserProvider>
 }

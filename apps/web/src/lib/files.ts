@@ -56,6 +56,14 @@ export async function fetchFolders(folderId?: string | null, page = 1, limit = 1
   return data
 }
 
+export async function fetchFolder(id: string): Promise<FolderItem> {
+  const { data, error } = await apiClient.GET('/v1/folders/{id}', {
+    params: { path: { id } },
+  })
+  if (error || !data) throw new Error('フォルダー情報の取得に失敗しました')
+  return data
+}
+
 export async function createFolder(name: string, folderId?: string | null): Promise<FolderItem> {
   const { data, error } = await apiClient.POST('/v1/folders', {
     body: { name, ...(folderId ? { folder_id: folderId } : {}) },
