@@ -15,7 +15,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '../components/ui/alert-dialog'
-import { fetchMyFiles, fetchFolders, uploadFileWithProgress, createUploadItem, deleteFile, toggleFavorite, renameFile, renameFolder, fetchTrashFiles, restoreFile, emptyTrash, permanentDeleteFile } from '../lib/files'
+import { fetchMyFiles, fetchFolders, uploadFileWithProgress, createUploadItem, deleteFile, toggleFavorite, renameFile, renameFolder, fetchTrashFiles, fetchTrashFolders, restoreFile, restoreFolder, emptyTrash, permanentDeleteFile, permanentDeleteFolder } from '../lib/files'
 import type { FileItem, FolderItem, UploadItem } from '../lib/files'
 
 export const Route = createFileRoute('/')({ component: App })
@@ -115,6 +115,8 @@ function App() {
   const [emptyingTrash, setEmptyingTrash] = useState(false)
   const [purgeTargetId, setPurgeTargetId] = useState<string | null>(null)
   const [purging, setPurging] = useState(false)
+  const [purgeFolderTargetId, setPurgeFolderTargetId] = useState<string | null>(null)
+  const [purgingFolder, setPurgingFolder] = useState(false)
 
   const refreshFiles = useCallback(async () => {
     try {
@@ -123,9 +125,12 @@ function App() {
         setFiles(fileData.files)
         setFolders([])
       } else if (activeSection === 'trash') {
-        const fileData = await fetchTrashFiles(1, 50)
+        const [fileData, folderData] = await Promise.all([
+          fetchTrashFiles(1, 50),
+          fetchTrashFolders(1, 50),
+        ])
         setFiles(fileData.files)
-        setFolders([])
+        setFolders(folderData.folders)
       } else {
         const [fileData, folderData] = await Promise.all([
           fetchMyFiles(1, 50, currentFolderId),
@@ -226,6 +231,29 @@ function App() {
       // エラー時は何もしない
     }
   }, [refreshFiles])
+
+  const handleRestoreFolder = useCallback(async (id: string) => {
+    try {
+      await restoreFolder(id)
+      await refreshFiles()
+    } catch {
+      // エラー時は何もしない
+    }
+  }, [refreshFiles])
+
+  const handleConfirmPurgeFolder = useCallback(async () => {
+    if (!purgeFolderTargetId) return
+    setPurgingFolder(true)
+    try {
+      await permanentDeleteFolder(purgeFolderTargetId)
+      await refreshFiles()
+    } catch {
+      // エラー時は何もしない
+    } finally {
+      setPurgingFolder(false)
+      setPurgeFolderTargetId(null)
+    }
+  }, [purgeFolderTargetId, refreshFiles])
 
   const handleConfirmPurge = useCallback(async () => {
     if (!purgeTargetId) return
@@ -353,6 +381,8 @@ function App() {
               onToggleFavorite={activeSection === 'trash' ? undefined : handleToggleFavorite}
               onRestore={activeSection === 'trash' ? handleRestore : undefined}
               onPurge={activeSection === 'trash' ? setPurgeTargetId : undefined}
+              onFolderRestore={activeSection === 'trash' ? handleRestoreFolder : undefined}
+              onFolderPurge={activeSection === 'trash' ? setPurgeFolderTargetId : undefined}
               onFolderOpen={activeSection === 'trash' ? undefined : handleFolderOpen}
               onFolderDelete={activeSection === 'trash' ? undefined : setDeleteFolderTargetId}
               onFolderMove={activeSection === 'trash' ? undefined : setMoveFolderTargetId}
@@ -420,6 +450,23 @@ function App() {
             <AlertDialogCancel disabled={deleting}>キャンセル</AlertDialogCancel>
             <AlertDialogAction onClick={handleConfirmDelete} disabled={deleting}>
               {deleting ? '削除中...' : '削除'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={purgeFolderTargetId !== null} onOpenChange={(open) => { if (!open) setPurgeFolderTargetId(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>フォルダーを完全削除しますか？</AlertDialogTitle>
+            <AlertDialogDescription>
+              このフォルダーとその中のすべてのファイルを完全に削除します。この操作は取り消せません。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={purgingFolder}>キャンセル</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmPurgeFolder} disabled={purgingFolder}>
+              {purgingFolder ? '削除中...' : '完全削除'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

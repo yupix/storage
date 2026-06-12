@@ -158,6 +158,28 @@ export async function restoreFile(id: string): Promise<FileItem> {
   return data
 }
 
+export async function fetchTrashFolders(page = 1, limit = 50): Promise<PaginatedFolders> {
+  const { data, error } = await apiClient.GET('/v1/folders/trash', {
+    params: { query: { page, limit } },
+  })
+  if (error || !data) throw new Error('ゴミ箱フォルダー一覧の取得に失敗しました')
+  return data
+}
+
+export async function restoreFolder(id: string): Promise<void> {
+  const { error } = await apiClient.POST('/v1/folders/trash/{id}/restore', {
+    params: { path: { id } },
+  })
+  if (error) throw new Error('フォルダーの復元に失敗しました')
+}
+
+export async function permanentDeleteFolder(id: string): Promise<void> {
+  const { error } = await apiClient.DELETE('/v1/folders/trash/{id}', {
+    params: { path: { id } },
+  })
+  if (error) throw new Error('フォルダーの完全削除に失敗しました')
+}
+
 export async function permanentDeleteFile(id: string): Promise<void> {
   const { error } = await apiClient.DELETE('/v1/files/trash/{id}', {
     params: { path: { id } },
