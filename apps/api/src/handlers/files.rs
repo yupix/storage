@@ -543,15 +543,18 @@ pub async fn get_trash(
         return Err(AuthError::InvalidInput("invalid limit".into()));
     }
 
-    // 削除済みフォルダー配下のファイルはフォルダーとしてゴミ箱に表示されるため除外する
-    let deleted_folder_ids: Vec<sea_orm::prelude::Uuid> = folders::Entity::find()
-        .filter(folders::Column::OwnerId.eq(current_user.id))
-        .filter(folders::Column::IsDeleted.eq(true))
-        .select_only()
+    // 削除済みフォルダー配下のファイルはフォルダーとしてゴミ箱に表示されるため除外する。
+    // IN リストではなくサブクエリで除外し、削除済みフォルダーが大量でも
+    // PostgreSQL のパラメーター上限（65535）を超えないようにする。
+    let deleted_folder_subquery = sea_orm::sea_query::Query::select()
         .column(folders::Column::Id)
-        .into_tuple()
-        .all(&state.db)
-        .await?;
+        .from(folders::Entity)
+        .cond_where(
+            Condition::all()
+                .add(folders::Column::OwnerId.eq(current_user.id))
+                .add(folders::Column::IsDeleted.eq(true))
+        )
+        .to_owned();
 
     let paginator = files::Entity::find()
         .filter(files::Column::AuthorId.eq(current_user.id))
@@ -559,7 +562,7 @@ pub async fn get_trash(
         .filter(
             Condition::any()
                 .add(files::Column::FolderId.is_null())
-                .add(files::Column::FolderId.is_not_in(deleted_folder_ids)),
+                .add(files::Column::FolderId.not_in_subquery(deleted_folder_subquery)),
         )
         .order_by_desc(files::Column::DeletedAt)
         .order_by_asc(files::Column::Id)

@@ -488,15 +488,18 @@ pub async fn get_trash_folders(
         return Err(AuthError::InvalidInput("invalid limit".into()));
     }
 
-    // 親フォルダー自体も削除済みのものは除外（ゴミ箱のトップレベルのみ表示）
-    let deleted_parent_ids: Vec<Uuid> = folders::Entity::find()
-        .filter(folders::Column::OwnerId.eq(auth.user_id))
-        .filter(folders::Column::IsDeleted.eq(true))
-        .select_only()
+    // 親フォルダー自体も削除済みのものは除外（ゴミ箱のトップレベルのみ表示）。
+    // IN リストではなくサブクエリで除外し、削除済みフォルダーが大量でも
+    // PostgreSQL のパラメーター上限（65535）を超えないようにする。
+    let deleted_ids_subquery = sea_orm::sea_query::Query::select()
         .column(folders::Column::Id)
-        .into_tuple()
-        .all(&state.db)
-        .await?;
+        .from(folders::Entity)
+        .cond_where(
+            Condition::all()
+                .add(folders::Column::OwnerId.eq(auth.user_id))
+                .add(folders::Column::IsDeleted.eq(true))
+        )
+        .to_owned();
 
     let paginator = folders::Entity::find()
         .filter(folders::Column::OwnerId.eq(auth.user_id))
@@ -504,7 +507,7 @@ pub async fn get_trash_folders(
         .filter(
             Condition::any()
                 .add(folders::Column::FolderId.is_null())
-                .add(folders::Column::FolderId.is_not_in(deleted_parent_ids)),
+                .add(folders::Column::FolderId.not_in_subquery(deleted_ids_subquery)),
         )
         .order_by_desc(folders::Column::DeletedAt)
         .paginate(&state.db, limit);
