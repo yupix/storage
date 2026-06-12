@@ -6,7 +6,7 @@ use axum::{
 };
 use chrono::Utc;
 use sea_orm::{
-    ActiveModelTrait, ActiveValue::Set, ColumnTrait, DatabaseConnection, EntityTrait,
+    ActiveModelTrait, ActiveValue::Set, ColumnTrait, Condition, DatabaseConnection, EntityTrait,
     PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, TransactionTrait,
 };
 use sea_orm::sea_query::LockType;
@@ -543,9 +543,24 @@ pub async fn get_trash(
         return Err(AuthError::InvalidInput("invalid limit".into()));
     }
 
+    // 削除済みフォルダー配下のファイルはフォルダーとしてゴミ箱に表示されるため除外する
+    let deleted_folder_ids: Vec<sea_orm::prelude::Uuid> = folders::Entity::find()
+        .filter(folders::Column::OwnerId.eq(current_user.id))
+        .filter(folders::Column::IsDeleted.eq(true))
+        .select_only()
+        .column(folders::Column::Id)
+        .into_tuple()
+        .all(&state.db)
+        .await?;
+
     let paginator = files::Entity::find()
         .filter(files::Column::AuthorId.eq(current_user.id))
         .filter(files::Column::IsDeleted.eq(true))
+        .filter(
+            Condition::any()
+                .add(files::Column::FolderId.is_null())
+                .add(files::Column::FolderId.is_not_in(deleted_folder_ids)),
+        )
         .order_by_desc(files::Column::DeletedAt)
         .order_by_asc(files::Column::Id)
         .paginate(&state.db, limit);
