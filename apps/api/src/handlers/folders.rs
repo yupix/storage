@@ -72,6 +72,11 @@ struct DescendantId {
     id: Uuid,
 }
 
+fn make_uuid_array(ids: &[Uuid]) -> sea_orm::Value {
+    let values: Vec<sea_orm::Value> = ids.iter().map(|id| sea_orm::Value::Uuid(Some(*id))).collect();
+    sea_orm::Value::Array(sea_orm::sea_query::ArrayType::Uuid, Some(Box::new(values)))
+}
+
 async fn collect_descendant_ids<C: ConnectionTrait>(
     db: &C,
     root_id: Uuid,
@@ -569,28 +574,27 @@ pub async fn restore_folder(
     let mut all_folder_ids = vec![id];
     all_folder_ids.extend(descendant_ids);
 
+    // is_in() は ID ごとにパラメーターを展開するため 65535 件超で失敗する。
+    // ANY($1::uuid[]) で配列を 1 パラメーターにまとめて上限を回避する。
+    let id_array = make_uuid_array(&all_folder_ids);
+
     // すべての削除済みフォルダーを復元
-    folders::Entity::update_many()
-        .col_expr(folders::Column::IsDeleted, sea_orm::sea_query::Expr::value(false))
-        .col_expr(folders::Column::DeletedAt, sea_orm::sea_query::Expr::value(Option::<DateTimeWithTimeZone>::None))
-        .col_expr(folders::Column::UpdatedAt, sea_orm::sea_query::Expr::value(now))
-        .filter(folders::Column::Id.is_in(all_folder_ids.clone()))
-        .exec(&txn)
-        .await?;
+    txn.execute_raw(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        "UPDATE folders SET is_deleted = false, deleted_at = NULL, updated_at = $2 WHERE id = ANY($1)",
+        [id_array.clone(), now.into()],
+    )).await?;
 
     // フォルダーと同時にゴミ箱へ移されたファイルだけを復元する。
     // フォルダー削除前に個別削除されたファイル（deleted_at < folder.deleted_at）は
     // ユーザーが意図して削除したものなので復元しない。
     if let Some(folder_deleted_at) = folder.deleted_at {
-        files::Entity::update_many()
-            .col_expr(files::Column::IsDeleted, sea_orm::sea_query::Expr::value(false))
-            .col_expr(files::Column::DeletedAt, sea_orm::sea_query::Expr::value(Option::<DateTimeWithTimeZone>::None))
-            .col_expr(files::Column::UpdatedAt, sea_orm::sea_query::Expr::value(now))
-            .filter(files::Column::FolderId.is_in(all_folder_ids.clone()))
-            .filter(files::Column::IsDeleted.eq(true))
-            .filter(files::Column::DeletedAt.gte(folder_deleted_at))
-            .exec(&txn)
-            .await?;
+        txn.execute_raw(Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            "UPDATE files SET is_deleted = false, deleted_at = NULL, updated_at = $2 \
+             WHERE folder_id = ANY($1) AND is_deleted = true AND deleted_at >= $3",
+            [id_array.clone(), now.into(), folder_deleted_at.into()],
+        )).await?;
     }
 
     // 復元したサブツリーの total_size を再計算する
@@ -614,16 +618,11 @@ pub async fn restore_folder(
         UPDATE folders SET total_size = sizes.total_size
         FROM sizes WHERE folders.id = sizes.ancestor_id
     "#;
-    let uuid_values: Vec<sea_orm::Value> = all_folder_ids.iter().map(|id| sea_orm::Value::Uuid(Some(*id))).collect();
-    let stmt = Statement::from_sql_and_values(
+    txn.execute_raw(Statement::from_sql_and_values(
         sea_orm::DatabaseBackend::Postgres,
         cte_sql,
-        [sea_orm::Value::Array(
-            sea_orm::sea_query::ArrayType::Uuid,
-            Some(Box::new(uuid_values)),
-        )],
-    );
-    txn.execute_raw(stmt).await?;
+        [id_array],
+    )).await?;
 
     // 最新の total_size を取得して親チェーンに加算する
     let updated = folders::Entity::find_by_id(id).one(&txn).await?.ok_or(AuthError::NotFound)?;
@@ -668,25 +667,27 @@ pub async fn purge_folder(
     let mut all_folder_ids = vec![id];
     all_folder_ids.extend(descendant_ids);
 
-    // フォルダー内のファイルをすべて取得（ストレージ削除用）
-    let files_to_delete = files::Entity::find()
-        .filter(files::Column::FolderId.is_in(all_folder_ids.clone()))
-        .lock(LockType::Update)
-        .all(&txn)
-        .await?;
+    let id_array = make_uuid_array(&all_folder_ids);
+
+    // フォルダー内のファイルをすべて取得（ストレージ削除用）。
+    // is_in() ではなく ANY($1) で取得し、サブツリーが大きくてもパラメーター上限を超えない。
+    let files_to_delete = files::Model::find_by_statement(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        "SELECT * FROM files WHERE folder_id = ANY($1) FOR UPDATE",
+        [id_array.clone()],
+    )).all(&txn).await?;
 
     // DB からファイル・フォルダーを削除
-    if !files_to_delete.is_empty() {
-        let file_ids: Vec<Uuid> = files_to_delete.iter().map(|f| f.id).collect();
-        files::Entity::delete_many()
-            .filter(files::Column::Id.is_in(file_ids))
-            .exec(&txn)
-            .await?;
-    }
-    folders::Entity::delete_many()
-        .filter(folders::Column::Id.is_in(all_folder_ids))
-        .exec(&txn)
-        .await?;
+    txn.execute_raw(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        "DELETE FROM files WHERE folder_id = ANY($1)",
+        [id_array.clone()],
+    )).await?;
+    txn.execute_raw(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        "DELETE FROM folders WHERE id = ANY($1)",
+        [id_array],
+    )).await?;
     txn.commit().await?;
 
     // ストレージオブジェクトを削除
@@ -719,38 +720,41 @@ pub async fn empty_trash_folders(
 ) -> Result<StatusCode, AuthError> {
     let txn = state.db.begin().await?;
 
-    let trashed_folders = folders::Entity::find()
-        .filter(folders::Column::OwnerId.eq(auth.user_id))
-        .filter(folders::Column::IsDeleted.eq(true))
-        .lock(LockType::Update)
-        .all(&txn)
-        .await?;
+    // 削除済みフォルダーを行ロックする（restore_folder との競合を直列化）。
+    // ID リストではなく条件で直接ロックし、フォルダー数が多くてもパラメーター上限を超えない。
+    let locked = DescendantId::find_by_statement(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        "SELECT id FROM folders WHERE owner_id = $1 AND is_deleted = true FOR UPDATE",
+        [auth.user_id.into()],
+    )).all(&txn).await?;
 
-    if trashed_folders.is_empty() {
+    if locked.is_empty() {
         let _ = txn.rollback().await;
         return Ok(StatusCode::NO_CONTENT);
     }
 
-    let folder_ids: Vec<Uuid> = trashed_folders.iter().map(|f| f.id).collect();
+    // フォルダー内のファイルをすべて取得（ストレージ削除用）。
+    // JOIN で絞り込み、フォルダーが大量でもパラメーター上限を超えない。
+    let files_to_delete = files::Model::find_by_statement(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        r#"SELECT f.* FROM files f
+           INNER JOIN folders fo ON fo.id = f.folder_id
+           WHERE fo.owner_id = $1 AND fo.is_deleted = true
+           FOR UPDATE OF f"#,
+        [auth.user_id.into()],
+    )).all(&txn).await?;
 
-    // フォルダー内のファイルをすべて取得（ストレージ削除用）
-    let files_to_delete = files::Entity::find()
-        .filter(files::Column::FolderId.is_in(folder_ids.clone()))
-        .lock(LockType::Update)
-        .all(&txn)
-        .await?;
-
-    if !files_to_delete.is_empty() {
-        let file_ids: Vec<Uuid> = files_to_delete.iter().map(|f| f.id).collect();
-        files::Entity::delete_many()
-            .filter(files::Column::Id.is_in(file_ids))
-            .exec(&txn)
-            .await?;
-    }
-    folders::Entity::delete_many()
-        .filter(folders::Column::Id.is_in(folder_ids))
-        .exec(&txn)
-        .await?;
+    // DB からファイル・フォルダーを削除（サブクエリで IN リストを回避）
+    txn.execute_raw(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        "DELETE FROM files WHERE folder_id IN (SELECT id FROM folders WHERE owner_id = $1 AND is_deleted = true)",
+        [auth.user_id.into()],
+    )).await?;
+    txn.execute_raw(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        "DELETE FROM folders WHERE owner_id = $1 AND is_deleted = true",
+        [auth.user_id.into()],
+    )).await?;
     txn.commit().await?;
 
     let mut join_set = tokio::task::JoinSet::new();
