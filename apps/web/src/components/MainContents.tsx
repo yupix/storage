@@ -387,6 +387,101 @@ function TrashFileRow({ file, onRestore, onPurge }: TrashFileItemActionsProps) {
   )
 }
 
+interface TrashFolderItemActionsProps {
+  folder: FolderItem
+  onRestore: (id: string) => void
+  onPurge: (id: string) => void
+}
+
+function TrashFolderDropdownMenuContent({ folder, onRestore, onPurge }: TrashFolderItemActionsProps) {
+  return (
+    <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+      <DropdownMenuItem onSelect={() => onRestore(folder.id)}>
+        <RotateCcw className="mr-2 size-4" />
+        復元
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem variant="destructive" onSelect={() => onPurge(folder.id)}>
+        <Trash2 className="mr-2 size-4" />
+        完全削除
+      </DropdownMenuItem>
+    </DropdownMenuContent>
+  )
+}
+
+function TrashFolderContextMenuContent({ folder, onRestore, onPurge }: TrashFolderItemActionsProps) {
+  return (
+    <ContextMenuContent onClick={(e) => e.stopPropagation()}>
+      <ContextMenuItem onSelect={() => onRestore(folder.id)}>
+        <RotateCcw className="mr-2 size-4" />
+        復元
+      </ContextMenuItem>
+      <ContextMenuSeparator />
+      <ContextMenuItem variant="destructive" onSelect={() => onPurge(folder.id)}>
+        <Trash2 className="mr-2 size-4" />
+        完全削除
+      </ContextMenuItem>
+    </ContextMenuContent>
+  )
+}
+
+function TrashFolderCard({ folder, onRestore, onPurge }: TrashFolderItemActionsProps) {
+  const date = folder.updated_at ? new Date(folder.updated_at).toLocaleDateString('ja-JP') : ''
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger>
+        <Card size="sm" className="opacity-75">
+          <div className="flex items-center justify-center h-24 bg-muted/50 rounded-t-xl">
+            <Folder className="size-12 text-muted-foreground" />
+          </div>
+          <CardContent className="pt-2 pb-3">
+            <div className="flex items-center justify-between gap-1">
+              <p className="text-sm font-medium truncate flex-1" title={folder.name}>{folder.name}</p>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon-xs" className="shrink-0" onClick={(e) => e.stopPropagation()}>
+                    <EllipsisVertical className="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <TrashFolderDropdownMenuContent folder={folder} onRestore={onRestore} onPurge={onPurge} />
+              </DropdownMenu>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {formatFileSize(folder.total_size ?? 0)}{date ? ` · ${date}` : ''}
+            </p>
+          </CardContent>
+        </Card>
+      </ContextMenuTrigger>
+      <TrashFolderContextMenuContent folder={folder} onRestore={onRestore} onPurge={onPurge} />
+    </ContextMenu>
+  )
+}
+
+function TrashFolderRow({ folder, onRestore, onPurge }: TrashFolderItemActionsProps) {
+  const date = folder.updated_at ? new Date(folder.updated_at).toLocaleDateString('ja-JP') : ''
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger>
+        <div className="flex items-center gap-3 px-3 py-2 hover:bg-muted/50 cursor-default transition-colors border-b border-border/50 last:border-0 opacity-75">
+          <Folder className="size-5 shrink-0 text-muted-foreground" />
+          <p className="flex-1 text-sm truncate min-w-0 font-medium" title={folder.name}>{folder.name}</p>
+          <p className="text-xs text-muted-foreground w-20 text-right shrink-0">{formatFileSize(folder.total_size ?? 0)}</p>
+          <p className="text-xs text-muted-foreground w-24 text-right shrink-0 hidden sm:block">{date}</p>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon-xs" className="shrink-0" onClick={(e) => e.stopPropagation()}>
+                <EllipsisVertical className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <TrashFolderDropdownMenuContent folder={folder} onRestore={onRestore} onPurge={onPurge} />
+          </DropdownMenu>
+        </div>
+      </ContextMenuTrigger>
+      <TrashFolderContextMenuContent folder={folder} onRestore={onRestore} onPurge={onPurge} />
+    </ContextMenu>
+  )
+}
+
 interface FolderItemActionsProps {
   folder: FolderItem
   onOpen: (folder: FolderItem) => void
@@ -560,6 +655,8 @@ interface MainContentsProps {
   onToggleFavorite?: (id: string, current: boolean) => void
   onRestore?: (id: string) => void
   onPurge?: (id: string) => void
+  onFolderRestore?: (id: string) => void
+  onFolderPurge?: (id: string) => void
   onFolderOpen?: (folder: FolderItem) => void
   onFolderDelete?: (id: string) => void
   onFolderMove?: (id: string) => void
@@ -582,6 +679,8 @@ export default function MainContentsDefault({
   onToggleFavorite,
   onRestore,
   onPurge,
+  onFolderRestore,
+  onFolderPurge,
   onFolderOpen,
   onFolderDelete,
   onFolderMove,
@@ -595,6 +694,8 @@ export default function MainContentsDefault({
   const handleToggleFavorite = onToggleFavorite ?? noop
   const handleRestore = onRestore ?? noop
   const handlePurge = onPurge ?? noop
+  const handleFolderRestore = onFolderRestore ?? noop
+  const handleFolderPurge = onFolderPurge ?? noop
   const handleFolderOpen = onFolderOpen ?? noop
   const handleFolderDelete = onFolderDelete ?? noop
   const handleFolderMove = onFolderMove ?? noop
@@ -665,6 +766,9 @@ export default function MainContentsDefault({
             <span className="w-24 text-right shrink-0 hidden sm:block">削除日</span>
             <span className="size-6 shrink-0" />
           </div>
+          {folders.map((folder) => (
+            <TrashFolderRow key={folder.id} folder={folder} onRestore={handleFolderRestore} onPurge={handleFolderPurge} />
+          ))}
           {files.map((file) => (
             <TrashFileRow key={file.id} file={file} onRestore={handleRestore} onPurge={handlePurge} />
           ))}
@@ -673,6 +777,9 @@ export default function MainContentsDefault({
     }
     return (
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 p-3">
+        {folders.map((folder) => (
+          <TrashFolderCard key={folder.id} folder={folder} onRestore={handleFolderRestore} onPurge={handleFolderPurge} />
+        ))}
         {files.map((file) => (
           <TrashFileCard key={file.id} file={file} onRestore={handleRestore} onPurge={handlePurge} />
         ))}

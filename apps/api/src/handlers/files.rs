@@ -6,7 +6,7 @@ use axum::{
 };
 use chrono::Utc;
 use sea_orm::{
-    ActiveModelTrait, ActiveValue::Set, ColumnTrait, DatabaseConnection, EntityTrait,
+    ActiveModelTrait, ActiveValue::Set, ColumnTrait, Condition, DatabaseConnection, EntityTrait,
     PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, TransactionTrait,
 };
 use sea_orm::sea_query::LockType;
@@ -543,9 +543,27 @@ pub async fn get_trash(
         return Err(AuthError::InvalidInput("invalid limit".into()));
     }
 
+    // 削除済みフォルダー配下のファイルはフォルダーとしてゴミ箱に表示されるため除外する。
+    // IN リストではなくサブクエリで除外し、削除済みフォルダーが大量でも
+    // PostgreSQL のパラメーター上限（65535）を超えないようにする。
+    let deleted_folder_subquery = sea_orm::sea_query::Query::select()
+        .column(folders::Column::Id)
+        .from(folders::Entity)
+        .cond_where(
+            Condition::all()
+                .add(folders::Column::OwnerId.eq(current_user.id))
+                .add(folders::Column::IsDeleted.eq(true))
+        )
+        .to_owned();
+
     let paginator = files::Entity::find()
         .filter(files::Column::AuthorId.eq(current_user.id))
         .filter(files::Column::IsDeleted.eq(true))
+        .filter(
+            Condition::any()
+                .add(files::Column::FolderId.is_null())
+                .add(files::Column::FolderId.not_in_subquery(deleted_folder_subquery)),
+        )
         .order_by_desc(files::Column::DeletedAt)
         .order_by_asc(files::Column::Id)
         .paginate(&state.db, limit);
@@ -718,12 +736,15 @@ pub async fn empty_trash(
     }
     txn.commit().await?;
 
+    let sem = std::sync::Arc::new(tokio::sync::Semaphore::new(16));
     let mut join_set = tokio::task::JoinSet::new();
     for file in &trashed {
         let storage = state.storage.clone();
         let url = file.url.clone();
         let id = file.id.to_string();
+        let permit = sem.clone().acquire_owned().await.unwrap();
         join_set.spawn(async move {
+            let _permit = permit;
             match storage.delete(&url).await {
                 Ok(()) => Ok(id),
                 Err(e) => Err((id, url, e)),
