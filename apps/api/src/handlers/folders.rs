@@ -72,6 +72,8 @@ struct DescendantId {
     id: Uuid,
 }
 
+const STORAGE_DELETE_CONCURRENCY: usize = 16;
+
 fn make_uuid_array(ids: &[Uuid]) -> sea_orm::Value {
     let values: Vec<sea_orm::Value> = ids.iter().map(|id| sea_orm::Value::Uuid(Some(*id))).collect();
     sea_orm::Value::Array(sea_orm::sea_query::ArrayType::Uuid, Some(Box::new(values)))
@@ -690,12 +692,15 @@ pub async fn purge_folder(
     )).await?;
     txn.commit().await?;
 
-    // ストレージオブジェクトを削除
+    // ストレージオブジェクトを削除（同時実行数を制限してレート制限を回避する）
+    let sem = std::sync::Arc::new(tokio::sync::Semaphore::new(STORAGE_DELETE_CONCURRENCY));
     let mut join_set = tokio::task::JoinSet::new();
     for file in files_to_delete {
         let storage = state.storage.clone();
         let url = file.url.clone();
+        let permit = sem.clone().acquire_owned().await.unwrap();
         join_set.spawn(async move {
+            let _permit = permit;
             if let Err(e) = storage.delete(&url).await {
                 tracing::warn!("ストレージ削除失敗 key={}: {e}", url);
             }
@@ -757,11 +762,14 @@ pub async fn empty_trash_folders(
     )).await?;
     txn.commit().await?;
 
+    let sem = std::sync::Arc::new(tokio::sync::Semaphore::new(STORAGE_DELETE_CONCURRENCY));
     let mut join_set = tokio::task::JoinSet::new();
     for file in files_to_delete {
         let storage = state.storage.clone();
         let url = file.url.clone();
+        let permit = sem.clone().acquire_owned().await.unwrap();
         join_set.spawn(async move {
+            let _permit = permit;
             if let Err(e) = storage.delete(&url).await {
                 tracing::warn!("ストレージ削除失敗 key={}: {e}", url);
             }

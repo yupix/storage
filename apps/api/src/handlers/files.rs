@@ -736,12 +736,15 @@ pub async fn empty_trash(
     }
     txn.commit().await?;
 
+    let sem = std::sync::Arc::new(tokio::sync::Semaphore::new(16));
     let mut join_set = tokio::task::JoinSet::new();
     for file in &trashed {
         let storage = state.storage.clone();
         let url = file.url.clone();
         let id = file.id.to_string();
+        let permit = sem.clone().acquire_owned().await.unwrap();
         join_set.spawn(async move {
+            let _permit = permit;
             match storage.delete(&url).await {
                 Ok(()) => Ok(id),
                 Err(e) => Err((id, url, e)),
