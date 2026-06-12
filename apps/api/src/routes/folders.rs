@@ -10,4 +10,7 @@ pub fn routes() -> OpenApiRouter<AppState> {
         .routes(routes!(crate::handlers::folders::get_folder))
         .routes(routes!(crate::handlers::folders::update_folder))
         .routes(routes!(crate::handlers::folders::delete_folder))
+        .routes(routes!(crate::handlers::folders::get_trash_folders))
+        .routes(routes!(crate::handlers::folders::restore_folder))
+        .routes(routes!(crate::handlers::folders::purge_folder))
 }

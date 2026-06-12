@@ -5,15 +5,16 @@ use axum::{
 };
 use axum_valid::Valid;
 use chrono::Utc;
-use sea_orm::prelude::Uuid;
+use sea_orm::prelude::{DateTimeWithTimeZone, Uuid};
 use sea_orm::{
-    ActiveModelTrait, ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait,
+    ActiveModelTrait, ActiveValue::Set, ColumnTrait, Condition, ConnectionTrait, EntityTrait,
     FromQueryResult, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, Statement, TransactionTrait,
 };
 use sea_orm::sea_query::{Expr, LockType};
 
 use crate::entities::{files, folders, users};
 use crate::extractors::AuthUser;
+use crate::utils::storage::StorageDriver;
 use crate::models::{FolderResponse, ListFoldersResponse};
 use crate::openapi::SessionAuthErrors;
 use crate::payloads::folders::{CreateFolderRequest, DeleteFolderQuery, ListFoldersQuery, UpdateFolderRequest};
@@ -411,5 +412,235 @@ pub async fn delete_folder(
     }
 
     txn.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// 削除済みの子孫フォルダー ID を再帰 CTE で収集する
+async fn collect_deleted_descendant_ids<C: ConnectionTrait>(
+    db: &C,
+    root_id: Uuid,
+    user_id: Uuid,
+) -> Result<Vec<Uuid>, AuthError> {
+    let sql = r#"
+        WITH RECURSIVE descendants AS (
+            SELECT id FROM folders
+            WHERE folder_id = $1 AND owner_id = $2 AND is_deleted = true
+            UNION ALL
+            SELECT f.id FROM folders f
+            INNER JOIN descendants d ON f.folder_id = d.id
+            WHERE f.owner_id = $2 AND f.is_deleted = true
+        )
+        SELECT id FROM descendants
+    "#;
+    let stmt = Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        sql,
+        [root_id.into(), user_id.into()],
+    );
+    let rows = DescendantId::find_by_statement(stmt).all(db).await?;
+    Ok(rows.into_iter().map(|r| r.id).collect())
+}
+
+#[utoipa::path(
+    get,
+    path = "/trash",
+    params(ListFoldersQuery),
+    responses(
+        (status = 200, description = "ゴミ箱内フォルダー一覧", body = ListFoldersResponse),
+        SessionAuthErrors,
+    )
+)]
+pub async fn get_trash_folders(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Query(query): Query<ListFoldersQuery>,
+) -> Result<Json<ListFoldersResponse>, AuthError> {
+    let page = query.page.unwrap_or(1);
+    let limit = query.limit.unwrap_or(50).min(100);
+
+    // 親フォルダー自体も削除済みのものは除外（ゴミ箱のトップレベルのみ表示）
+    let deleted_parent_ids: Vec<Uuid> = folders::Entity::find()
+        .filter(folders::Column::OwnerId.eq(auth.user_id))
+        .filter(folders::Column::IsDeleted.eq(true))
+        .select_only()
+        .column(folders::Column::Id)
+        .into_tuple()
+        .all(&state.db)
+        .await?;
+
+    let paginator = folders::Entity::find()
+        .filter(folders::Column::OwnerId.eq(auth.user_id))
+        .filter(folders::Column::IsDeleted.eq(true))
+        .filter(
+            Condition::any()
+                .add(folders::Column::FolderId.is_null())
+                .add(folders::Column::FolderId.is_not_in(deleted_parent_ids)),
+        )
+        .order_by_desc(folders::Column::DeletedAt)
+        .paginate(&state.db, limit);
+
+    let total = paginator.num_items().await?;
+    let folder_rows = paginator.fetch_page(page - 1).await?;
+    let owner = load_owner(&state.db, auth.user_id).await?;
+    let folders_resp = folder_rows.iter().map(|f| FolderResponse::from_models(f, &owner)).collect();
+
+    Ok(Json(ListFoldersResponse { folders: folders_resp, total, page, limit }))
+}
+
+#[utoipa::path(
+    post,
+    path = "/trash/{id}/restore",
+    params(("id" = Uuid, Path, description = "復元するフォルダーID")),
+    responses(
+        (status = 204, description = "復元しました"),
+        (status = 400, description = "ゴミ箱にないフォルダー"),
+        SessionAuthErrors,
+        (status = 404, description = "フォルダーが見つかりません"),
+    )
+)]
+pub async fn restore_folder(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode, AuthError> {
+    let now = Utc::now().fixed_offset();
+    let txn = state.db.begin().await?;
+
+    let folder = folders::Entity::find_by_id(id)
+        .filter(folders::Column::OwnerId.eq(auth.user_id))
+        .filter(folders::Column::IsDeleted.eq(true))
+        .lock(LockType::Update)
+        .one(&txn)
+        .await?
+        .ok_or(AuthError::NotFound)?;
+
+    if !folder.is_deleted {
+        let _ = txn.rollback().await;
+        return Err(AuthError::InvalidInput("フォルダーはゴミ箱にありません".into()));
+    }
+
+    let descendant_ids = collect_deleted_descendant_ids(&txn, id, auth.user_id).await?;
+    let mut all_folder_ids = vec![id];
+    all_folder_ids.extend(descendant_ids);
+
+    // すべての削除済みフォルダーを復元
+    folders::Entity::update_many()
+        .col_expr(folders::Column::IsDeleted, sea_orm::sea_query::Expr::value(false))
+        .col_expr(folders::Column::DeletedAt, sea_orm::sea_query::Expr::value(Option::<DateTimeWithTimeZone>::None))
+        .col_expr(folders::Column::UpdatedAt, sea_orm::sea_query::Expr::value(now))
+        .filter(folders::Column::Id.is_in(all_folder_ids.clone()))
+        .exec(&txn)
+        .await?;
+
+    // 各フォルダー内の削除済みファイルを復元
+    files::Entity::update_many()
+        .col_expr(files::Column::IsDeleted, sea_orm::sea_query::Expr::value(false))
+        .col_expr(files::Column::DeletedAt, sea_orm::sea_query::Expr::value(Option::<DateTimeWithTimeZone>::None))
+        .col_expr(files::Column::UpdatedAt, sea_orm::sea_query::Expr::value(now))
+        .filter(files::Column::FolderId.is_in(all_folder_ids.clone()))
+        .filter(files::Column::IsDeleted.eq(true))
+        .exec(&txn)
+        .await?;
+
+    // 復元したサブツリーの total_size を再計算する
+    let ids_str = all_folder_ids.iter().map(|fid| format!("'{fid}'")).collect::<Vec<_>>().join(", ");
+    let cte_sql = format!(r#"
+        WITH RECURSIVE subtree AS (
+            SELECT id AS ancestor_id, id AS folder_id
+            FROM folders WHERE id IN ({ids_str})
+            UNION ALL
+            SELECT s.ancestor_id, f.id AS folder_id
+            FROM folders f
+            INNER JOIN subtree s ON f.folder_id = s.folder_id
+            WHERE f.is_deleted = false
+        ),
+        sizes AS (
+            SELECT s.ancestor_id, COALESCE(SUM(fi.filesize), 0)::bigint AS total_size
+            FROM subtree s
+            LEFT JOIN files fi ON fi.folder_id = s.folder_id AND fi.is_deleted = false
+            GROUP BY s.ancestor_id
+        )
+        UPDATE folders SET total_size = sizes.total_size
+        FROM sizes WHERE folders.id = sizes.ancestor_id
+    "#);
+    txn.execute_unprepared(&cte_sql).await?;
+
+    // 最新の total_size を取得して親チェーンに加算する
+    let updated = folders::Entity::find_by_id(id).one(&txn).await?.ok_or(AuthError::NotFound)?;
+    adjust_folder_chain(&txn, updated.folder_id, updated.total_size, now).await?;
+
+    txn.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[utoipa::path(
+    delete,
+    path = "/trash/{id}",
+    params(("id" = Uuid, Path, description = "完全削除するフォルダーID")),
+    responses(
+        (status = 204, description = "完全削除しました"),
+        (status = 400, description = "ゴミ箱にないフォルダー"),
+        SessionAuthErrors,
+        (status = 404, description = "フォルダーが見つかりません"),
+    )
+)]
+pub async fn purge_folder(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode, AuthError> {
+    let txn = state.db.begin().await?;
+
+    let folder = folders::Entity::find_by_id(id)
+        .filter(folders::Column::OwnerId.eq(auth.user_id))
+        .filter(folders::Column::IsDeleted.eq(true))
+        .lock(LockType::Update)
+        .one(&txn)
+        .await?
+        .ok_or(AuthError::NotFound)?;
+
+    if !folder.is_deleted {
+        let _ = txn.rollback().await;
+        return Err(AuthError::InvalidInput("フォルダーはゴミ箱にありません".into()));
+    }
+
+    let descendant_ids = collect_deleted_descendant_ids(&txn, id, auth.user_id).await?;
+    let mut all_folder_ids = vec![id];
+    all_folder_ids.extend(descendant_ids);
+
+    // フォルダー内のファイルをすべて取得（ストレージ削除用）
+    let files_to_delete = files::Entity::find()
+        .filter(files::Column::FolderId.is_in(all_folder_ids.clone()))
+        .lock(LockType::Update)
+        .all(&txn)
+        .await?;
+
+    // DB からファイル・フォルダーを削除
+    if !files_to_delete.is_empty() {
+        let file_ids: Vec<Uuid> = files_to_delete.iter().map(|f| f.id).collect();
+        files::Entity::delete_many()
+            .filter(files::Column::Id.is_in(file_ids))
+            .exec(&txn)
+            .await?;
+    }
+    folders::Entity::delete_many()
+        .filter(folders::Column::Id.is_in(all_folder_ids))
+        .exec(&txn)
+        .await?;
+    txn.commit().await?;
+
+    // ストレージオブジェクトを削除
+    let mut join_set = tokio::task::JoinSet::new();
+    for file in files_to_delete {
+        let storage = state.storage.clone();
+        let url = file.url.clone();
+        join_set.spawn(async move {
+            if let Err(e) = storage.delete(&url).await {
+                tracing::warn!("ストレージ削除失敗 key={}: {e}", url);
+            }
+        });
+    }
+    while join_set.join_next().await.is_some() {}
+
     Ok(StatusCode::NO_CONTENT)
 }
