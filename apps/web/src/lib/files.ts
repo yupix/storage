@@ -188,8 +188,18 @@ export async function permanentDeleteFile(id: string): Promise<void> {
 }
 
 export async function emptyTrash(): Promise<void> {
-  const { error } = await apiClient.DELETE('/v1/files/trash', {})
-  if (error) throw new Error('ゴミ箱を空にするのに失敗しました')
+  const [filesResult, foldersResult] = await Promise.allSettled([
+    apiClient.DELETE('/v1/files/trash', {}),
+    apiClient.DELETE('/v1/folders/trash', {}),
+  ])
+  if (
+    (filesResult.status === 'fulfilled' && filesResult.value.error) ||
+    (foldersResult.status === 'fulfilled' && foldersResult.value.error) ||
+    filesResult.status === 'rejected' ||
+    foldersResult.status === 'rejected'
+  ) {
+    throw new Error('ゴミ箱を空にするのに失敗しました')
+  }
 }
 
 export async function downloadFile(id: string, name: string): Promise<void> {

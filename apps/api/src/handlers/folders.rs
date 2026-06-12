@@ -664,3 +664,66 @@ pub async fn purge_folder(
 
     Ok(StatusCode::NO_CONTENT)
 }
+
+#[utoipa::path(
+    delete,
+    path = "/trash",
+    responses(
+        (status = 204, description = "すべての削除済みフォルダーを完全削除しました"),
+        SessionAuthErrors,
+    )
+)]
+pub async fn empty_trash_folders(
+    State(state): State<AppState>,
+    auth: AuthUser,
+) -> Result<StatusCode, AuthError> {
+    let txn = state.db.begin().await?;
+
+    let trashed_folders = folders::Entity::find()
+        .filter(folders::Column::OwnerId.eq(auth.user_id))
+        .filter(folders::Column::IsDeleted.eq(true))
+        .lock(LockType::Update)
+        .all(&txn)
+        .await?;
+
+    if trashed_folders.is_empty() {
+        let _ = txn.rollback().await;
+        return Ok(StatusCode::NO_CONTENT);
+    }
+
+    let folder_ids: Vec<Uuid> = trashed_folders.iter().map(|f| f.id).collect();
+
+    // フォルダー内のファイルをすべて取得（ストレージ削除用）
+    let files_to_delete = files::Entity::find()
+        .filter(files::Column::FolderId.is_in(folder_ids.clone()))
+        .lock(LockType::Update)
+        .all(&txn)
+        .await?;
+
+    if !files_to_delete.is_empty() {
+        let file_ids: Vec<Uuid> = files_to_delete.iter().map(|f| f.id).collect();
+        files::Entity::delete_many()
+            .filter(files::Column::Id.is_in(file_ids))
+            .exec(&txn)
+            .await?;
+    }
+    folders::Entity::delete_many()
+        .filter(folders::Column::Id.is_in(folder_ids))
+        .exec(&txn)
+        .await?;
+    txn.commit().await?;
+
+    let mut join_set = tokio::task::JoinSet::new();
+    for file in files_to_delete {
+        let storage = state.storage.clone();
+        let url = file.url.clone();
+        join_set.spawn(async move {
+            if let Err(e) = storage.delete(&url).await {
+                tracing::warn!("ストレージ削除失敗 key={}: {e}", url);
+            }
+        });
+    }
+    while join_set.join_next().await.is_some() {}
+
+    Ok(StatusCode::NO_CONTENT)
+}
