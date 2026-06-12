@@ -546,9 +546,44 @@ pub async fn restore_folder(
     let now = Utc::now().fixed_offset();
     let txn = state.db.begin().await?;
 
+    // ロック順序を delete_folder と統一（親 → 子）するため、
+    // まずロックなしで対象フォルダーを読み folder_id を取得する。
+    let folder_preview = folders::Entity::find_by_id(id)
+        .filter(folders::Column::OwnerId.eq(auth.user_id))
+        .one(&txn)
+        .await?
+        .ok_or(AuthError::NotFound)?;
+
+    if !folder_preview.is_deleted {
+        let _ = txn.rollback().await;
+        return Err(AuthError::InvalidInput("フォルダーはゴミ箱にありません".into()));
+    }
+
+    // 親フォルダーが存在する場合、先にロックしてから削除状態を再確認する。
+    // delete_folder と同じ親→子ロック順でデッドロックを防ぎ、ロック取得後の
+    // 再確認で「確認後に親が削除 → 孤立」の競合を排除する。
+    if let Some(parent_id) = folder_preview.folder_id {
+        let parent = folders::Entity::find_by_id(parent_id)
+            .filter(folders::Column::OwnerId.eq(auth.user_id))
+            .lock(LockType::Update)
+            .one(&txn)
+            .await?;
+        match parent {
+            None => {
+                let _ = txn.rollback().await;
+                return Err(AuthError::InvalidInput("親フォルダーが存在しません".into()));
+            }
+            Some(p) if p.is_deleted => {
+                let _ = txn.rollback().await;
+                return Err(AuthError::InvalidInput("親フォルダーがゴミ箱にあります。親フォルダーを復元してください".into()));
+            }
+            Some(_) => {}
+        }
+    }
+
+    // 親フォルダーの後に対象フォルダーをロックし（親→子順）、状態を再確認する。
     let folder = folders::Entity::find_by_id(id)
         .filter(folders::Column::OwnerId.eq(auth.user_id))
-        .filter(folders::Column::IsDeleted.eq(true))
         .lock(LockType::Update)
         .one(&txn)
         .await?
@@ -557,19 +592,6 @@ pub async fn restore_folder(
     if !folder.is_deleted {
         let _ = txn.rollback().await;
         return Err(AuthError::InvalidInput("フォルダーはゴミ箱にありません".into()));
-    }
-
-    // 親フォルダーが削除済みの場合、子だけを復元すると通常一覧にもゴミ箱にも
-    // 表示されない孤立フォルダーになるため拒否する。
-    if let Some(parent_id) = folder.folder_id {
-        let parent_deleted = folders::Entity::find_by_id(parent_id)
-            .filter(folders::Column::IsDeleted.eq(true))
-            .one(&txn)
-            .await?;
-        if parent_deleted.is_some() {
-            let _ = txn.rollback().await;
-            return Err(AuthError::InvalidInput("親フォルダーがゴミ箱にあります。親フォルダーを復元してください".into()));
-        }
     }
 
     let descendant_ids = collect_deleted_descendant_ids(&txn, id, auth.user_id, folder.deleted_at).await?;
