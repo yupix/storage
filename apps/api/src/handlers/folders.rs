@@ -456,17 +456,22 @@ pub async fn get_trash_folders(
     Query(query): Query<ListFoldersQuery>,
 ) -> Result<Json<ListFoldersResponse>, AuthError> {
     let page = query.page.unwrap_or(1);
+    if page == 0 {
+        return Err(AuthError::InvalidInput("invalid page".into()));
+    }
     let limit = query.limit.unwrap_or(50).min(100);
+    if limit == 0 {
+        return Err(AuthError::InvalidInput("invalid limit".into()));
+    }
 
     // 親フォルダー自体も削除済みのものは除外（ゴミ箱のトップレベルのみ表示）
-    let deleted_parent_ids: Vec<Uuid> = folders::Entity::find()
-        .filter(folders::Column::OwnerId.eq(auth.user_id))
-        .filter(folders::Column::IsDeleted.eq(true))
-        .select_only()
+    // サブクエリで deleted_id を一括取得し、メモリ圧迫・SQLパラメータ上限を回避する
+    let deleted_ids_subquery = sea_orm::sea_query::Query::select()
         .column(folders::Column::Id)
-        .into_tuple()
-        .all(&state.db)
-        .await?;
+        .from(folders::Entity)
+        .and_where(Expr::col(folders::Column::OwnerId).eq(auth.user_id))
+        .and_where(Expr::col(folders::Column::IsDeleted).eq(true))
+        .to_owned();
 
     let paginator = folders::Entity::find()
         .filter(folders::Column::OwnerId.eq(auth.user_id))
@@ -474,7 +479,7 @@ pub async fn get_trash_folders(
         .filter(
             Condition::any()
                 .add(folders::Column::FolderId.is_null())
-                .add(folders::Column::FolderId.is_not_in(deleted_parent_ids)),
+                .add(folders::Column::FolderId.not_in_subquery(deleted_ids_subquery)),
         )
         .order_by_desc(folders::Column::DeletedAt)
         .paginate(&state.db, limit);
@@ -543,11 +548,11 @@ pub async fn restore_folder(
         .await?;
 
     // 復元したサブツリーの total_size を再計算する
-    let ids_str = all_folder_ids.iter().map(|fid| format!("'{fid}'")).collect::<Vec<_>>().join(", ");
-    let cte_sql = format!(r#"
+    // ANY($1) でパラメータバインドしてクエリプランをキャッシュ可能にする
+    let cte_sql = r#"
         WITH RECURSIVE subtree AS (
             SELECT id AS ancestor_id, id AS folder_id
-            FROM folders WHERE id IN ({ids_str})
+            FROM folders WHERE id = ANY($1)
             UNION ALL
             SELECT s.ancestor_id, f.id AS folder_id
             FROM folders f
@@ -562,8 +567,17 @@ pub async fn restore_folder(
         )
         UPDATE folders SET total_size = sizes.total_size
         FROM sizes WHERE folders.id = sizes.ancestor_id
-    "#);
-    txn.execute_unprepared(&cte_sql).await?;
+    "#;
+    let uuid_values: Vec<sea_orm::Value> = all_folder_ids.iter().map(|id| sea_orm::Value::Uuid(Some(*id))).collect();
+    let stmt = Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        cte_sql,
+        [sea_orm::Value::Array(
+            sea_orm::sea_query::ArrayType::Uuid,
+            Some(Box::new(uuid_values)),
+        )],
+    );
+    txn.execute_raw(stmt).await?;
 
     // 最新の total_size を取得して親チェーンに加算する
     let updated = folders::Entity::find_by_id(id).one(&txn).await?.ok_or(AuthError::NotFound)?;
