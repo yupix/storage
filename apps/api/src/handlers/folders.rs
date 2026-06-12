@@ -7,7 +7,7 @@ use axum_valid::Valid;
 use chrono::Utc;
 use sea_orm::prelude::Uuid;
 use sea_orm::{
-    ActiveModelTrait, ActiveValue::Set, ColumnTrait, ConnectionTrait, DatabaseBackend, EntityTrait,
+    ActiveModelTrait, ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait,
     FromQueryResult, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, Statement, TransactionTrait,
 };
 use sea_orm::sea_query::{Expr, LockType};
@@ -18,6 +18,7 @@ use crate::models::{FolderResponse, ListFoldersResponse};
 use crate::openapi::SessionAuthErrors;
 use crate::payloads::folders::{CreateFolderRequest, DeleteFolderQuery, ListFoldersQuery, UpdateFolderRequest};
 use crate::utils::auth::AuthError;
+use crate::utils::folder_size::adjust_folder_chain;
 use crate::AppState;
 
 fn trim_name(name: &str) -> Result<String, AuthError> {
@@ -88,7 +89,7 @@ async fn collect_descendant_ids<C: ConnectionTrait>(
     "#;
 
     let stmt = Statement::from_sql_and_values(
-        DatabaseBackend::Postgres,
+        sea_orm::DatabaseBackend::Postgres,
         sql,
         [root_id.into(), user_id.into()],
     );
@@ -231,6 +232,7 @@ pub async fn create_folder(
         folder_id: Set(payload.folder_id),
         owner_id: Set(auth.user_id),
         is_deleted: Set(false),
+        total_size: Set(0),
         deleted_at: Set(None),
         created_at: Set(Some(now)),
         updated_at: Set(Some(now)),
@@ -331,6 +333,13 @@ pub async fn update_folder(
         }
     };
 
+    // フォルダーを移動する場合、旧親から total_size を引き、新親に加算する
+    if let Some(ref np) = new_parent {
+        let size = folder.total_size;
+        adjust_folder_chain(&txn, folder.folder_id, -size, now).await?;
+        adjust_folder_chain(&txn, *np, size, now).await?;
+    }
+
     let mut am: folders::ActiveModel = folder.clone().into();
     if let Some(name) = new_name {
         am.name = Set(name);
@@ -369,7 +378,10 @@ pub async fn delete_folder(
     let txn = state.db.begin().await?;
 
     // アップロード/移動処理と同じフォルダー行を最初にロックして直列化する
-    get_owned_folder(&txn, id, auth.user_id, true).await?;
+    let folder = get_owned_folder(&txn, id, auth.user_id, true).await?;
+
+    // 親フォルダーの total_size からこのフォルダーの合計サイズ分を引く
+    adjust_folder_chain(&txn, folder.folder_id, -folder.total_size, now).await?;
 
     if to_home {
         folders::Entity::update_many()

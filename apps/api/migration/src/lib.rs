@@ -8,6 +8,7 @@ mod m20260531_190003_create_table_files;
 mod m20260531_190004_create_table_file_permissions;
 mod m20260531_190005_create_table_share_links;
 mod m20260611_000001_add_is_favorite_to_files;
+mod m20260611_000002_add_total_size_to_folders;
 
 pub struct Migrator;
 
@@ -22,6 +23,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260531_190004_create_table_file_permissions::Migration),
             Box::new(m20260531_190005_create_table_share_links::Migration),
             Box::new(m20260611_000001_add_is_favorite_to_files::Migration),
+            Box::new(m20260611_000002_add_total_size_to_folders::Migration),
         ]
     }
 }

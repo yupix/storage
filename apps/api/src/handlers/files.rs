@@ -23,6 +23,7 @@ use crate::payloads::files::{
     UpdateFileRequest, UploadFileRequest,
 };
 use crate::utils::auth::AuthError;
+use crate::utils::folder_size::adjust_folder_chain;
 use crate::AppState;
 
 fn file_to_response(file: files::Model) -> FileResponse {
@@ -251,7 +252,7 @@ pub async fn upload_file(
                 .await?
                 .ok_or(AuthError::NotFound)?;
         }
-        files::ActiveModel {
+        let model = files::ActiveModel {
             id: Set(file_id),
             filename: Set(filename),
             file_type: Set(mime),
@@ -269,7 +270,9 @@ pub async fn upload_file(
         }
         .insert(&txn)
         .await
-        .map_err(AuthError::from)
+        .map_err(AuthError::from)?;
+        adjust_folder_chain(&txn, folder_id, filesize, now).await?;
+        Ok(model)
     }
     .await
     {
@@ -419,6 +422,8 @@ pub async fn update_file(
     }
 
     let author_id = file.author_id;
+    let old_folder_id = file.folder_id;
+    let filesize = file.filesize;
     let now = Utc::now().fixed_offset();
     let mut active: files::ActiveModel = file.into();
 
@@ -450,9 +455,18 @@ pub async fn update_file(
             .await?
             .ok_or(AuthError::NotFound)?;
     }
-    let updated = match active.update(&txn).await {
+    let moving = payload.folder_id.is_some();
+    let new_folder_id = if moving { active.folder_id.clone().unwrap() } else { old_folder_id };
+    let updated = match async {
+        let m = active.update(&txn).await?;
+        if moving {
+            adjust_folder_chain(&txn, old_folder_id, -filesize, now).await?;
+            adjust_folder_chain(&txn, new_folder_id, filesize, now).await?;
+        }
+        Ok::<_, AuthError>(m)
+    }.await {
         Ok(m) => { txn.commit().await?; m }
-        Err(e) => { let _ = txn.rollback().await; return Err(e.into()); }
+        Err(e) => { let _ = txn.rollback().await; return Err(e); }
     };
     Ok(Json(file_to_response(updated)))
 }
@@ -483,12 +497,25 @@ pub async fn delete_file(
         check_file_permission(&state.db, file.id, file.author_id, current_user.id, true).await?;
     }
 
+    let folder_id = file.folder_id;
+    let filesize = file.filesize;
     let now = Utc::now().fixed_offset();
+
+    let txn = state.db.begin().await?;
+    // フォルダーを先にロックしてから（Folder → File 順）ファイルをロック
+    if let Some(fid) = folder_id {
+        folders::Entity::find_by_id(fid)
+            .lock(LockType::Update)
+            .one(&txn)
+            .await?;
+    }
     let mut active: files::ActiveModel = file.into();
     active.is_deleted = Set(true);
     active.deleted_at = Set(Some(now));
     active.updated_at = Set(Some(now));
-    active.update(&state.db).await?;
+    active.update(&txn).await?;
+    adjust_folder_chain(&txn, folder_id, -filesize, now).await?;
+    txn.commit().await?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -595,6 +622,7 @@ pub async fn restore_file(
     }
 
     let now = Utc::now().fixed_offset();
+    let filesize = file.filesize;
     let mut active: files::ActiveModel = file.into();
     active.is_deleted = Set(false);
     active.deleted_at = Set(None);
@@ -602,6 +630,7 @@ pub async fn restore_file(
     active.updated_at = Set(Some(now));
 
     let updated = active.update(&txn).await?;
+    adjust_folder_chain(&txn, restored_folder_id, filesize, now).await?;
     txn.commit().await?;
     Ok(Json(file_to_response(updated)))
 }

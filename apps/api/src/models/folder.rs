@@ -11,6 +11,8 @@ pub struct FolderResponse {
     pub name: String,
     pub folder_id: Option<Uuid>,
     pub owner: OwnerInfo,
+    /// フォルダー内のファイルの合計サイズ（バイト、再帰的）
+    pub total_size: i64,
     #[schema(value_type = String, format = "date-time")]
     pub created_at: DateTimeWithTimeZone,
     #[schema(value_type = String, format = "date-time")]
@@ -24,6 +26,7 @@ impl FolderResponse {
             name: folder.name.clone(),
             folder_id: folder.folder_id,
             owner: OwnerInfo::from(owner),
+            total_size: folder.total_size,
             created_at: folder
                 .created_at
                 .unwrap_or_else(|| owner.created_at.clone()),

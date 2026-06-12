@@ -13,6 +13,7 @@ pub struct Model {
     pub folder_id: Option<Uuid>,
     pub owner_id: Uuid,
     pub is_deleted: bool,
+    pub total_size: i64,
     pub deleted_at: Option<DateTimeWithTimeZone>,
     pub created_at: Option<DateTimeWithTimeZone>,
     pub updated_at: Option<DateTimeWithTimeZone>,
