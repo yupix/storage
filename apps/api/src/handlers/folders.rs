@@ -525,6 +525,19 @@ pub async fn restore_folder(
         return Err(AuthError::InvalidInput("フォルダーはゴミ箱にありません".into()));
     }
 
+    // 親フォルダーが削除済みの場合、子だけを復元すると通常一覧にもゴミ箱にも
+    // 表示されない孤立フォルダーになるため拒否する。
+    if let Some(parent_id) = folder.folder_id {
+        let parent_deleted = folders::Entity::find_by_id(parent_id)
+            .filter(folders::Column::IsDeleted.eq(true))
+            .one(&txn)
+            .await?;
+        if parent_deleted.is_some() {
+            let _ = txn.rollback().await;
+            return Err(AuthError::InvalidInput("親フォルダーがゴミ箱にあります。親フォルダーを復元してください".into()));
+        }
+    }
+
     let descendant_ids = collect_deleted_descendant_ids(&txn, id, auth.user_id).await?;
     let mut all_folder_ids = vec![id];
     all_folder_ids.extend(descendant_ids);
