@@ -465,13 +465,14 @@ pub async fn get_trash_folders(
     }
 
     // 親フォルダー自体も削除済みのものは除外（ゴミ箱のトップレベルのみ表示）
-    // サブクエリで deleted_id を一括取得し、メモリ圧迫・SQLパラメータ上限を回避する
-    let deleted_ids_subquery = sea_orm::sea_query::Query::select()
+    let deleted_parent_ids: Vec<Uuid> = folders::Entity::find()
+        .filter(folders::Column::OwnerId.eq(auth.user_id))
+        .filter(folders::Column::IsDeleted.eq(true))
+        .select_only()
         .column(folders::Column::Id)
-        .from(folders::Entity)
-        .and_where(Expr::col(folders::Column::OwnerId).eq(auth.user_id))
-        .and_where(Expr::col(folders::Column::IsDeleted).eq(true))
-        .to_owned();
+        .into_tuple()
+        .all(&state.db)
+        .await?;
 
     let paginator = folders::Entity::find()
         .filter(folders::Column::OwnerId.eq(auth.user_id))
@@ -479,7 +480,7 @@ pub async fn get_trash_folders(
         .filter(
             Condition::any()
                 .add(folders::Column::FolderId.is_null())
-                .add(folders::Column::FolderId.not_in_subquery(deleted_ids_subquery)),
+                .add(folders::Column::FolderId.is_not_in(deleted_parent_ids)),
         )
         .order_by_desc(folders::Column::DeletedAt)
         .paginate(&state.db, limit);
@@ -537,15 +538,20 @@ pub async fn restore_folder(
         .exec(&txn)
         .await?;
 
-    // 各フォルダー内の削除済みファイルを復元
-    files::Entity::update_many()
-        .col_expr(files::Column::IsDeleted, sea_orm::sea_query::Expr::value(false))
-        .col_expr(files::Column::DeletedAt, sea_orm::sea_query::Expr::value(Option::<DateTimeWithTimeZone>::None))
-        .col_expr(files::Column::UpdatedAt, sea_orm::sea_query::Expr::value(now))
-        .filter(files::Column::FolderId.is_in(all_folder_ids.clone()))
-        .filter(files::Column::IsDeleted.eq(true))
-        .exec(&txn)
-        .await?;
+    // フォルダーと同時にゴミ箱へ移されたファイルだけを復元する。
+    // フォルダー削除前に個別削除されたファイル（deleted_at < folder.deleted_at）は
+    // ユーザーが意図して削除したものなので復元しない。
+    if let Some(folder_deleted_at) = folder.deleted_at {
+        files::Entity::update_many()
+            .col_expr(files::Column::IsDeleted, sea_orm::sea_query::Expr::value(false))
+            .col_expr(files::Column::DeletedAt, sea_orm::sea_query::Expr::value(Option::<DateTimeWithTimeZone>::None))
+            .col_expr(files::Column::UpdatedAt, sea_orm::sea_query::Expr::value(now))
+            .filter(files::Column::FolderId.is_in(all_folder_ids.clone()))
+            .filter(files::Column::IsDeleted.eq(true))
+            .filter(files::Column::DeletedAt.gte(folder_deleted_at))
+            .exec(&txn)
+            .await?;
+    }
 
     // 復元したサブツリーの total_size を再計算する
     // ANY($1) でパラメータバインドしてクエリプランをキャッシュ可能にする
