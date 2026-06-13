@@ -24,15 +24,16 @@ pub async fn process_ocr_job(job: OcrJob, state: Data<AppState>) -> Result<(), S
     let tmp = tempfile::Builder::new()
         .suffix(&format!(".{ext}"))
         .tempfile()
-        .map_err(|e| format!("tempfile: {e}"))?;
+        .map_err(|e| format!("tempfile: {e}"))?
+        .into_temp_path();
 
     state
         .storage
-        .download_to(&job.storage_key, tmp.path())
+        .download_to(&job.storage_key, &tmp)
         .await
         .map_err(|e| format!("download failed: {e}"))?;
 
-    let Some(text) = ocr::extract_text(tmp.path()).await else {
+    let Some(text) = ocr::extract_text(&tmp).await else {
         eprintln!("[OCR job] テキストなし: file_id={}", job.file_id);
         return Ok(());
     };
