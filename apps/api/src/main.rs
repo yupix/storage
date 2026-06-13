@@ -3,12 +3,13 @@ use std::time::Duration;
 use apalis::prelude::*;
 use apalis_redis::RedisStorage;
 use api::{AppState, jobs::ocr, server::run};
+use tokio_util::sync::CancellationToken;
 
-// OCR タイムアウト（ocr.rs と合わせる）＋余裕
-const WORKER_DRAIN_SECS: u64 = 150;
+// Ctrl+C でサーバーが停止してからワーカーが応答するまでの猶予時間
+const WORKER_DRAIN_SECS: u64 = 30;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), anyhow::Error> {
     let settings = api::settings::load_settings()?;
     let db = sea_orm::Database::connect(&settings.database_url).await?;
     db.get_schema_registry("backend::entities::*")
@@ -32,28 +33,60 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ocr_queue: ocr_queue.clone(),
     };
 
+    // API とワーカーで共有するシャットダウントークン。
+    // どちらかが先に停止した場合、もう一方も停止させる。
+    let shutdown = CancellationToken::new();
+
+    // ワーカータスク: shutdown キャンセル時にポーリングループを即時終了する
+    let worker_shutdown = shutdown.clone();
     let worker = WorkerBuilder::new("ocr-worker")
         .backend(ocr_queue)
         .concurrency(2)
         .data(state.clone())
         .build(ocr::process_ocr_job);
+    let mut worker_task = tokio::spawn(async move {
+        tokio::select! {
+            biased;
+            _ = worker_shutdown.cancelled() => Ok(()),
+            res = worker.run() => res,
+        }
+    });
 
-    // ワーカーを別タスクで起動する。
-    // tokio::select! で run(state) が完了した瞬間に worker.run() をキャンセルすると、
-    // 処理中の OCR ジョブが途中で放棄されるため、ワーカーは独立したタスクで動かす。
-    let worker_task = tokio::spawn(worker.run());
+    // API サーバータスク: Ctrl+C または shutdown キャンセルで停止する
+    let server_shutdown = shutdown.clone();
+    let mut server_task = tokio::spawn(run(state, server_shutdown));
 
-    // API サーバーを起動し、シグナルを受けるまでブロック
-    run(state).await?;
-
-    // サーバーが停止したら新規アップロードは受け付けない。
-    // 実行中の OCR ジョブが完了するまでドレイン期間を設ける。
-    eprintln!("[shutdown] ワーカーの完了を待機中 (最大 {WORKER_DRAIN_SECS} 秒)...");
-    match tokio::time::timeout(Duration::from_secs(WORKER_DRAIN_SECS), worker_task).await {
-        Ok(Ok(Ok(()))) => {}
-        Ok(Ok(Err(e))) => eprintln!("[shutdown] ワーカーエラー: {e}"),
-        Ok(Err(e)) => eprintln!("[shutdown] ワーカータスクエラー: {e}"),
-        Err(_) => eprintln!("[shutdown] ワーカーのドレインがタイムアウトしました"),
+    tokio::select! {
+        result = &mut server_task => {
+            // サーバー停止 → ワーカーに停止を通知してドレイン待機
+            shutdown.cancel();
+            eprintln!("[shutdown] ワーカーの完了を待機中 (最大 {WORKER_DRAIN_SECS} 秒)...");
+            let _ = tokio::time::timeout(Duration::from_secs(WORKER_DRAIN_SECS), worker_task).await;
+            result??;
+        }
+        result = &mut worker_task => {
+            match result {
+                Ok(Ok(())) => {
+                    // ワーカーが正常終了（外部 stop 等）: サーバーも止める
+                    shutdown.cancel();
+                    let _ = server_task.await;
+                }
+                Ok(Err(e)) => {
+                    // ワーカー異常終了: サーバーも停止させてエラーを伝播する
+                    eprintln!("[shutdown] ワーカー異常終了、サーバーを停止します: {e}");
+                    shutdown.cancel();
+                    let _ = server_task.await;
+                    return Err(e.into());
+                }
+                Err(e) => {
+                    // タスクパニック
+                    eprintln!("[shutdown] ワーカータスクがパニック、サーバーを停止します: {e}");
+                    shutdown.cancel();
+                    let _ = server_task.await;
+                    return Err(e.into());
+                }
+            }
+        }
     }
 
     Ok(())
