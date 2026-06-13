@@ -18,7 +18,7 @@ export const Route = createFileRoute('/_app/home')({
 
 function HomePage() {
   const data = Route.useLoaderData()
-  const { view } = Route.useSearch()
+  const { view, sort } = Route.useSearch()
   const navigate = Route.useNavigate()
   return (
     <WorkspacePage
@@ -26,7 +26,9 @@ function HomePage() {
       initialFolders={data.folders}
       breadcrumb={data.breadcrumb}
       view={view ?? 'grid'}
-      onViewChange={(nextView) => navigate({ search: { view: nextView } })}
+      onViewChange={(nextView) => navigate({ search: (prev) => ({ ...prev, view: nextView }) })}
+      sort={sort}
+      onSortChange={(nextSort) => navigate({ search: (prev) => ({ ...prev, sort: nextSort }) })}
     />
   )
 }
