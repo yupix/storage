@@ -61,36 +61,45 @@ pub async fn extract_text(image_path: &Path) -> Option<String> {
         .map_err(|e| eprintln!("[OCR] spawn 失敗: {e}"))
         .ok()?;
 
-    let stderr_handle = child.stderr.take();
+    // wait と stderr ドレインを並行して実行する。
+    // wait() のみで待つと、Python/ONNX が 64KB 超のログを stderr に書いた場合に
+    // パイプバッファが詰まって子プロセスがブロックし、デッドロックする。
+    let mut stderr_reader = child.stderr.take();
+    let drain_stderr = async move {
+        use tokio::io::AsyncReadExt;
+        let mut buf = String::new();
+        if let Some(ref mut r) = stderr_reader {
+            let _ = r.read_to_string(&mut buf).await;
+        }
+        buf
+    };
 
-    let wait_result = tokio::time::timeout(
+    let join_result = tokio::time::timeout(
         Duration::from_secs(TIMEOUT_SECS),
-        child.wait(),
+        async { tokio::join!(child.wait(), drain_stderr) },
     )
     .await;
 
-    let status = match wait_result {
-        Ok(Ok(s)) => s,
-        Ok(Err(e)) => {
-            eprintln!("[OCR] wait 失敗: {e}");
-            return None;
-        }
+    let (wait_res, stderr_msg) = match join_result {
+        Ok(pair) => pair,
         Err(_) => {
-            // timeout: child は kill_on_drop により drop 時に kill される
+            // kill_on_drop により child drop 時に SIGKILL される
             eprintln!("[OCR] タイムアウト: {TIMEOUT_SECS}s を超えました");
             return None;
         }
     };
 
-    // stderr を読み込んでログ出力
-    if let Some(mut stderr) = stderr_handle {
-        use tokio::io::AsyncReadExt;
-        let mut buf = String::new();
-        let _ = stderr.read_to_string(&mut buf).await;
-        let trimmed = buf.trim();
-        if !trimmed.is_empty() {
-            eprintln!("[OCR] stderr:\n{trimmed}");
+    let status = match wait_res {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("[OCR] wait 失敗: {e}");
+            return None;
         }
+    };
+
+    let trimmed = stderr_msg.trim();
+    if !trimmed.is_empty() {
+        eprintln!("[OCR] stderr:\n{trimmed}");
     }
 
     if !status.success() {
