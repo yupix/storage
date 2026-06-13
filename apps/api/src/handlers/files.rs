@@ -810,7 +810,7 @@ pub async fn empty_trash(
 
 #[utoipa::path(
     get,
-    path = "/",
+    path = "/search",
     params(FileSearchQuery),
     responses(
         (status = 200, description = "検索結果", body = PaginatedFileResponse),
