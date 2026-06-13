@@ -1,5 +1,5 @@
 use apalis::prelude::*;
-use sea_orm::{ActiveModelTrait, ActiveValue::Set};
+use sea_orm::{ActiveModelTrait, ActiveValue::Set, DbErr};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -46,10 +46,13 @@ pub async fn process_ocr_job(job: OcrJob, state: Data<AppState>) -> Result<(), S
         ..Default::default()
     };
     active.ocr_text = Set(Some(text));
-    active
-        .update(&state.db)
-        .await
-        .map_err(|e| format!("db update: {e}"))?;
+    match active.update(&state.db).await {
+        Ok(_) => {}
+        Err(DbErr::RecordNotUpdated) => {
+            eprintln!("[OCR job] ファイルが削除済みのためスキップ: file_id={file_id}");
+        }
+        Err(e) => return Err(format!("db update: {e}")),
+    }
 
     Ok(())
 }
