@@ -1,6 +1,11 @@
+use std::time::Duration;
+
 use apalis::prelude::*;
 use apalis_redis::RedisStorage;
 use api::{AppState, jobs::ocr, server::run};
+
+// OCR タイムアウト（ocr.rs と合わせる）＋余裕
+const WORKER_DRAIN_SECS: u64 = 150;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -33,9 +38,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .data(state.clone())
         .build(ocr::process_ocr_job);
 
-    tokio::select! {
-        res = run(state) => res?,
-        res = worker.run() => res?,
+    // ワーカーを別タスクで起動する。
+    // tokio::select! で run(state) が完了した瞬間に worker.run() をキャンセルすると、
+    // 処理中の OCR ジョブが途中で放棄されるため、ワーカーは独立したタスクで動かす。
+    let worker_task = tokio::spawn(worker.run());
+
+    // API サーバーを起動し、シグナルを受けるまでブロック
+    run(state).await?;
+
+    // サーバーが停止したら新規アップロードは受け付けない。
+    // 実行中の OCR ジョブが完了するまでドレイン期間を設ける。
+    eprintln!("[shutdown] ワーカーの完了を待機中 (最大 {WORKER_DRAIN_SECS} 秒)...");
+    match tokio::time::timeout(Duration::from_secs(WORKER_DRAIN_SECS), worker_task).await {
+        Ok(Ok(Ok(()))) => {}
+        Ok(Ok(Err(e))) => eprintln!("[shutdown] ワーカーエラー: {e}"),
+        Ok(Err(e)) => eprintln!("[shutdown] ワーカータスクエラー: {e}"),
+        Err(_) => eprintln!("[shutdown] ワーカーのドレインがタイムアウトしました"),
     }
 
     Ok(())
