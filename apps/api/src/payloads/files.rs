@@ -10,6 +10,14 @@ pub struct FileListQuery {
     pub is_favorite: Option<bool>,
 }
 
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
+pub struct FileSearchQuery {
+    pub q: String,
+    pub page: Option<u64>,
+    pub limit: Option<u64>,
+}
+
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct FileResponse {
     pub id: String,

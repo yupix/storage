@@ -19,11 +19,12 @@ use crate::entities::{file_permissions, files, folders, users};
 use crate::extractors::CurrentUser;
 use crate::utils::storage::StorageDriver;
 use crate::payloads::files::{
-    EmptyTrashResponse, FileDetailResponse, FileListQuery, FileResponse, PaginatedFileResponse,
-    UpdateFileRequest, UploadFileRequest,
+    EmptyTrashResponse, FileDetailResponse, FileListQuery, FileResponse, FileSearchQuery,
+    PaginatedFileResponse, UpdateFileRequest, UploadFileRequest,
 };
 use crate::utils::auth::AuthError;
 use crate::utils::folder_size::adjust_folder_chain;
+use crate::utils::ocr;
 use crate::AppState;
 
 fn file_to_response(file: files::Model) -> FileResponse {
@@ -223,6 +224,17 @@ pub async fn upload_file(
     let file_id = Uuid::new_v4();
     let storage_key = format!("{}/{}", current_user.id, file_id);
 
+    // OCR: 画像ファイルの場合はブロッキングスレッドでテキスト抽出
+    let ocr_text = if ocr::is_ocr_supported(&mime) {
+        let tmp_path = ff.tmp.path().to_path_buf();
+        tokio::task::spawn_blocking(move || ocr::extract_text(&tmp_path))
+            .await
+            .ok()
+            .flatten()
+    } else {
+        None
+    };
+
     state
         .storage
         .upload(&storage_key, ff.tmp.path(), &mime)
@@ -263,7 +275,7 @@ pub async fn upload_file(
             author_id: Set(current_user.id),
             is_deleted: Set(false),
             deleted_at: Set(None),
-            ocr_text: Set(None),
+            ocr_text: Set(ocr_text),
             created_at: Set(Some(now)),
             updated_at: Set(Some(now)),
             is_favorite: Set(false),
@@ -777,4 +789,56 @@ pub async fn empty_trash(
         )
             .into_response())
     }
+}
+
+#[utoipa::path(
+    get,
+    path = "/search",
+    params(FileSearchQuery),
+    responses(
+        (status = 200, description = "検索結果", body = PaginatedFileResponse),
+        (status = 401, description = "未認証"),
+    )
+)]
+pub async fn search_files(
+    State(state): State<AppState>,
+    current_user: CurrentUser,
+    Query(query): Query<FileSearchQuery>,
+) -> Result<Json<PaginatedFileResponse>, AuthError> {
+    let page = query.page.unwrap_or(1);
+    if page == 0 {
+        return Err(AuthError::InvalidInput("invalid page".into()));
+    }
+    let limit = query.limit.unwrap_or(50).min(100);
+    if limit == 0 {
+        return Err(AuthError::InvalidInput("invalid limit".into()));
+    }
+
+    let q = query.q.trim().to_string();
+    if q.is_empty() {
+        return Ok(Json(PaginatedFileResponse { files: vec![], total: 0, page, limit }));
+    }
+    let pattern = format!("%{}%", q);
+
+    let paginator = files::Entity::find()
+        .filter(files::Column::AuthorId.eq(current_user.id))
+        .filter(files::Column::IsDeleted.eq(false))
+        .filter(
+            Condition::any()
+                .add(files::Column::Filename.like(&pattern))
+                .add(files::Column::OcrText.like(&pattern)),
+        )
+        .order_by_desc(files::Column::UpdatedAt)
+        .order_by_asc(files::Column::Id)
+        .paginate(&state.db, limit);
+
+    let total = paginator.num_items().await?;
+    let db_files = paginator.fetch_page(page - 1).await?;
+
+    Ok(Json(PaginatedFileResponse {
+        files: db_files.into_iter().map(file_to_response).collect(),
+        total,
+        page,
+        limit,
+    }))
 }
