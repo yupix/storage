@@ -224,13 +224,11 @@ pub async fn upload_file(
     let file_id = Uuid::new_v4();
     let storage_key = format!("{}/{}", current_user.id, file_id);
 
-    // OCR: 画像ファイルの場合は非同期でテキスト抽出
-    eprintln!("[upload] mime={mime}, ocr_supported={}", ocr::is_ocr_supported(&mime));
-    let ocr_text = if ocr::is_ocr_supported(&mime) {
-        let tmp_path = ff.tmp.path().to_path_buf();
-        let result = ocr::extract_text(&tmp_path, &mime).await;
-        eprintln!("[upload] OCR 結果: {:?}", result.as_deref().map(|s| &s[..s.len().min(80)]));
-        result
+    // OCR はアップロード後にバックグラウンドで実行するため、ここでは None を設定する。
+    // アップロードレスポンスをブロックしないことでセッションミドルウェアの干渉を避ける。
+    let ocr_mime = mime.clone();
+    let ocr_tmp_path = if ocr::is_ocr_supported(&mime) {
+        Some(ff.tmp.path().to_path_buf())
     } else {
         None
     };
@@ -275,7 +273,7 @@ pub async fn upload_file(
             author_id: Set(current_user.id),
             is_deleted: Set(false),
             deleted_at: Set(None),
-            ocr_text: Set(ocr_text),
+            ocr_text: Set(None),
             created_at: Set(Some(now)),
             updated_at: Set(Some(now)),
             is_favorite: Set(false),
@@ -307,6 +305,25 @@ pub async fn upload_file(
             return Err(e);
         }
     };
+
+    // OCR をバックグラウンドで実行し、完了後に ocr_text を更新する。
+    // NamedTempFile は spawn 後もアクセスされるため move して所有権を渡す。
+    if let Some(tmp_path) = ocr_tmp_path {
+        let db = state.db.clone();
+        tokio::spawn(async move {
+            if let Some(text) = ocr::extract_text(&tmp_path, &ocr_mime).await {
+                eprintln!("[OCR] 完了: {} 文字 → file_id={file_id}", text.chars().count());
+                let mut active = files::ActiveModel {
+                    id: Set(file_id),
+                    ..Default::default()
+                };
+                active.ocr_text = Set(Some(text));
+                let _ = active.update(&db).await;
+            } else {
+                eprintln!("[OCR] テキストなし: file_id={file_id}");
+            }
+        });
+    }
 
     Ok((StatusCode::CREATED, Json(file_to_response(model))))
 }
