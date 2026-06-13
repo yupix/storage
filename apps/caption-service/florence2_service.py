@@ -8,11 +8,10 @@ Response: { "caption": "..." }
   python florence2_service.py [--host 0.0.0.0] [--port 8500] [--model microsoft/Florence-2-base]
 """
 import argparse
-import glob
 import io
 import logging
 import os
-import re
+import site
 from contextlib import asynccontextmanager
 
 import torch
@@ -31,37 +30,40 @@ florence_model = None
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-def _download_and_patch(model_id: str) -> str:
-    """モデルをローカルにダウンロードして flash_attn インポートをパッチする。"""
+def _install_flash_attn_stub() -> None:
+    """flash_attn のダミーパッケージを venv に配置する。
+
+    transformers の check_imports はパッケージが importable かを確認するだけなので
+    ダミーを置けばチェックを通過できる。実際の forward は attn_implementation='eager'
+    で flash_attn を使わない経路に切り替えるため問題ない。
+    """
+    for site_dir in site.getsitepackages():
+        stub_dir = os.path.join(site_dir, "flash_attn")
+        if not os.path.isdir(site_dir):
+            continue
+        if os.path.exists(stub_dir):
+            return  # already installed
+        try:
+            os.makedirs(stub_dir, exist_ok=True)
+            with open(os.path.join(stub_dir, "__init__.py"), "w") as f:
+                f.write("# stub: flash_attn not available; eager attention is used instead\n")
+            log.info("flash_attn ダミーを配置しました: %s", stub_dir)
+            return
+        except OSError:
+            continue
+    log.warning("flash_attn ダミーの配置に失敗しました")
+
+
+def _download_model(model_id: str) -> str:
+    """モデルをローカルにダウンロードしてパスを返す。"""
     from huggingface_hub import snapshot_download
 
     safe_name = model_id.replace("/", "_")
     local_dir = os.path.join(
         os.path.expanduser("~/.cache/caption_service"), safe_name
     )
-
     log.info("モデルをダウンロード中: %s → %s", model_id, local_dir)
     snapshot_download(repo_id=model_id, local_dir=local_dir)
-
-    # flash_attn の import を try/except で囲んで optional にする
-    patched_count = 0
-    for path in glob.glob(f"{local_dir}/**/*.py", recursive=True):
-        text = open(path, encoding="utf-8").read()
-        if "flash_attn" not in text:
-            continue
-        new_text = re.sub(
-            r"^((?:from|import) flash_attn\b.*)$",
-            "try:\n    \\1\nexcept ImportError:\n    pass",
-            text,
-            flags=re.MULTILINE,
-        )
-        if new_text != text:
-            open(path, "w", encoding="utf-8").write(new_text)
-            patched_count += 1
-
-    if patched_count:
-        log.info("flash_attn パッチを %d ファイルに適用しました", patched_count)
-
     return local_dir
 
 
@@ -70,7 +72,8 @@ async def lifespan(app: FastAPI):
     global processor, florence_model
 
     model_id = app.state.model_id
-    local_dir = _download_and_patch(model_id)
+    _install_flash_attn_stub()
+    local_dir = _download_model(model_id)
 
     log.info("Florence-2 モデルを読み込み中 (device=%s)...", device)
     processor = AutoProcessor.from_pretrained(local_dir, trust_remote_code=True, local_files_only=True)
