@@ -224,14 +224,11 @@ pub async fn upload_file(
     let file_id = Uuid::new_v4();
     let storage_key = format!("{}/{}", current_user.id, file_id);
 
-    // OCR: 画像ファイルの場合はブロッキングスレッドでテキスト抽出
+    // OCR: 画像ファイルの場合は非同期でテキスト抽出
     eprintln!("[upload] mime={mime}, ocr_supported={}", ocr::is_ocr_supported(&mime));
     let ocr_text = if ocr::is_ocr_supported(&mime) {
         let tmp_path = ff.tmp.path().to_path_buf();
-        let result = tokio::task::spawn_blocking(move || ocr::extract_text(&tmp_path))
-            .await
-            .ok()
-            .flatten();
+        let result = ocr::extract_text(&tmp_path).await;
         eprintln!("[upload] OCR 結果: {:?}", result.as_deref().map(|s| &s[..s.len().min(80)]));
         result
     } else {
