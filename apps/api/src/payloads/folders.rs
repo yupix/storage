@@ -8,6 +8,7 @@ pub struct ListFoldersQuery {
     pub folder_id: Option<Uuid>,
     pub page: Option<u64>,
     pub limit: Option<u64>,
+    pub is_favorite: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, utoipa::IntoParams)]
@@ -29,6 +30,7 @@ pub struct UpdateFolderRequest {
     pub name: Option<String>,
     #[serde(default, deserialize_with = "deserialize_optional_field")]
     pub folder_id: Option<Option<Uuid>>,
+    pub is_favorite: Option<bool>,
 }
 
 pub fn deserialize_optional_field<'de, D>(

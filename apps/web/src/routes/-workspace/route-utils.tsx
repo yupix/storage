@@ -53,10 +53,13 @@ export async function loadDrive(folderId: string | null = null): Promise<Workspa
 }
 
 export async function loadFavorites(): Promise<WorkspaceData> {
-  const fileData = await fetchMyFiles(1, 50, null, true)
+  const [fileData, folderData] = await Promise.all([
+    fetchMyFiles(1, 50, null, true),
+    fetchFolders(null, 1, 100, true),
+  ])
   return {
     files: fileData.files,
-    folders: [],
+    folders: folderData.folders,
     breadcrumb: [{ id: null, name: 'お気に入り' }],
   }
 }

@@ -308,6 +308,7 @@ export interface components {
             folder_id?: string | null;
             /** Format: uuid */
             id: string;
+            is_favorite: boolean;
             name: string;
             owner: components["schemas"]["OwnerInfo"];
             /**
@@ -371,6 +372,7 @@ export interface components {
         UpdateFolderRequest: {
             /** Format: uuid */
             folder_id?: string | null;
+            is_favorite?: boolean | null;
             name?: string | null;
         };
         /** @description multipart/form-data アップロード用リクエスト（OpenAPI スキーマ定義用） */
@@ -1010,6 +1012,7 @@ export interface operations {
                 folder_id?: string;
                 page?: number;
                 limit?: number;
+                is_favorite?: boolean;
             };
             header?: never;
             path?: never;
@@ -1138,6 +1141,7 @@ export interface operations {
                 folder_id?: string;
                 page?: number;
                 limit?: number;
+                is_favorite?: boolean;
             };
             header?: never;
             path?: never;
@@ -1218,6 +1222,17 @@ export interface operations {
             };
             /** @description Forbidden */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        message: string;
+                    };
+                };
+            };
+            /** @description Internal server error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

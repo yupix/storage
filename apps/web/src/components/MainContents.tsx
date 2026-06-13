@@ -20,6 +20,17 @@ import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyCont
 import type { FileItem, FolderItem } from '../lib/files'
 import { formatFileSize, downloadFile } from '../lib/files'
 
+const skeletonItemIds = [
+  'skeleton-1',
+  'skeleton-2',
+  'skeleton-3',
+  'skeleton-4',
+  'skeleton-5',
+  'skeleton-6',
+  'skeleton-7',
+  'skeleton-8',
+]
+
 function FileTypeIcon({ name, size = 40 }: { name: string; size?: number }) {
   const ext = name.split('.').pop()?.toLowerCase() ?? ''
   const style = (defaultStyles as Record<string, FileIconProps>)[ext] ?? {}
@@ -237,9 +248,18 @@ function FileRow({
   return (
     <ContextMenu>
       <ContextMenuTrigger>
+        {/* biome-ignore lint/a11y/useSemanticElements: The row contains a nested menu button. */}
         <div
+          role="button"
+          tabIndex={0}
           className="flex items-center gap-3 px-3 py-2 hover:bg-muted/50 cursor-pointer transition-colors border-b border-border/50 last:border-0"
           onClick={() => onPreview(file.id)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault()
+              onPreview(file.id)
+            }
+          }}
         >
           <FileTypeIcon name={file.name} size={20} />
           <p className="flex-1 text-sm truncate min-w-0" title={file.name}>{file.name}</p>
@@ -488,10 +508,11 @@ interface FolderItemActionsProps {
   onDelete: (id: string) => void
   onMove: (id: string) => void
   onRename: (id: string, currentName: string) => void
+  onToggleFavorite: (id: string, current: boolean) => void
 }
 
 function FolderDropdownMenuContent({
-  folder, onOpen, onDelete, onMove, onRename,
+  folder, onOpen, onDelete, onMove, onRename, onToggleFavorite,
 }: FolderItemActionsProps) {
   return (
     <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
@@ -507,6 +528,10 @@ function FolderDropdownMenuContent({
         <MoveRight className="mr-2 size-4" />
         移動
       </DropdownMenuItem>
+      <DropdownMenuItem onSelect={() => onToggleFavorite(folder.id, folder.is_favorite)}>
+        <Star className={`mr-2 size-4 ${folder.is_favorite ? 'fill-yellow-400 text-yellow-400' : ''}`} />
+        {folder.is_favorite ? 'お気に入り解除' : 'お気に入り'}
+      </DropdownMenuItem>
       <DropdownMenuSeparator />
       <DropdownMenuItem variant="destructive" onSelect={() => onDelete(folder.id)}>
         <Trash2 className="mr-2 size-4" />
@@ -517,7 +542,7 @@ function FolderDropdownMenuContent({
 }
 
 function FolderContextMenuContent({
-  folder, onOpen, onDelete, onMove, onRename,
+  folder, onOpen, onDelete, onMove, onRename, onToggleFavorite,
 }: FolderItemActionsProps) {
   return (
     <ContextMenuContent onClick={(e) => e.stopPropagation()}>
@@ -533,6 +558,10 @@ function FolderContextMenuContent({
         <MoveRight className="mr-2 size-4" />
         移動
       </ContextMenuItem>
+      <ContextMenuItem onSelect={() => onToggleFavorite(folder.id, folder.is_favorite)}>
+        <Star className={`mr-2 size-4 ${folder.is_favorite ? 'fill-yellow-400 text-yellow-400' : ''}`} />
+        {folder.is_favorite ? 'お気に入り解除' : 'お気に入り'}
+      </ContextMenuItem>
       <ContextMenuSeparator />
       <ContextMenuItem variant="destructive" onSelect={() => onDelete(folder.id)}>
         <Trash2 className="mr-2 size-4" />
@@ -542,7 +571,7 @@ function FolderContextMenuContent({
   )
 }
 
-function FolderCard({ folder, onOpen, onDelete, onMove, onRename }: FolderItemActionsProps) {
+function FolderCard({ folder, onOpen, onDelete, onMove, onRename, onToggleFavorite }: FolderItemActionsProps) {
   const date = folder.updated_at ? new Date(folder.updated_at).toLocaleDateString('ja-JP') : ''
   return (
     <ContextMenu>
@@ -552,8 +581,11 @@ function FolderCard({ folder, onOpen, onDelete, onMove, onRename }: FolderItemAc
           className="cursor-pointer hover:ring-primary/40 transition-shadow"
           onClick={() => onOpen(folder)}
         >
-          <div className="flex items-center justify-center h-24 bg-muted/50 rounded-t-xl">
+          <div className="relative flex items-center justify-center h-24 bg-muted/50 rounded-t-xl">
             <Folder className="size-12 text-muted-foreground" />
+            {folder.is_favorite && (
+              <Star className="absolute top-1 right-1 size-3.5 fill-yellow-400 text-yellow-400 drop-shadow" />
+            )}
           </div>
           <CardContent className="pt-2 pb-3">
             <div className="flex items-center justify-between gap-1">
@@ -576,6 +608,7 @@ function FolderCard({ folder, onOpen, onDelete, onMove, onRename }: FolderItemAc
                   onDelete={onDelete}
                   onMove={onMove}
                   onRename={onRename}
+                  onToggleFavorite={onToggleFavorite}
                 />
               </DropdownMenu>
             </div>
@@ -591,22 +624,33 @@ function FolderCard({ folder, onOpen, onDelete, onMove, onRename }: FolderItemAc
         onDelete={onDelete}
         onMove={onMove}
         onRename={onRename}
+        onToggleFavorite={onToggleFavorite}
       />
     </ContextMenu>
   )
 }
 
-function FolderRow({ folder, onOpen, onDelete, onMove, onRename }: FolderItemActionsProps) {
+function FolderRow({ folder, onOpen, onDelete, onMove, onRename, onToggleFavorite }: FolderItemActionsProps) {
   const date = folder.updated_at ? new Date(folder.updated_at).toLocaleDateString('ja-JP') : ''
   return (
     <ContextMenu>
       <ContextMenuTrigger>
+        {/* biome-ignore lint/a11y/useSemanticElements: The row contains a nested menu button. */}
         <div
+          role="button"
+          tabIndex={0}
           className="flex items-center gap-3 px-3 py-2 hover:bg-muted/50 cursor-pointer transition-colors border-b border-border/50 last:border-0"
           onClick={() => onOpen(folder)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault()
+              onOpen(folder)
+            }
+          }}
         >
           <Folder className="size-5 shrink-0 text-muted-foreground" />
           <p className="flex-1 text-sm truncate min-w-0 font-medium" title={folder.name}>{folder.name}</p>
+          {folder.is_favorite && <Star className="size-3.5 fill-yellow-400 text-yellow-400 shrink-0" />}
           <p className="text-xs text-muted-foreground w-20 text-right shrink-0">{formatFileSize(folder.total_size ?? 0)}</p>
           <p className="text-xs text-muted-foreground w-24 text-right shrink-0 hidden sm:block">{date}</p>
           <DropdownMenu>
@@ -626,6 +670,7 @@ function FolderRow({ folder, onOpen, onDelete, onMove, onRename }: FolderItemAct
               onDelete={onDelete}
               onMove={onMove}
               onRename={onRename}
+              onToggleFavorite={onToggleFavorite}
             />
           </DropdownMenu>
         </div>
@@ -636,6 +681,7 @@ function FolderRow({ folder, onOpen, onDelete, onMove, onRename }: FolderItemAct
         onDelete={onDelete}
         onMove={onMove}
         onRename={onRename}
+        onToggleFavorite={onToggleFavorite}
       />
     </ContextMenu>
   )
@@ -661,6 +707,7 @@ interface MainContentsProps {
   onFolderDelete?: (id: string) => void
   onFolderMove?: (id: string) => void
   onFolderRename?: (id: string, currentName: string) => void
+  onFolderToggleFavorite?: (id: string, current: boolean) => void
 }
 
 export default function MainContentsDefault({
@@ -683,6 +730,7 @@ export default function MainContentsDefault({
   onFolderDelete,
   onFolderMove,
   onFolderRename,
+  onFolderToggleFavorite,
 }: MainContentsProps) {
   const noop = () => {}
   const handlePreview = onPreview ?? noop
@@ -698,21 +746,22 @@ export default function MainContentsDefault({
   const handleFolderDelete = onFolderDelete ?? noop
   const handleFolderMove = onFolderMove ?? noop
   const handleFolderRename = onFolderRename ?? noop
+  const handleFolderToggleFavorite = onFolderToggleFavorite ?? noop
 
   if (loading) {
     if (view === 'list') {
       return (
         <div className="flex flex-col gap-1 p-3">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className="rounded-lg bg-muted/50 animate-pulse h-9" />
+          {skeletonItemIds.map((id) => (
+            <div key={id} className="rounded-lg bg-muted/50 animate-pulse h-9" />
           ))}
         </div>
       )
     }
     return (
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 p-3">
-        {Array.from({ length: 8 }).map((_, i) => (
-          <div key={i} className="rounded-xl bg-muted/50 animate-pulse h-36" />
+        {skeletonItemIds.map((id) => (
+          <div key={id} className="rounded-xl bg-muted/50 animate-pulse h-36" />
         ))}
       </div>
     )
@@ -803,6 +852,7 @@ export default function MainContentsDefault({
             onDelete={handleFolderDelete}
             onMove={handleFolderMove}
             onRename={handleFolderRename}
+            onToggleFavorite={handleFolderToggleFavorite}
           />
         ))}
         {files.map((file) => (
@@ -830,6 +880,7 @@ export default function MainContentsDefault({
           onDelete={handleFolderDelete}
           onMove={handleFolderMove}
           onRename={handleFolderRename}
+          onToggleFavorite={handleFolderToggleFavorite}
         />
       ))}
       {files.map((file) => (

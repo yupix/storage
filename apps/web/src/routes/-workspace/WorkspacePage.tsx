@@ -12,7 +12,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '../../components/ui/alert-dialog'
-import { uploadFileWithProgress, createUploadItem, deleteFile, toggleFavorite, renameFile, renameFolder, restoreFile, restoreFolder, emptyTrash, permanentDeleteFile, permanentDeleteFolder } from '../../lib/files'
+import { uploadFileWithProgress, createUploadItem, deleteFile, toggleFavorite, toggleFolderFavorite, renameFile, renameFolder, restoreFile, restoreFolder, emptyTrash, permanentDeleteFile, permanentDeleteFolder } from '../../lib/files'
 import type { FileItem, FolderItem, UploadItem } from '../../lib/files'
 
 interface BreadcrumbItem {
@@ -62,11 +62,19 @@ export default function WorkspacePage({
   const [purging, setPurging] = useState(false)
   const [purgeFolderTargetId, setPurgeFolderTargetId] = useState<string | null>(null)
   const [purgingFolder, setPurgingFolder] = useState(false)
+  const [favoriteError, setFavoriteError] = useState<string | null>(null)
 
   useEffect(() => {
     setFiles(initialFiles)
     setFolders(initialFolders)
   }, [initialFiles, initialFolders])
+
+  useEffect(() => {
+    if (!favoriteError) return
+
+    const timer = window.setTimeout(() => setFavoriteError(null), 5000)
+    return () => window.clearTimeout(timer)
+  }, [favoriteError])
 
   const refreshFiles = useCallback(async () => {
     await router.invalidate()
@@ -204,6 +212,7 @@ export default function WorkspacePage({
 
   const handleToggleFavorite = useCallback(async (id: string, current: boolean) => {
     const next = !current
+    setFavoriteError(null)
     setFiles((prev) => prev.map((f) => f.id === id ? { ...f, is_favorite: next } : f))
     try {
       await toggleFavorite(id, next)
@@ -212,6 +221,26 @@ export default function WorkspacePage({
       }
     } catch {
       setFiles((prev) => prev.map((f) => f.id === id ? { ...f, is_favorite: current } : f))
+      setFavoriteError('ファイルのお気に入りを更新できませんでした')
+    }
+  }, [favoritesOnly])
+
+  const handleToggleFolderFavorite = useCallback(async (id: string, current: boolean) => {
+    const next = !current
+    setFavoriteError(null)
+    setFolders((prev) => prev.map((folder) =>
+      folder.id === id ? { ...folder, is_favorite: next } : folder,
+    ))
+    try {
+      await toggleFolderFavorite(id, next)
+      if (favoritesOnly && !next) {
+        setFolders((prev) => prev.filter((folder) => folder.id !== id))
+      }
+    } catch {
+      setFolders((prev) => prev.map((folder) =>
+        folder.id === id ? { ...folder, is_favorite: current } : folder,
+      ))
+      setFavoriteError('フォルダーのお気に入りを更新できませんでした')
     }
   }, [favoritesOnly])
 
@@ -237,6 +266,15 @@ export default function WorkspacePage({
         onEmptyTrash={() => setEmptyTrashOpen(true)}
       />
 
+      {favoriteError && (
+        <div
+          role="alert"
+          className="mx-1.5 mb-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+        >
+          {favoriteError}
+        </div>
+      )}
+
       <div className="bg-card text-card-foreground rounded-xl ring-1 ring-foreground/10 mx-1.5 min-h-96">
             <MainContentsDefault
               files={files}
@@ -257,6 +295,7 @@ export default function WorkspacePage({
               onFolderDelete={mode === 'trash' ? undefined : setDeleteFolderTargetId}
               onFolderMove={mode === 'trash' ? undefined : setMoveFolderTargetId}
               onFolderRename={mode === 'trash' ? undefined : (id, name) => setRenameTarget({ id, name, kind: 'folder' })}
+              onFolderToggleFavorite={mode === 'trash' ? undefined : handleToggleFolderFavorite}
             />
       </div>
 
