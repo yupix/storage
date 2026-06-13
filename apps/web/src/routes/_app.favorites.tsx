@@ -23,6 +23,7 @@ function FavoritesPage() {
   return (
     <WorkspacePage
       initialFiles={data.files}
+      initialFolders={data.folders}
       breadcrumb={data.breadcrumb}
       favoritesOnly
       view={view ?? 'grid'}
