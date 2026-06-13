@@ -1,5 +1,5 @@
 import type React from 'react'
-import { ChevronRight, Folder, CloudUpload, Share2, Trash2, LayoutGrid, List } from 'lucide-react'
+import { ChevronRight, FolderPlus, CloudUpload, Share2, Trash2, LayoutGrid, List } from 'lucide-react'
 import { Button } from './ui/button'
 
 interface BreadcrumbItem {
@@ -39,8 +39,9 @@ export default function ToolbarDefault({
         </Button>
       ) : (
         <>
-          <Button variant="ghost" size="icon-sm" title="フォルダー作成" onClick={onCreateFolder}>
-            <Folder />
+          <Button variant="ghost" size="sm" onClick={onCreateFolder}>
+            <FolderPlus className="size-4" />
+            新しいフォルダー
           </Button>
           <Button asChild variant="ghost" size="icon-sm" title="アップロード" disabled={uploading}>
             <label className={uploading ? 'pointer-events-none' : 'cursor-pointer'}>
