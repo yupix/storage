@@ -12,7 +12,7 @@ const SUPPORTED_MIMES: &[&str] = &[
     "image/webp",
 ];
 
-/// ndlocr-lite の ocr.py へのパス（リポジトリルートからの相対）
+/// ndlocr-lite の ocr.py へのパス（コンパイル時に CARGO_MANIFEST_DIR から解決）
 const OCR_SCRIPT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../extern/ndlocr-lite/src/ocr.py");
 
 /// OCR タイムアウト（秒）
@@ -25,10 +25,16 @@ pub fn is_ocr_supported(mime: &str) -> bool {
 /// ndlocr-lite を使って画像からテキストを抽出する。
 /// Python 3 サブプロセスを起動し、JSON 出力を解析して返す。
 pub fn extract_text(image_path: &Path) -> Option<String> {
+    eprintln!("[OCR] 開始: script={OCR_SCRIPT:?} image={image_path:?}");
+
+    // スクリプトが存在するか確認
+    if !std::path::Path::new(OCR_SCRIPT).exists() {
+        eprintln!("[OCR] ERROR: スクリプトが見つかりません: {OCR_SCRIPT}");
+        return None;
+    }
+
     let out_dir = tempfile::TempDir::new().ok()?;
     let out_path = out_dir.path();
-
-    tracing::info!("OCR 開始: {:?}", image_path);
 
     // stderr を一時ファイルに向けることでパイプバッファ詰まりによる
     // デッドロックを避けながら、エラーメッセージを取得できる
@@ -45,6 +51,7 @@ pub fn extract_text(image_path: &Path) -> Option<String> {
         .stdout(std::process::Stdio::null())
         .stderr(stderr_file)
         .spawn()
+        .map_err(|e| { eprintln!("[OCR] spawn 失敗: {e}"); e })
         .ok()?;
 
     let status = match child.wait_timeout(Duration::from_secs(TIMEOUT_SECS)).ok()? {
@@ -52,22 +59,22 @@ pub fn extract_text(image_path: &Path) -> Option<String> {
         None => {
             let _ = child.kill();
             let _ = child.wait();
-            tracing::warn!("ndlocr-lite OCR タイムアウト: {}s を超えました", TIMEOUT_SECS);
+            eprintln!("[OCR] タイムアウト: {TIMEOUT_SECS}s を超えました");
             return None;
         }
     };
 
-    if !status.success() {
-        if let Ok(msg) = std::fs::read_to_string(stderr_tmp.path()) {
-            if !msg.trim().is_empty() {
-                tracing::warn!("ndlocr-lite stderr: {}", msg.trim());
-            }
+    if let Ok(msg) = std::fs::read_to_string(stderr_tmp.path()) {
+        let trimmed = msg.trim();
+        if !trimmed.is_empty() {
+            eprintln!("[OCR] stderr:\n{trimmed}");
         }
-        tracing::warn!("ndlocr-lite OCR 失敗 status={}", status);
-        return None;
     }
 
-    tracing::info!("OCR 完了");
+    if !status.success() {
+        eprintln!("[OCR] 失敗 status={status}");
+        return None;
+    }
 
     // JSON ファイルを探して読み込む（stem.json の名前で出力される）
     let json_path = std::fs::read_dir(out_path)
@@ -77,7 +84,9 @@ pub fn extract_text(image_path: &Path) -> Option<String> {
         .path();
 
     let content = std::fs::read_to_string(&json_path).ok()?;
-    parse_ndlocr_json(&content)
+    let result = parse_ndlocr_json(&content);
+    eprintln!("[OCR] 完了: {} 文字", result.as_deref().map_or(0, |s| s.chars().count()));
+    result
 }
 
 /// ndlocr-lite JSON から全テキストを連結して返す。

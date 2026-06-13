@@ -225,17 +225,14 @@ pub async fn upload_file(
     let storage_key = format!("{}/{}", current_user.id, file_id);
 
     // OCR: 画像ファイルの場合はブロッキングスレッドでテキスト抽出
+    eprintln!("[upload] mime={mime}, ocr_supported={}", ocr::is_ocr_supported(&mime));
     let ocr_text = if ocr::is_ocr_supported(&mime) {
         let tmp_path = ff.tmp.path().to_path_buf();
         let result = tokio::task::spawn_blocking(move || ocr::extract_text(&tmp_path))
             .await
             .ok()
             .flatten();
-        if let Some(ref text) = result {
-            tracing::info!("OCR 結果: {} 文字", text.chars().count());
-        } else {
-            tracing::warn!("OCR 結果なし (mime={})", mime);
-        }
+        eprintln!("[upload] OCR 結果: {:?}", result.as_deref().map(|s| &s[..s.len().min(80)]));
         result
     } else {
         None
