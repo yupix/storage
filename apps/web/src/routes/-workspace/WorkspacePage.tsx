@@ -1,5 +1,15 @@
 import { useRouter } from '@tanstack/react-router'
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from '@dnd-kit/core'
+import { Folder } from 'lucide-react'
 import ToolbarDefault from '../../components/ToolbarDefault'
 import MainContentsDefault from '#/components/MainContents'
 import UploadProgress from '../../components/UploadProgress'
@@ -12,7 +22,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '../../components/ui/alert-dialog'
-import { uploadFileWithProgress, createUploadItem, deleteFile, toggleFavorite, toggleFolderFavorite, renameFile, renameFolder, restoreFile, restoreFolder, emptyTrash, permanentDeleteFile, permanentDeleteFolder } from '../../lib/files'
+import { uploadFileWithProgress, createUploadItem, deleteFile, toggleFavorite, toggleFolderFavorite, moveFile, moveFolder, renameFile, renameFolder, restoreFile, restoreFolder, emptyTrash, permanentDeleteFile, permanentDeleteFolder } from '../../lib/files'
 import type { FileItem, FolderItem, UploadItem } from '../../lib/files'
 import type { WorkspaceSort } from './route-utils'
 
@@ -49,6 +59,10 @@ export default function WorkspacePage({
   onSortChange,
 }: WorkspacePageProps) {
   const router = useRouter()
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+  )
+  const [activeDragItem, setActiveDragItem] = useState<{ type: 'file' | 'folder'; name: string } | null>(null)
   const [files, setFiles] = useState(initialFiles)
   const [folders, setFolders] = useState(initialFolders)
   const [uploadItems, setUploadItems] = useState<UploadItem[]>([])
@@ -275,10 +289,44 @@ export default function WorkspacePage({
     })
   }, [files, sort])
 
+  const handleDragStart = useCallback(({ active }: DragStartEvent) => {
+    setActiveDragItem({
+      type: active.data.current?.type as 'file' | 'folder',
+      name: active.data.current?.name as string,
+    })
+  }, [])
+
+  const handleDragEnd = useCallback(async ({ active, over }: DragEndEvent) => {
+    setActiveDragItem(null)
+    if (!over || active.id === over.id) return
+    if (over.data.current?.type !== 'folder') return
+
+    const dragType = active.data.current?.type as 'file' | 'folder'
+    const dragId = active.data.current?.id as string
+    const targetId = over.data.current?.id as string | null
+    if (dragId === targetId) return
+
+    try {
+      if (dragType === 'file') {
+        await moveFile(dragId, targetId)
+      } else {
+        await moveFolder(dragId, targetId)
+      }
+      await refreshFiles()
+    } catch {
+      // エラー時は何もしない
+    }
+  }, [refreshFiles])
+
   const uploading = uploadItems.some((i) => i.status === 'uploading')
 
   return (
-    <>
+    <DndContext
+      sensors={sensors}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      onDragCancel={() => setActiveDragItem(null)}
+    >
       <ToolbarDefault
         onFileSelect={handleFileSelect}
         uploading={uploading}
@@ -331,6 +379,15 @@ export default function WorkspacePage({
               onFolderToggleFavorite={mode === 'trash' ? undefined : handleToggleFolderFavorite}
             />
       </div>
+
+      <DragOverlay dropAnimation={null}>
+        {activeDragItem ? (
+          <div className="flex items-center gap-2 bg-card border border-border rounded-lg px-3 py-2 shadow-lg text-sm font-medium opacity-90 cursor-grabbing select-none">
+            {activeDragItem.type === 'folder' && <Folder className="size-4 text-muted-foreground shrink-0" />}
+            <span className="truncate max-w-48">{activeDragItem.name}</span>
+          </div>
+        ) : null}
+      </DragOverlay>
 
       <UploadProgress items={uploadItems} onClose={handleCloseProgress} />
 
@@ -445,6 +502,6 @@ export default function WorkspacePage({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </>
+    </DndContext>
   )
 }

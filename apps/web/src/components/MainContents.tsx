@@ -1,5 +1,6 @@
 import type React from 'react'
-import { useEffect, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { useDraggable, useDroppable } from '@dnd-kit/core'
 import {
   EllipsisVertical, Download, SquarePen, Trash2, Share2,
   Star, MoveRight, Lock, Info, CloudUpload, Folder, RotateCcw,
@@ -19,6 +20,9 @@ import { Button } from './ui/button'
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from './ui/empty'
 import type { FileItem, FolderItem } from '../lib/files'
 import { formatFileSize, downloadFile } from '../lib/files'
+
+// ドラッグが有効かどうかを子コンポーネントへ伝播するコンテキスト
+const DragEnabledContext = createContext(false)
 
 const skeletonItemIds = [
   'skeleton-1',
@@ -178,10 +182,18 @@ function FileCard({
 }: FileItemActionsProps) {
   const date = file.updated_at ? new Date(file.updated_at).toLocaleDateString('ja-JP') : ''
   const isImage = file.file_type.startsWith('image/')
+  const dragEnabled = useContext(DragEnabledContext)
+
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `file-${file.id}`,
+    data: { type: 'file' as const, id: file.id, name: file.name },
+    disabled: !dragEnabled,
+  })
 
   return (
     <ContextMenu>
       <ContextMenuTrigger>
+        <div ref={setNodeRef} {...attributes} {...listeners} className={isDragging ? 'opacity-40' : ''}>
         <Card
           size="sm"
           className="cursor-pointer hover:ring-primary/40 transition-shadow"
@@ -227,6 +239,7 @@ function FileCard({
             </p>
           </CardContent>
         </Card>
+        </div>
       </ContextMenuTrigger>
       <FileContextMenuContent
         file={file}
@@ -244,15 +257,25 @@ function FileRow({
   file, onPreview, onDelete, onMove, onRename, onToggleFavorite,
 }: FileItemActionsProps) {
   const date = file.updated_at ? new Date(file.updated_at).toLocaleDateString('ja-JP') : ''
+  const dragEnabled = useContext(DragEnabledContext)
+
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `file-${file.id}`,
+    data: { type: 'file' as const, id: file.id, name: file.name },
+    disabled: !dragEnabled,
+  })
 
   return (
     <ContextMenu>
       <ContextMenuTrigger>
         {/* biome-ignore lint/a11y/useSemanticElements: The row contains a nested menu button. */}
         <div
+          ref={setNodeRef}
+          {...attributes}
+          {...listeners}
           role="button"
           tabIndex={0}
-          className="flex items-center gap-3 px-3 py-2 hover:bg-muted/50 cursor-pointer transition-colors border-b border-border/50 last:border-0"
+          className={`flex items-center gap-3 px-3 py-2 hover:bg-muted/50 cursor-pointer transition-colors border-b border-border/50 last:border-0 ${isDragging ? 'opacity-40' : ''}`}
           onClick={() => onPreview(file.id)}
           onKeyDown={(event) => {
             if (event.key === 'Enter' || event.key === ' ') {
@@ -573,50 +596,71 @@ function FolderContextMenuContent({
 
 function FolderCard({ folder, onOpen, onDelete, onMove, onRename, onToggleFavorite }: FolderItemActionsProps) {
   const date = folder.updated_at ? new Date(folder.updated_at).toLocaleDateString('ja-JP') : ''
+  const dragEnabled = useContext(DragEnabledContext)
+
+  const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({
+    id: `folder-${folder.id}`,
+    data: { type: 'folder' as const, id: folder.id, name: folder.name },
+    disabled: !dragEnabled,
+  })
+  const { isOver, setNodeRef: setDropRef } = useDroppable({
+    id: `folder-${folder.id}`,
+    data: { type: 'folder' as const, id: folder.id },
+    disabled: !dragEnabled,
+  })
+  const setRef = (el: HTMLElement | null) => { setDragRef(el); setDropRef(el) }
+
   return (
     <ContextMenu>
       <ContextMenuTrigger>
-        <Card
-          size="sm"
-          className="cursor-pointer hover:ring-primary/40 transition-shadow"
-          onClick={() => onOpen(folder)}
+        <div
+          ref={setRef}
+          {...attributes}
+          {...listeners}
+          className={isDragging ? 'opacity-40' : ''}
         >
-          <div className="relative flex items-center justify-center h-24 bg-muted/50 rounded-t-xl">
-            <Folder className="size-12 text-muted-foreground" />
-            {folder.is_favorite && (
-              <Star className="absolute top-1 right-1 size-3.5 fill-yellow-400 text-yellow-400 drop-shadow" />
-            )}
-          </div>
-          <CardContent className="pt-2 pb-3">
-            <div className="flex items-center justify-between gap-1">
-              <p className="text-sm font-medium truncate flex-1" title={folder.name}>{folder.name}</p>
-
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    className="shrink-0"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <EllipsisVertical className="size-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <FolderDropdownMenuContent
-                  folder={folder}
-                  onOpen={onOpen}
-                  onDelete={onDelete}
-                  onMove={onMove}
-                  onRename={onRename}
-                  onToggleFavorite={onToggleFavorite}
-                />
-              </DropdownMenu>
+          <Card
+            size="sm"
+            className={`cursor-pointer hover:ring-primary/40 transition-shadow ${isOver ? 'ring-2 ring-primary bg-primary/5' : ''}`}
+            onClick={() => onOpen(folder)}
+          >
+            <div className="relative flex items-center justify-center h-24 bg-muted/50 rounded-t-xl">
+              <Folder className="size-12 text-muted-foreground" />
+              {folder.is_favorite && (
+                <Star className="absolute top-1 right-1 size-3.5 fill-yellow-400 text-yellow-400 drop-shadow" />
+              )}
             </div>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {formatFileSize(folder.total_size ?? 0)}{date ? ` · ${date}` : ''}
-            </p>
-          </CardContent>
-        </Card>
+            <CardContent className="pt-2 pb-3">
+              <div className="flex items-center justify-between gap-1">
+                <p className="text-sm font-medium truncate flex-1" title={folder.name}>{folder.name}</p>
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      className="shrink-0"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <EllipsisVertical className="size-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <FolderDropdownMenuContent
+                    folder={folder}
+                    onOpen={onOpen}
+                    onDelete={onDelete}
+                    onMove={onMove}
+                    onRename={onRename}
+                    onToggleFavorite={onToggleFavorite}
+                  />
+                </DropdownMenu>
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {formatFileSize(folder.total_size ?? 0)}{date ? ` · ${date}` : ''}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
       </ContextMenuTrigger>
       <FolderContextMenuContent
         folder={folder}
@@ -632,14 +676,31 @@ function FolderCard({ folder, onOpen, onDelete, onMove, onRename, onToggleFavori
 
 function FolderRow({ folder, onOpen, onDelete, onMove, onRename, onToggleFavorite }: FolderItemActionsProps) {
   const date = folder.updated_at ? new Date(folder.updated_at).toLocaleDateString('ja-JP') : ''
+  const dragEnabled = useContext(DragEnabledContext)
+
+  const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({
+    id: `folder-${folder.id}`,
+    data: { type: 'folder' as const, id: folder.id, name: folder.name },
+    disabled: !dragEnabled,
+  })
+  const { isOver, setNodeRef: setDropRef } = useDroppable({
+    id: `folder-${folder.id}`,
+    data: { type: 'folder' as const, id: folder.id },
+    disabled: !dragEnabled,
+  })
+  const setRef = (el: HTMLElement | null) => { setDragRef(el); setDropRef(el) }
+
   return (
     <ContextMenu>
       <ContextMenuTrigger>
         {/* biome-ignore lint/a11y/useSemanticElements: The row contains a nested menu button. */}
         <div
+          ref={setRef}
+          {...attributes}
+          {...listeners}
           role="button"
           tabIndex={0}
-          className="flex items-center gap-3 px-3 py-2 hover:bg-muted/50 cursor-pointer transition-colors border-b border-border/50 last:border-0"
+          className={`flex items-center gap-3 px-3 py-2 hover:bg-muted/50 cursor-pointer transition-colors border-b border-border/50 last:border-0 ${isOver ? 'bg-primary/5 ring-1 ring-inset ring-primary' : ''} ${isDragging ? 'opacity-40' : ''}`}
           onClick={() => onOpen(folder)}
           onKeyDown={(event) => {
             if (event.key === 'Enter' || event.key === ' ') {
@@ -836,16 +897,47 @@ export default function MainContentsDefault({
 
   if (view === 'list') {
     return (
-      <div className="p-2">
-        <div className="flex items-center gap-3 px-3 py-1.5 border-b border-border text-xs text-muted-foreground font-medium">
-          <span className="size-5 shrink-0" />
-          <span className="flex-1">名前</span>
-          <span className="w-20 text-right shrink-0">サイズ</span>
-          <span className="w-24 text-right shrink-0 hidden sm:block">更新日</span>
-          <span className="size-6 shrink-0" />
+      <DragEnabledContext.Provider value={mode === 'normal'}>
+        <div className="p-2">
+          <div className="flex items-center gap-3 px-3 py-1.5 border-b border-border text-xs text-muted-foreground font-medium">
+            <span className="size-5 shrink-0" />
+            <span className="flex-1">名前</span>
+            <span className="w-20 text-right shrink-0">サイズ</span>
+            <span className="w-24 text-right shrink-0 hidden sm:block">更新日</span>
+            <span className="size-6 shrink-0" />
+          </div>
+          {folders.map((folder) => (
+            <FolderRow
+              key={folder.id}
+              folder={folder}
+              onOpen={handleFolderOpen}
+              onDelete={handleFolderDelete}
+              onMove={handleFolderMove}
+              onRename={handleFolderRename}
+              onToggleFavorite={handleFolderToggleFavorite}
+            />
+          ))}
+          {files.map((file) => (
+            <FileRow
+              key={file.id}
+              file={file}
+              onPreview={handlePreview}
+              onDelete={handleDelete}
+              onMove={handleMove}
+              onRename={handleRename}
+              onToggleFavorite={handleToggleFavorite}
+            />
+          ))}
         </div>
+      </DragEnabledContext.Provider>
+    )
+  }
+
+  return (
+    <DragEnabledContext.Provider value={mode === 'normal'}>
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 p-3">
         {folders.map((folder) => (
-          <FolderRow
+          <FolderCard
             key={folder.id}
             folder={folder}
             onOpen={handleFolderOpen}
@@ -856,7 +948,7 @@ export default function MainContentsDefault({
           />
         ))}
         {files.map((file) => (
-          <FileRow
+          <FileCard
             key={file.id}
             file={file}
             onPreview={handlePreview}
@@ -867,33 +959,6 @@ export default function MainContentsDefault({
           />
         ))}
       </div>
-    )
-  }
-
-  return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 p-3">
-      {folders.map((folder) => (
-        <FolderCard
-          key={folder.id}
-          folder={folder}
-          onOpen={handleFolderOpen}
-          onDelete={handleFolderDelete}
-          onMove={handleFolderMove}
-          onRename={handleFolderRename}
-          onToggleFavorite={handleFolderToggleFavorite}
-        />
-      ))}
-      {files.map((file) => (
-        <FileCard
-          key={file.id}
-          file={file}
-          onPreview={handlePreview}
-          onDelete={handleDelete}
-          onMove={handleMove}
-          onRename={handleRename}
-          onToggleFavorite={handleToggleFavorite}
-        />
-      ))}
-    </div>
+    </DragEnabledContext.Provider>
   )
 }

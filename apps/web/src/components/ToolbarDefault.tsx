@@ -8,11 +8,38 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from './ui/dropdown-menu'
+import { useDroppable } from '@dnd-kit/core'
 import type { WorkspaceSort } from '../routes/-workspace/route-utils'
 
 interface BreadcrumbItem {
   id: string | null
   name: string
+}
+
+function DroppableBreadcrumb({ item, isLast, onClick }: {
+  item: { id: string | null; name: string }
+  isLast: boolean
+  onClick: () => void
+}) {
+  const { isOver, setNodeRef } = useDroppable({
+    id: `breadcrumb-${item.id ?? 'root'}`,
+    data: { type: 'folder' as const, id: item.id },
+    disabled: isLast,
+  })
+  return (
+    <button
+      ref={setNodeRef}
+      type="button"
+      onClick={onClick}
+      className={`text-sm px-1 py-0.5 rounded whitespace-nowrap transition-colors ${
+        isLast
+          ? 'font-medium text-foreground pointer-events-none'
+          : `text-muted-foreground hover:text-foreground hover:bg-muted ${isOver ? 'bg-primary/10 text-primary ring-1 ring-primary' : ''}`
+      }`}
+    >
+      {item.name}
+    </button>
+  )
 }
 
 const SORT_LABELS: Record<WorkspaceSort, string> = {
@@ -85,17 +112,11 @@ export default function ToolbarDefault({
               {breadcrumb.map((item, index) => (
                 <span key={item.id ?? 'root'} className="flex items-center gap-0.5">
                   {index > 0 && <ChevronRight className="size-3 text-muted-foreground shrink-0" />}
-                  <button
-                    type="button"
+                  <DroppableBreadcrumb
+                    item={item}
+                    isLast={index === breadcrumb.length - 1}
                     onClick={() => onBreadcrumbNavigate?.(item.id)}
-                    className={`text-sm px-1 py-0.5 rounded hover:bg-muted transition-colors whitespace-nowrap ${
-                      index === breadcrumb.length - 1
-                        ? 'font-medium text-foreground pointer-events-none'
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    {item.name}
-                  </button>
+                  />
                 </span>
               ))}
             </nav>
