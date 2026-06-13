@@ -1,5 +1,6 @@
 use std::path::Path;
 use std::time::Duration;
+use tokio::process::Command;
 
 const SUPPORTED_MIMES: &[&str] = &[
     "image/jpeg",
@@ -7,8 +8,8 @@ const SUPPORTED_MIMES: &[&str] = &[
     "image/png",
     "image/tiff",
     "image/bmp",
-    "image/gif",
     "image/webp",
+    // GIF は ocr.py の対応拡張子に含まれないため除外
 ];
 
 /// ndlocr-lite の ocr.py へのパス（コンパイル時に CARGO_MANIFEST_DIR から解決）
@@ -27,7 +28,6 @@ pub fn mime_to_ext(mime: &str) -> &'static str {
         "image/png" => "png",
         "image/tiff" => "tiff",
         "image/bmp" => "bmp",
-        "image/gif" => "gif",
         "image/webp" => "webp",
         _ => "png",
     }
@@ -36,7 +36,7 @@ pub fn mime_to_ext(mime: &str) -> &'static str {
 /// ndlocr-lite を使って画像からテキストを抽出する（async版）。
 /// image_path には必ず正しい拡張子を付けること（ndlocr-lite が拡張子で形式を判定する）。
 pub async fn extract_text(image_path: &Path) -> Option<String> {
-    eprintln!("[OCR] 開始: script={OCR_SCRIPT:?} image={image_path:?}");
+    eprintln!("[OCR] 開始: image={image_path:?}");
 
     if !std::path::Path::new(OCR_SCRIPT).exists() {
         eprintln!("[OCR] ERROR: スクリプトが見つかりません: {OCR_SCRIPT}");
@@ -46,31 +46,55 @@ pub async fn extract_text(image_path: &Path) -> Option<String> {
     let out_dir = tempfile::TempDir::new().ok()?;
     let out_path = out_dir.path().to_path_buf();
 
-    let output = tokio::time::timeout(
-        Duration::from_secs(TIMEOUT_SECS),
-        tokio::process::Command::new("python3")
-            .arg(OCR_SCRIPT)
-            .arg("--sourceimg")
-            .arg(image_path)
-            .arg("--output")
-            .arg(&out_path)
-            .arg("--json-only")
-            .output(),
-    )
-    .await
-    .map_err(|_| eprintln!("[OCR] タイムアウト: {TIMEOUT_SECS}s を超えました"))
-    .ok()?
-    .map_err(|e| eprintln!("[OCR] spawn/wait 失敗: {e}"))
-    .ok()?;
+    // kill_on_drop(true) により、タイムアウトで Child が drop されると自動的に SIGKILL する
+    let mut child = Command::new("python3")
+        .arg(OCR_SCRIPT)
+        .arg("--sourceimg")
+        .arg(image_path)
+        .arg("--output")
+        .arg(&out_path)
+        .arg("--json-only")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .map_err(|e| eprintln!("[OCR] spawn 失敗: {e}"))
+        .ok()?;
 
-    let stderr_msg = String::from_utf8_lossy(&output.stderr);
-    let stderr_trimmed = stderr_msg.trim();
-    if !stderr_trimmed.is_empty() {
-        eprintln!("[OCR] stderr:\n{stderr_trimmed}");
+    let stderr_handle = child.stderr.take();
+
+    let wait_result = tokio::time::timeout(
+        Duration::from_secs(TIMEOUT_SECS),
+        child.wait(),
+    )
+    .await;
+
+    let status = match wait_result {
+        Ok(Ok(s)) => s,
+        Ok(Err(e)) => {
+            eprintln!("[OCR] wait 失敗: {e}");
+            return None;
+        }
+        Err(_) => {
+            // timeout: child は kill_on_drop により drop 時に kill される
+            eprintln!("[OCR] タイムアウト: {TIMEOUT_SECS}s を超えました");
+            return None;
+        }
+    };
+
+    // stderr を読み込んでログ出力
+    if let Some(mut stderr) = stderr_handle {
+        use tokio::io::AsyncReadExt;
+        let mut buf = String::new();
+        let _ = stderr.read_to_string(&mut buf).await;
+        let trimmed = buf.trim();
+        if !trimmed.is_empty() {
+            eprintln!("[OCR] stderr:\n{trimmed}");
+        }
     }
 
-    if !output.status.success() {
-        eprintln!("[OCR] 失敗 status={}", output.status);
+    if !status.success() {
+        eprintln!("[OCR] 失敗 status={status}");
         return None;
     }
 

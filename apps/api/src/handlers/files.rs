@@ -853,8 +853,8 @@ pub async fn search_files(
         .filter(files::Column::IsDeleted.eq(false))
         .filter(
             Condition::any()
-                .add(files::Column::Filename.like(&pattern))
-                .add(files::Column::OcrText.like(&pattern)),
+                .add(files::Column::Filename.ilike(&pattern))
+                .add(files::Column::OcrText.ilike(&pattern)),
         )
         .order_by_desc(files::Column::UpdatedAt)
         .order_by_asc(files::Column::Id)

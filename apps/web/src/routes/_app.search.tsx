@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Search } from 'lucide-react'
 import { searchFiles } from '../lib/files'
 import WorkspacePage from './-workspace/WorkspacePage'
@@ -32,6 +32,11 @@ function SearchPage() {
   const { view, sort } = Route.useSearch()
   const navigate = Route.useNavigate()
   const [inputValue, setInputValue] = useState(q)
+
+  // ヘッダーから別の検索語で遷移した場合に入力欄を同期する
+  useEffect(() => {
+    setInputValue(q)
+  }, [q])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
