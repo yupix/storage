@@ -180,9 +180,12 @@ pub async fn list_folders(
         .order_by_asc(folders::Column::Name)
         .order_by_asc(folders::Column::Id);
 
-    if let Some(is_favorite) = query.is_favorite {
-        selector = selector.filter(folders::Column::IsFavorite.eq(is_favorite));
+    if query.is_favorite == Some(true) {
+        selector = selector.filter(folders::Column::IsFavorite.eq(true));
     } else {
+        if let Some(is_favorite) = query.is_favorite {
+            selector = selector.filter(folders::Column::IsFavorite.eq(is_favorite));
+        }
         selector = match query.folder_id {
             Some(parent_id) => selector.filter(folders::Column::FolderId.eq(parent_id)),
             None => selector.filter(folders::Column::FolderId.is_null()),
