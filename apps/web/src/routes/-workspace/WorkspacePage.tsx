@@ -1,5 +1,5 @@
 import { useRouter } from '@tanstack/react-router'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import ToolbarDefault from '../../components/ToolbarDefault'
 import MainContentsDefault from '#/components/MainContents'
 import UploadProgress from '../../components/UploadProgress'
@@ -14,6 +14,7 @@ import {
 } from '../../components/ui/alert-dialog'
 import { uploadFileWithProgress, createUploadItem, deleteFile, toggleFavorite, toggleFolderFavorite, renameFile, renameFolder, restoreFile, restoreFolder, emptyTrash, permanentDeleteFile, permanentDeleteFolder } from '../../lib/files'
 import type { FileItem, FolderItem, UploadItem } from '../../lib/files'
+import type { WorkspaceSort } from './route-utils'
 
 interface BreadcrumbItem {
   id: string | null
@@ -29,6 +30,8 @@ interface WorkspacePageProps {
   favoritesOnly?: boolean
   view: 'grid' | 'list'
   onViewChange: (view: 'grid' | 'list') => void
+  sort?: WorkspaceSort
+  onSortChange?: (sort: WorkspaceSort) => void
 }
 
 const emptyFolders: FolderItem[] = []
@@ -42,6 +45,8 @@ export default function WorkspacePage({
   favoritesOnly = false,
   view,
   onViewChange,
+  sort = 'name-asc',
+  onSortChange,
 }: WorkspacePageProps) {
   const router = useRouter()
   const [files, setFiles] = useState(initialFiles)
@@ -244,6 +249,32 @@ export default function WorkspacePage({
     }
   }, [favoritesOnly])
 
+  const sortedFolders = useMemo(() => {
+    const lastDash = sort.lastIndexOf('-')
+    const key = sort.slice(0, lastDash)
+    const order = sort.slice(lastDash + 1)
+    return [...folders].sort((a, b) => {
+      let cmp = 0
+      if (key === 'name') cmp = a.name.localeCompare(b.name, 'ja')
+      else if (key === 'updated_at') cmp = (a.updated_at ?? '').localeCompare(b.updated_at ?? '')
+      else if (key === 'size') cmp = (a.total_size ?? 0) - (b.total_size ?? 0)
+      return order === 'desc' ? -cmp : cmp
+    })
+  }, [folders, sort])
+
+  const sortedFiles = useMemo(() => {
+    const lastDash = sort.lastIndexOf('-')
+    const key = sort.slice(0, lastDash)
+    const order = sort.slice(lastDash + 1)
+    return [...files].sort((a, b) => {
+      let cmp = 0
+      if (key === 'name') cmp = a.name.localeCompare(b.name, 'ja')
+      else if (key === 'updated_at') cmp = (a.updated_at ?? '').localeCompare(b.updated_at ?? '')
+      else if (key === 'size') cmp = a.size - b.size
+      return order === 'desc' ? -cmp : cmp
+    })
+  }, [files, sort])
+
   const uploading = uploadItems.some((i) => i.status === 'uploading')
 
   return (
@@ -264,6 +295,8 @@ export default function WorkspacePage({
         }}
         mode={mode}
         onEmptyTrash={() => setEmptyTrashOpen(true)}
+        sort={sort}
+        onSortChange={onSortChange}
       />
 
       {favoriteError && (
@@ -277,8 +310,8 @@ export default function WorkspacePage({
 
       <div className="bg-card text-card-foreground rounded-xl ring-1 ring-foreground/10 mx-1.5 min-h-96">
             <MainContentsDefault
-              files={files}
-              folders={folders}
+              files={sortedFiles}
+              folders={sortedFolders}
               view={view}
               mode={mode}
               onFileSelect={mode === 'trash' ? undefined : handleFileSelect}

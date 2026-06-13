@@ -10,9 +10,11 @@ import {
 import type { FileItem, FolderItem } from '../../lib/files'
 
 export type WorkspaceView = 'grid' | 'list'
+export type WorkspaceSort = 'name-asc' | 'name-desc' | 'updated_at-desc' | 'updated_at-asc' | 'size-desc' | 'size-asc'
 
 export interface WorkspaceSearch {
   view?: WorkspaceView
+  sort?: WorkspaceSort
 }
 
 export interface WorkspaceData {
@@ -32,10 +34,15 @@ const pendingItemIds = [
   'pending-8',
 ]
 
+const VALID_SORTS: WorkspaceSort[] = ['name-asc', 'name-desc', 'updated_at-desc', 'updated_at-asc', 'size-desc', 'size-asc']
+
 export function validateWorkspaceSearch(search: Record<string, unknown>): WorkspaceSearch {
-  return search.view === 'list' || search.view === 'grid'
-    ? { view: search.view }
-    : {}
+  const result: WorkspaceSearch = {}
+  if (search.view === 'list' || search.view === 'grid') result.view = search.view
+  if (typeof search.sort === 'string' && (VALID_SORTS as string[]).includes(search.sort)) {
+    result.sort = search.sort as WorkspaceSort
+  }
+  return result
 }
 
 export async function loadDrive(folderId: string | null = null): Promise<WorkspaceData> {

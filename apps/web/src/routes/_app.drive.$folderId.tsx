@@ -19,7 +19,7 @@ export const Route = createFileRoute('/_app/drive/$folderId')({
 function FolderPage() {
   const data = Route.useLoaderData()
   const { folderId } = Route.useParams()
-  const { view } = Route.useSearch()
+  const { view, sort } = Route.useSearch()
   const navigate = Route.useNavigate()
 
   return (
@@ -29,7 +29,9 @@ function FolderPage() {
       currentFolderId={folderId}
       breadcrumb={data.breadcrumb}
       view={view ?? 'grid'}
-      onViewChange={(nextView) => navigate({ search: { view: nextView } })}
+      onViewChange={(nextView) => navigate({ search: (prev) => ({ ...prev, view: nextView }) })}
+      sort={sort}
+      onSortChange={(nextSort) => navigate({ search: (prev) => ({ ...prev, sort: nextSort }) })}
     />
   )
 }

@@ -1,10 +1,27 @@
 import type React from 'react'
-import { ChevronRight, FolderPlus, CloudUpload, Share2, Trash2, LayoutGrid, List } from 'lucide-react'
+import { ChevronRight, FolderPlus, CloudUpload, Share2, Trash2, LayoutGrid, List, ArrowUpDown, Check } from 'lucide-react'
 import { Button } from './ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from './ui/dropdown-menu'
+import type { WorkspaceSort } from '../routes/-workspace/route-utils'
 
 interface BreadcrumbItem {
   id: string | null
   name: string
+}
+
+const SORT_LABELS: Record<WorkspaceSort, string> = {
+  'name-asc': '名前 (A → Z)',
+  'name-desc': '名前 (Z → A)',
+  'updated_at-desc': '更新日時 (新しい順)',
+  'updated_at-asc': '更新日時 (古い順)',
+  'size-desc': 'サイズ (大きい順)',
+  'size-asc': 'サイズ (小さい順)',
 }
 
 interface ToolbarDefaultProps {
@@ -17,6 +34,8 @@ interface ToolbarDefaultProps {
   onBreadcrumbNavigate?: (id: string | null) => void
   mode?: 'normal' | 'trash'
   onEmptyTrash?: () => void
+  sort?: WorkspaceSort
+  onSortChange?: (sort: WorkspaceSort) => void
 }
 
 export default function ToolbarDefault({
@@ -29,6 +48,8 @@ export default function ToolbarDefault({
   onBreadcrumbNavigate,
   mode = 'normal',
   onEmptyTrash,
+  sort = 'name-asc',
+  onSortChange,
 }: ToolbarDefaultProps) {
   return (
     <div className="bg-card text-card-foreground h-12 mx-1.5 my-2 px-3 rounded-lg flex items-center gap-1 ring-1 ring-foreground/10 overflow-x-auto">
@@ -83,6 +104,39 @@ export default function ToolbarDefault({
       )}
 
       <div className="ml-auto flex items-center gap-0.5 shrink-0">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm" title="並び替え" className="gap-1.5">
+              <ArrowUpDown className="size-4" />
+              <span className="hidden sm:inline text-xs">{SORT_LABELS[sort]}</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            {(['name-asc', 'name-desc'] as WorkspaceSort[]).map((s) => (
+              <DropdownMenuItem key={s} onSelect={() => onSortChange?.(s)}>
+                {sort === s && <Check className="mr-2 size-4" />}
+                {sort !== s && <span className="mr-2 size-4 inline-block" />}
+                {SORT_LABELS[s]}
+              </DropdownMenuItem>
+            ))}
+            <DropdownMenuSeparator />
+            {(['updated_at-desc', 'updated_at-asc'] as WorkspaceSort[]).map((s) => (
+              <DropdownMenuItem key={s} onSelect={() => onSortChange?.(s)}>
+                {sort === s && <Check className="mr-2 size-4" />}
+                {sort !== s && <span className="mr-2 size-4 inline-block" />}
+                {SORT_LABELS[s]}
+              </DropdownMenuItem>
+            ))}
+            <DropdownMenuSeparator />
+            {(['size-desc', 'size-asc'] as WorkspaceSort[]).map((s) => (
+              <DropdownMenuItem key={s} onSelect={() => onSortChange?.(s)}>
+                {sort === s && <Check className="mr-2 size-4" />}
+                {sort !== s && <span className="mr-2 size-4 inline-block" />}
+                {SORT_LABELS[s]}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
         <Button
           variant={view === 'grid' ? 'secondary' : 'ghost'}
           size="icon-sm"

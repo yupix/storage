@@ -18,7 +18,7 @@ export const Route = createFileRoute('/_app/trash')({
 
 function TrashPage() {
   const data = Route.useLoaderData()
-  const { view } = Route.useSearch()
+  const { view, sort } = Route.useSearch()
   const navigate = Route.useNavigate()
   return (
     <WorkspacePage
@@ -27,7 +27,9 @@ function TrashPage() {
       breadcrumb={data.breadcrumb}
       mode="trash"
       view={view ?? 'grid'}
-      onViewChange={(nextView) => navigate({ search: { view: nextView } })}
+      onViewChange={(nextView) => navigate({ search: (prev) => ({ ...prev, view: nextView }) })}
+      sort={sort}
+      onSortChange={(nextSort) => navigate({ search: (prev) => ({ ...prev, sort: nextSort }) })}
     />
   )
 }
