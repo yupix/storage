@@ -222,7 +222,7 @@ export async function searchFiles(
   limit = 50,
 ): Promise<PaginatedFiles> {
   const res = await fetch(
-    `/v1/files/search?q=${encodeURIComponent(q)}&page=${page}&limit=${limit}`,
+    `/v1/search?q=${encodeURIComponent(q)}&page=${page}&limit=${limit}`,
   )
   if (!res.ok) throw new Error('検索に失敗しました')
   return res.json() as Promise<PaginatedFiles>
