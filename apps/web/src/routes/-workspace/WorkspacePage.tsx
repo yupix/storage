@@ -12,7 +12,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '../../components/ui/alert-dialog'
-import { uploadFileWithProgress, createUploadItem, deleteFile, toggleFavorite, renameFile, renameFolder, restoreFile, restoreFolder, emptyTrash, permanentDeleteFile, permanentDeleteFolder } from '../../lib/files'
+import { uploadFileWithProgress, createUploadItem, deleteFile, toggleFavorite, toggleFolderFavorite, renameFile, renameFolder, restoreFile, restoreFolder, emptyTrash, permanentDeleteFile, permanentDeleteFolder } from '../../lib/files'
 import type { FileItem, FolderItem, UploadItem } from '../../lib/files'
 
 interface BreadcrumbItem {
@@ -215,6 +215,23 @@ export default function WorkspacePage({
     }
   }, [favoritesOnly])
 
+  const handleToggleFolderFavorite = useCallback(async (id: string, current: boolean) => {
+    const next = !current
+    setFolders((prev) => prev.map((folder) =>
+      folder.id === id ? { ...folder, is_favorite: next } : folder,
+    ))
+    try {
+      await toggleFolderFavorite(id, next)
+      if (favoritesOnly && !next) {
+        setFolders((prev) => prev.filter((folder) => folder.id !== id))
+      }
+    } catch {
+      setFolders((prev) => prev.map((folder) =>
+        folder.id === id ? { ...folder, is_favorite: current } : folder,
+      ))
+    }
+  }, [favoritesOnly])
+
   const uploading = uploadItems.some((i) => i.status === 'uploading')
 
   return (
@@ -257,6 +274,7 @@ export default function WorkspacePage({
               onFolderDelete={mode === 'trash' ? undefined : setDeleteFolderTargetId}
               onFolderMove={mode === 'trash' ? undefined : setMoveFolderTargetId}
               onFolderRename={mode === 'trash' ? undefined : (id, name) => setRenameTarget({ id, name, kind: 'folder' })}
+              onFolderToggleFavorite={mode === 'trash' ? undefined : handleToggleFolderFavorite}
             />
       </div>
 

@@ -180,10 +180,14 @@ pub async fn list_folders(
         .order_by_asc(folders::Column::Name)
         .order_by_asc(folders::Column::Id);
 
-    selector = match query.folder_id {
-        Some(parent_id) => selector.filter(folders::Column::FolderId.eq(parent_id)),
-        None => selector.filter(folders::Column::FolderId.is_null()),
-    };
+    if let Some(is_favorite) = query.is_favorite {
+        selector = selector.filter(folders::Column::IsFavorite.eq(is_favorite));
+    } else {
+        selector = match query.folder_id {
+            Some(parent_id) => selector.filter(folders::Column::FolderId.eq(parent_id)),
+            None => selector.filter(folders::Column::FolderId.is_null()),
+        };
+    }
 
     let paginator = selector.paginate(&state.db, limit);
     let total = paginator.num_items().await?;
@@ -240,6 +244,7 @@ pub async fn create_folder(
         folder_id: Set(payload.folder_id),
         owner_id: Set(auth.user_id),
         is_deleted: Set(false),
+        is_favorite: Set(false),
         total_size: Set(0),
         deleted_at: Set(None),
         created_at: Set(Some(now)),
@@ -292,9 +297,9 @@ pub async fn update_folder(
     Path(id): Path<Uuid>,
     Valid(Json(payload)): Valid<Json<UpdateFolderRequest>>,
 ) -> Result<Json<FolderResponse>, AuthError> {
-    if payload.name.is_none() && payload.folder_id.is_none() {
+    if payload.name.is_none() && payload.folder_id.is_none() && payload.is_favorite.is_none() {
         return Err(AuthError::InvalidInput(
-            "name and folder_id cannot both be omitted".into(),
+            "name, folder_id and is_favorite cannot all be omitted".into(),
         ));
     }
 
@@ -354,6 +359,9 @@ pub async fn update_folder(
     }
     if let Some(parent) = new_parent {
         am.folder_id = Set(parent);
+    }
+    if let Some(is_favorite) = payload.is_favorite {
+        am.is_favorite = Set(is_favorite);
     }
     am.updated_at = Set(Some(now));
     let folder = am.update(&txn).await?;

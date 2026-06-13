@@ -48,9 +48,21 @@ export async function fetchMyFiles(
   return data
 }
 
-export async function fetchFolders(folderId?: string | null, page = 1, limit = 100): Promise<PaginatedFolders> {
+export async function fetchFolders(
+  folderId?: string | null,
+  page = 1,
+  limit = 100,
+  isFavorite?: boolean,
+): Promise<PaginatedFolders> {
   const { data, error } = await apiClient.GET('/v1/folders', {
-    params: { query: { page, limit, ...(folderId ? { folder_id: folderId } : {}) } },
+    params: {
+      query: {
+        page,
+        limit,
+        ...(folderId ? { folder_id: folderId } : {}),
+        ...(isFavorite !== undefined ? { is_favorite: isFavorite } : {}),
+      },
+    },
   })
   if (error || !data) throw new Error('フォルダー一覧の取得に失敗しました')
   return data
@@ -94,6 +106,15 @@ export async function moveFolder(id: string, folderId: string | null): Promise<F
     body: { folder_id: folderId },
   })
   if (error || !data) throw new Error('フォルダーの移動に失敗しました')
+  return data
+}
+
+export async function toggleFolderFavorite(id: string, isFavorite: boolean): Promise<FolderItem> {
+  const { data, error } = await apiClient.PATCH('/v1/folders/{id}', {
+    params: { path: { id } },
+    body: { is_favorite: isFavorite },
+  })
+  if (error || !data) throw new Error('フォルダーのお気に入り更新に失敗しました')
   return data
 }
 
