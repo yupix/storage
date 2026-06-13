@@ -880,7 +880,8 @@ async fn search_vector(
     limit: u64,
 ) -> Result<Json<PaginatedFileResponse>, AuthError> {
     let embedder = state.embedder.clone();
-    let text = q.to_string();
+    // multilingual-e5 はクエリ側に "query: " プレフィックスが必要
+    let text = format!("query: {q}");
     let embeddings = tokio::task::spawn_blocking(move || embedder.embed(vec![text], None))
         .await
         .map_err(|e| AuthError::Internal(anyhow::anyhow!("spawn_blocking: {e}")))?

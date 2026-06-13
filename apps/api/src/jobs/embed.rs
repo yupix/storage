@@ -32,7 +32,8 @@ pub async fn process_embed_job(job: EmbedJob, state: Data<AppState>) -> Result<(
     }
 
     let embedder = state.embedder.clone();
-    let texts = vec![text];
+    // multilingual-e5 はドキュメント側に "passage: " プレフィックスが必要
+    let texts = vec![format!("passage: {text}")];
     let embeddings = tokio::task::spawn_blocking(move || embedder.embed(texts, None))
         .await
         .map_err(|e| format!("spawn_blocking: {e}"))?
