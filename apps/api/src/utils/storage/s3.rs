@@ -75,10 +75,9 @@ impl StorageDriver for S3Driver {
             .send()
             .await
             .map_err(|e| anyhow::anyhow!("download failed: {e}"))?;
-        let bytes = resp.body.collect().await
-            .map_err(|e| anyhow::anyhow!("read body failed: {e}"))?.into_bytes();
+        let mut reader = resp.body.into_async_read();
         let mut file = tokio::fs::File::create(dest).await?;
-        file.write_all(&bytes).await?;
+        tokio::io::copy(&mut reader, &mut file).await?;
         Ok(())
     }
 
