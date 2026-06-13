@@ -60,7 +60,7 @@ export async function fetchFolders(
         page,
         limit,
         ...(folderId ? { folder_id: folderId } : {}),
-        ...(isFavorite !== undefined ? { is_favorite: isFavorite } : {}),
+        ...(isFavorite === true ? { is_favorite: true } : {}),
       },
     },
   })

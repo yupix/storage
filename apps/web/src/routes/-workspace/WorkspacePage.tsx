@@ -62,6 +62,7 @@ export default function WorkspacePage({
   const [purging, setPurging] = useState(false)
   const [purgeFolderTargetId, setPurgeFolderTargetId] = useState<string | null>(null)
   const [purgingFolder, setPurgingFolder] = useState(false)
+  const [favoriteError, setFavoriteError] = useState<string | null>(null)
 
   useEffect(() => {
     setFiles(initialFiles)
@@ -204,6 +205,7 @@ export default function WorkspacePage({
 
   const handleToggleFavorite = useCallback(async (id: string, current: boolean) => {
     const next = !current
+    setFavoriteError(null)
     setFiles((prev) => prev.map((f) => f.id === id ? { ...f, is_favorite: next } : f))
     try {
       await toggleFavorite(id, next)
@@ -212,11 +214,13 @@ export default function WorkspacePage({
       }
     } catch {
       setFiles((prev) => prev.map((f) => f.id === id ? { ...f, is_favorite: current } : f))
+      setFavoriteError('ファイルのお気に入りを更新できませんでした')
     }
   }, [favoritesOnly])
 
   const handleToggleFolderFavorite = useCallback(async (id: string, current: boolean) => {
     const next = !current
+    setFavoriteError(null)
     setFolders((prev) => prev.map((folder) =>
       folder.id === id ? { ...folder, is_favorite: next } : folder,
     ))
@@ -229,6 +233,7 @@ export default function WorkspacePage({
       setFolders((prev) => prev.map((folder) =>
         folder.id === id ? { ...folder, is_favorite: current } : folder,
       ))
+      setFavoriteError('フォルダーのお気に入りを更新できませんでした')
     }
   }, [favoritesOnly])
 
@@ -253,6 +258,15 @@ export default function WorkspacePage({
         mode={mode}
         onEmptyTrash={() => setEmptyTrashOpen(true)}
       />
+
+      {favoriteError && (
+        <div
+          role="alert"
+          className="mx-1.5 mb-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+        >
+          {favoriteError}
+        </div>
+      )}
 
       <div className="bg-card text-card-foreground rounded-xl ring-1 ring-foreground/10 mx-1.5 min-h-96">
             <MainContentsDefault
