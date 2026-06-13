@@ -228,7 +228,7 @@ pub async fn upload_file(
     eprintln!("[upload] mime={mime}, ocr_supported={}", ocr::is_ocr_supported(&mime));
     let ocr_text = if ocr::is_ocr_supported(&mime) {
         let tmp_path = ff.tmp.path().to_path_buf();
-        let result = ocr::extract_text(&tmp_path).await;
+        let result = ocr::extract_text(&tmp_path, &mime).await;
         eprintln!("[upload] OCR 結果: {:?}", result.as_deref().map(|s| &s[..s.len().min(80)]));
         result
     } else {
