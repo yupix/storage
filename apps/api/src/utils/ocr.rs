@@ -21,7 +21,7 @@ pub fn is_ocr_supported(mime: &str) -> bool {
     SUPPORTED_MIMES.contains(&mime)
 }
 
-fn mime_to_ext(mime: &str) -> &'static str {
+pub fn mime_to_ext(mime: &str) -> &'static str {
     match mime {
         "image/jpeg" | "image/jpg" => "jpg",
         "image/png" => "png",
@@ -34,9 +34,8 @@ fn mime_to_ext(mime: &str) -> &'static str {
 }
 
 /// ndlocr-lite を使って画像からテキストを抽出する（async版）。
-/// tokio::process::Command を使い、SIGCHLD との競合を避ける。
-/// mime: ndlocr-lite が拡張子で画像を判定するため必須。
-pub async fn extract_text(image_path: &Path, mime: &str) -> Option<String> {
+/// image_path には必ず正しい拡張子を付けること（ndlocr-lite が拡張子で形式を判定する）。
+pub async fn extract_text(image_path: &Path) -> Option<String> {
     eprintln!("[OCR] 開始: script={OCR_SCRIPT:?} image={image_path:?}");
 
     if !std::path::Path::new(OCR_SCRIPT).exists() {
@@ -44,27 +43,15 @@ pub async fn extract_text(image_path: &Path, mime: &str) -> Option<String> {
         return None;
     }
 
-    // ndlocr-lite は拡張子でファイル形式を判定する。
-    // API の一時ファイルには拡張子がないため、正しい拡張子を持つ一時ファイルにコピーする。
-    let ext = mime_to_ext(mime);
-    let named_tmp = tempfile::Builder::new()
-        .suffix(&format!(".{ext}"))
-        .tempfile()
-        .ok()?;
-    std::fs::copy(image_path, named_tmp.path())
-        .map_err(|e| eprintln!("[OCR] ファイルコピー失敗: {e}"))
-        .ok()?;
-
     let out_dir = tempfile::TempDir::new().ok()?;
     let out_path = out_dir.path().to_path_buf();
-    let named_tmp_path = named_tmp.path().to_path_buf();
 
     let output = tokio::time::timeout(
         Duration::from_secs(TIMEOUT_SECS),
         tokio::process::Command::new("python3")
             .arg(OCR_SCRIPT)
             .arg("--sourceimg")
-            .arg(&named_tmp_path)
+            .arg(image_path)
             .arg("--output")
             .arg(&out_path)
             .arg("--json-only")

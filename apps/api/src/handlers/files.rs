@@ -225,10 +225,19 @@ pub async fn upload_file(
     let storage_key = format!("{}/{}", current_user.id, file_id);
 
     // OCR はアップロード後にバックグラウンドで実行するため、ここでは None を設定する。
-    // アップロードレスポンスをブロックしないことでセッションミドルウェアの干渉を避ける。
+    // ff.tmp はハンドラー終了時に drop されてファイルが消えるため、
+    // バックグラウンドタスクに渡す前に拡張子付き一時ファイルにコピーして所有権を移す。
     let ocr_mime = mime.clone();
-    let ocr_tmp_path = if ocr::is_ocr_supported(&mime) {
-        Some(ff.tmp.path().to_path_buf())
+    let ocr_preserved = if ocr::is_ocr_supported(&mime) {
+        let ext = ocr::mime_to_ext(&mime);
+        tempfile::Builder::new()
+            .suffix(&format!(".{ext}"))
+            .tempfile()
+            .ok()
+            .and_then(|tmp| {
+                std::fs::copy(ff.tmp.path(), tmp.path()).ok()?;
+                Some(tmp)
+            })
     } else {
         None
     };
@@ -307,11 +316,13 @@ pub async fn upload_file(
     };
 
     // OCR をバックグラウンドで実行し、完了後に ocr_text を更新する。
-    // NamedTempFile は spawn 後もアクセスされるため move して所有権を渡す。
-    if let Some(tmp_path) = ocr_tmp_path {
+    // ocr_preserved を move することで NamedTempFile が drop されずファイルが生き続ける。
+    if let Some(preserved) = ocr_preserved {
         let db = state.db.clone();
         tokio::spawn(async move {
-            if let Some(text) = ocr::extract_text(&tmp_path, &ocr_mime).await {
+            // preserved を move して所有することでタスク完了まで一時ファイルを保持する
+            let _keep = preserved;
+            if let Some(text) = ocr::extract_text(_keep.path()).await {
                 eprintln!("[OCR] 完了: {} 文字 → file_id={file_id}", text.chars().count());
                 let mut active = files::ActiveModel {
                     id: Set(file_id),
