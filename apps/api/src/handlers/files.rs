@@ -25,8 +25,9 @@ use crate::payloads::files::{
 use crate::utils::auth::AuthError;
 use crate::utils::folder_size::adjust_folder_chain;
 use crate::utils::ocr;
-use crate::jobs::ocr::OcrJob;
+use crate::jobs::caption::CaptionJob;
 use crate::jobs::embed::EmbedJob;
+use crate::jobs::ocr::OcrJob;
 use crate::AppState;
 use apalis::prelude::TaskSink;
 
@@ -228,6 +229,7 @@ pub async fn upload_file(
     let storage_key = format!("{}/{}", current_user.id, file_id);
 
     let ocr_mime = mime.clone();
+    let caption_mime = mime.clone();
     let ocr_supported = ocr::is_ocr_supported(&mime);
 
     state
@@ -271,6 +273,7 @@ pub async fn upload_file(
             is_deleted: Set(false),
             deleted_at: Set(None),
             ocr_text: Set(None),
+            caption: Set(None),
             created_at: Set(Some(now)),
             updated_at: Set(Some(now)),
             is_favorite: Set(false),
@@ -327,9 +330,21 @@ pub async fn upload_file(
     }
 
     // ファイル名でのベクトルインデックスを非同期で生成する。
-    // OCR 対応ファイルは OCR 完了後にも再インデックスされる。
+    // OCR / Caption 完了後にも再インデックスされる。
     if let Err(e) = state.embed_queue.clone().push(EmbedJob { file_id }).await {
         eprintln!("[upload] EmbedJob のキュー追加失敗 (非致命的): file_id={file_id} err={e}");
+    }
+
+    // 画像キャプション生成（CAPTION_DRIVER 設定時のみ有効）
+    if ocr_supported {
+        let cap_job = CaptionJob {
+            file_id,
+            storage_key: storage_key.clone(),
+            mime: caption_mime,
+        };
+        if let Err(e) = state.caption_queue.clone().push(cap_job).await {
+            eprintln!("[upload] CaptionJob のキュー追加失敗 (非致命的): file_id={file_id} err={e}");
+        }
     }
 
     Ok((StatusCode::CREATED, Json(file_to_response(model))))

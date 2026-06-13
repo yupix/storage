@@ -12,6 +12,12 @@ pub struct Settings {
     pub qdrant_url: String,
     pub qdrant_api_key: Option<String>,
 
+    /// キャプションドライバー: "gemini" / "local_http" / 未設定(無効)
+    pub caption_driver: Option<String>,
+    pub gemini_api_key: Option<String>,
+    /// ローカル HTTP キャプションサービスの URL（既定: http://localhost:8500）
+    pub caption_local_url: Option<String>,
+
     #[serde(default)]
     pub storage_driver: Option<String>,
 

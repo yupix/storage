@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use apalis::prelude::*;
 use apalis_redis::RedisStorage;
-use api::{AppState, EMBED_DIM, QDRANT_COLLECTION, jobs::{embed, ocr}, server::run, utils::qdrant::QdrantRest};
+use api::{AppState, EMBED_DIM, QDRANT_COLLECTION, jobs::{caption, embed, ocr}, server::run, utils::caption::build_captioner, utils::qdrant::QdrantRest};
 use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
 use tokio_util::sync::CancellationToken;
 
@@ -25,7 +25,10 @@ async fn main() -> Result<(), anyhow::Error> {
     let redis = redis::Client::open(settings.redis_url.as_str())?;
     let conn = redis::aio::ConnectionManager::new(redis).await?;
     let ocr_queue = RedisStorage::new(conn.clone());
-    let embed_queue = RedisStorage::new(conn);
+    let embed_queue = RedisStorage::new(conn.clone());
+    let caption_queue = RedisStorage::new(conn);
+
+    let captioner = build_captioner(&settings)?;
 
     let qdrant = QdrantRest::new(&settings.qdrant_url, settings.qdrant_api_key.as_deref())?;
     ensure_qdrant_collection(&qdrant).await?;
@@ -48,8 +51,10 @@ async fn main() -> Result<(), anyhow::Error> {
         storage,
         ocr_queue: ocr_queue.clone(),
         embed_queue: embed_queue.clone(),
+        caption_queue: caption_queue.clone(),
         qdrant: qdrant.clone(),
         embedder,
+        captioner,
     };
 
     let shutdown = CancellationToken::new();
@@ -84,6 +89,21 @@ async fn main() -> Result<(), anyhow::Error> {
         }
     });
 
+    let caption_shutdown = shutdown.clone();
+    let caption_worker_id = format!("caption-worker-{}", uuid::Uuid::new_v4());
+    let caption_worker = WorkerBuilder::new(&caption_worker_id)
+        .backend(caption_queue)
+        .concurrency(2)
+        .data(state.clone())
+        .build(caption::process_caption_job);
+    let mut caption_task = tokio::spawn(async move {
+        tokio::select! {
+            biased;
+            _ = caption_shutdown.cancelled() => Ok(()),
+            res = caption_worker.run() => res,
+        }
+    });
+
     let server_shutdown = shutdown.clone();
     let mut server_task = tokio::spawn(run(state, server_shutdown));
 
@@ -93,7 +113,7 @@ async fn main() -> Result<(), anyhow::Error> {
             eprintln!("[shutdown] ワーカーの完了を待機中 (最大 {WORKER_DRAIN_SECS} 秒)...");
             let _ = tokio::time::timeout(
                 Duration::from_secs(WORKER_DRAIN_SECS),
-                async { let _ = tokio::join!(ocr_task, embed_task); },
+                async { let _ = tokio::join!(ocr_task, embed_task, caption_task); },
             ).await;
             result??;
         }
@@ -122,6 +142,21 @@ async fn main() -> Result<(), anyhow::Error> {
                 }
                 Err(e) => {
                     eprintln!("[shutdown] Embedワーカーパニック: {e}");
+                    shutdown.cancel(); let _ = server_task.await;
+                    return Err(e.into());
+                }
+            }
+        }
+        result = &mut caption_task => {
+            match result {
+                Ok(Ok(())) => { shutdown.cancel(); let _ = server_task.await; }
+                Ok(Err(e)) => {
+                    eprintln!("[shutdown] Captionワーカー異常終了: {e}");
+                    shutdown.cancel(); let _ = server_task.await;
+                    return Err(e.into());
+                }
+                Err(e) => {
+                    eprintln!("[shutdown] Captionワーカーパニック: {e}");
                     shutdown.cancel(); let _ = server_task.await;
                     return Err(e.into());
                 }

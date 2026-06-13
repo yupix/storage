@@ -30,6 +30,12 @@ pub async fn process_embed_job(job: EmbedJob, state: Data<AppState>) -> Result<(
             text.push_str(ocr);
         }
     }
+    if let Some(ref cap) = file.caption {
+        if !cap.is_empty() {
+            text.push(' ');
+            text.push_str(cap);
+        }
+    }
 
     let embedder = state.embedder.clone();
     // multilingual-e5 はドキュメント側に "passage: " プレフィックスが必要

@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod caption;
 pub mod folder_size;
 pub mod ocr;
 pub mod qdrant;
