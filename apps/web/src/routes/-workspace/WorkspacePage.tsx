@@ -31,9 +31,11 @@ interface WorkspacePageProps {
   onViewChange: (view: 'grid' | 'list') => void
 }
 
+const emptyFolders: FolderItem[] = []
+
 export default function WorkspacePage({
   initialFiles,
-  initialFolders = [],
+  initialFolders = emptyFolders,
   currentFolderId = null,
   breadcrumb = [],
   mode = 'normal',
