@@ -39,7 +39,10 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // ワーカータスク: shutdown キャンセル時にポーリングループを即時終了する
     let worker_shutdown = shutdown.clone();
-    let worker = WorkerBuilder::new("ocr-worker")
+    // ワーカー名を起動ごとにユニークにする。
+    // 固定名だと Redis に残った前回の登録が "worker is still active" エラーを引き起こす。
+    let worker_id = format!("ocr-worker-{}", uuid::Uuid::new_v4());
+    let worker = WorkerBuilder::new(&worker_id)
         .backend(ocr_queue)
         .concurrency(2)
         .data(state.clone())
