@@ -7,6 +7,7 @@ pub mod entities;
 pub mod error;
 pub mod extractors;
 pub mod handlers;
+pub mod jobs;
 pub mod models;
 pub mod openapi;
 pub mod payloads;
@@ -21,4 +22,5 @@ pub struct AppState {
     pub db: DatabaseConnection,
     pub redis_client: RedisConnection,
     pub storage: Storage,
+    pub ocr_queue: apalis_redis::RedisStorage<jobs::ocr::OcrJob>,
 }

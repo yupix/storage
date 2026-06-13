@@ -1,4 +1,6 @@
-use api::{AppState, server::run};
+use apalis::prelude::*;
+use apalis_redis::RedisStorage;
+use api::{AppState, jobs::ocr, server::run};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -13,13 +15,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let storage = api::utils::storage::build_storage(&settings)?;
 
+    let redis = redis::Client::open(settings.redis_url.as_str())?;
+    let conn = redis::aio::ConnectionManager::new(redis).await?;
+    let ocr_queue = RedisStorage::new(conn);
+
     let state = AppState {
         settings,
         db,
         redis_client,
         storage,
+        ocr_queue: ocr_queue.clone(),
     };
-    run(state).await?;
+
+    let worker = WorkerBuilder::new("ocr-worker")
+        .backend(ocr_queue)
+        .concurrency(2)
+        .data(state.clone())
+        .build(ocr::process_ocr_job);
+
+    tokio::select! {
+        res = run(state) => res?,
+        res = worker.run() => res?,
+    }
 
     Ok(())
 }

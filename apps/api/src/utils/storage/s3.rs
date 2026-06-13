@@ -7,6 +7,7 @@ use aws_sdk_s3::{
     presigning::PresigningConfig,
     primitives::ByteStream,
 };
+use tokio::io::AsyncWriteExt;
 
 use super::driver::StorageDriver;
 
@@ -63,6 +64,21 @@ impl StorageDriver for S3Driver {
             .send()
             .await
             .map_err(|e| anyhow::anyhow!("delete failed: {e}"))?;
+        Ok(())
+    }
+
+    async fn download_to(&self, key: &str, dest: &Path) -> Result<()> {
+        let resp = self.inner
+            .get_object()
+            .bucket(&self.bucket)
+            .key(key)
+            .send()
+            .await
+            .map_err(|e| anyhow::anyhow!("download failed: {e}"))?;
+        let bytes = resp.body.collect().await
+            .map_err(|e| anyhow::anyhow!("read body failed: {e}"))?.into_bytes();
+        let mut file = tokio::fs::File::create(dest).await?;
+        file.write_all(&bytes).await?;
         Ok(())
     }
 

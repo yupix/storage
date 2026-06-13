@@ -74,6 +74,12 @@ impl StorageDriver for LocalDriver {
         }
     }
 
+    async fn download_to(&self, key: &str, dest: &Path) -> Result<()> {
+        let src = self.resolve_path(key)?;
+        tokio::fs::copy(&src, dest).await?;
+        Ok(())
+    }
+
     async fn get_download_url(&self, key: &str, content_type: &str, expires_in: Duration) -> Result<String> {
         let exp = (Utc::now() + expires_in).timestamp() as u64;
         let sig = self.sign(key, exp, content_type);
