@@ -304,7 +304,7 @@ pub async fn upload_file(
 
     if ocr_supported {
         let job = OcrJob {
-            file_id: file_id.to_string(),
+            file_id,
             storage_key: storage_key.clone(),
             mime: ocr_mime,
         };

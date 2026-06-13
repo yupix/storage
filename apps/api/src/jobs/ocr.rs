@@ -1,6 +1,7 @@
 use apalis::prelude::*;
 use sea_orm::{ActiveModelTrait, ActiveValue::Set};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use crate::{
     AppState,
@@ -10,7 +11,7 @@ use crate::{
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct OcrJob {
-    pub file_id: String,
+    pub file_id: Uuid,
     pub storage_key: String,
     pub mime: String,
 }
@@ -18,7 +19,7 @@ pub struct OcrJob {
 pub async fn process_ocr_job(job: OcrJob, state: Data<AppState>) -> Result<(), String> {
     eprintln!("[OCR job] 開始: file_id={}", job.file_id);
 
-    let file_id: uuid::Uuid = job.file_id.parse().map_err(|e| format!("invalid file_id: {e}"))?;
+    let file_id = job.file_id;
     let ext = ocr::mime_to_ext(&job.mime);
 
     let tmp = tempfile::Builder::new()
