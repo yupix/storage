@@ -69,6 +69,13 @@ export default function WorkspacePage({
     setFolders(initialFolders)
   }, [initialFiles, initialFolders])
 
+  useEffect(() => {
+    if (!favoriteError) return
+
+    const timer = window.setTimeout(() => setFavoriteError(null), 5000)
+    return () => window.clearTimeout(timer)
+  }, [favoriteError])
+
   const refreshFiles = useCallback(async () => {
     await router.invalidate()
   }, [router])
