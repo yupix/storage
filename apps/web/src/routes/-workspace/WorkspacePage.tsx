@@ -9,6 +9,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core'
+import { snapCenterToCursor } from '@dnd-kit/modifiers'
 import { Folder } from 'lucide-react'
 import ToolbarDefault from '../../components/ToolbarDefault'
 import MainContentsDefault from '#/components/MainContents'
@@ -380,7 +381,7 @@ export default function WorkspacePage({
             />
       </div>
 
-      <DragOverlay dropAnimation={null}>
+      <DragOverlay dropAnimation={null} modifiers={[snapCenterToCursor]}>
         {activeDragItem ? (
           <div className="flex items-center gap-2 bg-card border border-border rounded-lg px-3 py-2 shadow-lg text-sm font-medium opacity-90 cursor-grabbing select-none">
             {activeDragItem.type === 'folder' && <Folder className="size-4 text-muted-foreground shrink-0" />}
