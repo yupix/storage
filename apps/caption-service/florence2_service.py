@@ -38,6 +38,7 @@ async def lifespan(app: FastAPI):
         model_id,
         trust_remote_code=True,
         torch_dtype=torch.float16 if device == "cuda" else torch.float32,
+        attn_implementation="eager",  # flash_attn 不要（CPU対応）
     ).to(device)
     florence_model.eval()
     log.info("モデルの準備完了")
