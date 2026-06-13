@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Download, X, FileText, File, Loader2 } from 'lucide-react'
+import { Download, FileText, File, Loader2 } from 'lucide-react'
 import { Dialog, DialogContent, DialogTitle } from './ui/dialog'
 import { Button } from './ui/button'
 import { fetchFileDetail } from '../lib/files'
@@ -20,10 +20,12 @@ function PreviewContent({ detail }: { detail: FileDetail }) {
   }
   if (mime.startsWith('video/')) {
     return (
+      // biome-ignore lint/a11y/useMediaCaption: Uploaded files do not provide a separate caption track.
       <video src={detail.url} controls className="max-h-[60vh] max-w-full rounded" />
     )
   }
   if (mime.startsWith('audio/')) {
+    // biome-ignore lint/a11y/useMediaCaption: Uploaded files do not provide a separate caption track.
     return <audio src={detail.url} controls className="w-full" />
   }
   if (mime === 'application/pdf') {
@@ -84,7 +86,7 @@ export default function FilePreviewDialog({ fileId, onClose }: FilePreviewDialog
   return (
     <Dialog open={fileId !== null} onOpenChange={(open) => { if (!open) onClose() }}>
       <DialogContent className="max-w-3xl w-full">
-        <div className="flex items-start justify-between gap-2 mb-4">
+        <div className="flex items-start justify-between gap-2 mb-4 pr-8">
           <div className="flex items-center gap-2 min-w-0">
             <FileText className="size-5 shrink-0 text-muted-foreground" />
             <DialogTitle className="text-base font-medium truncate">
@@ -99,9 +101,6 @@ export default function FilePreviewDialog({ fileId, onClose }: FilePreviewDialog
                 </a>
               </Button>
             )}
-            <Button variant="ghost" size="icon-sm" onClick={onClose}>
-              <X className="size-4" />
-            </Button>
           </div>
         </div>
 
