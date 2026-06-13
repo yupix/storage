@@ -1,0 +1,11 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pillow>=10.0
+python-multipart>=0.0.9
+# moondream
+moondream>=0.0.5
+# florence-2
+transformers>=4.44
+torch>=2.2
+einops>=0.8
+timm>=0.9
