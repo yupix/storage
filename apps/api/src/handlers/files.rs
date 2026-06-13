@@ -25,7 +25,9 @@ use crate::payloads::files::{
 use crate::utils::auth::AuthError;
 use crate::utils::folder_size::adjust_folder_chain;
 use crate::utils::ocr;
+use crate::jobs::ocr::OcrJob;
 use crate::AppState;
+use apalis::prelude::TaskSink;
 
 fn file_to_response(file: files::Model) -> FileResponse {
     FileResponse {
@@ -224,23 +226,8 @@ pub async fn upload_file(
     let file_id = Uuid::new_v4();
     let storage_key = format!("{}/{}", current_user.id, file_id);
 
-    // OCR はアップロード後にバックグラウンドで実行するため、ここでは None を設定する。
-    // ff.tmp はハンドラー終了時に drop されてファイルが消えるため、
-    // バックグラウンドタスクに渡す前に拡張子付き一時ファイルにコピーして所有権を移す。
     let ocr_mime = mime.clone();
-    let ocr_preserved = if ocr::is_ocr_supported(&mime) {
-        let ext = ocr::mime_to_ext(&mime);
-        tempfile::Builder::new()
-            .suffix(&format!(".{ext}"))
-            .tempfile()
-            .ok()
-            .and_then(|tmp| {
-                std::fs::copy(ff.tmp.path(), tmp.path()).ok()?;
-                Some(tmp)
-            })
-    } else {
-        None
-    };
+    let ocr_supported = ocr::is_ocr_supported(&mime);
 
     state
         .storage
@@ -315,25 +302,27 @@ pub async fn upload_file(
         }
     };
 
-    // OCR をバックグラウンドで実行し、完了後に ocr_text を更新する。
-    // ocr_preserved を move することで NamedTempFile が drop されずファイルが生き続ける。
-    if let Some(preserved) = ocr_preserved {
-        let db = state.db.clone();
-        tokio::spawn(async move {
-            // preserved を move して所有することでタスク完了まで一時ファイルを保持する
-            let _keep = preserved;
-            if let Some(text) = ocr::extract_text(_keep.path()).await {
-                eprintln!("[OCR] 完了: {} 文字 → file_id={file_id}", text.chars().count());
-                let mut active = files::ActiveModel {
-                    id: Set(file_id),
-                    ..Default::default()
-                };
-                active.ocr_text = Set(Some(text));
-                let _ = active.update(&db).await;
-            } else {
-                eprintln!("[OCR] テキストなし: file_id={file_id}");
+    if ocr_supported {
+        let job = OcrJob {
+            file_id,
+            storage_key: storage_key.clone(),
+            mime: ocr_mime,
+        };
+        if let Err(e) = state.ocr_queue.clone().push(job).await {
+            // キュー投入失敗は OCR が永久に実行されない原因となるため、
+            // ファイル削除・フォルダーサイズ戻し・ストレージ削除を行いアップロードをロールバックする。
+            eprintln!("[OCR] キューへの追加失敗、アップロードをロールバック: file_id={file_id} err={e}");
+            if let Ok(comp_txn) = state.db.begin().await {
+                let _ = files::Entity::delete_by_id(file_id).exec(&comp_txn).await;
+                let comp_now = chrono::Utc::now().fixed_offset();
+                let _ = adjust_folder_chain(&comp_txn, folder_id, -filesize, comp_now).await;
+                let _ = comp_txn.commit().await;
             }
-        });
+            if let Err(se) = state.storage.delete(&storage_key).await {
+                tracing::warn!("補償削除失敗 key={storage_key}: {se}");
+            }
+            return Err(AuthError::Internal(anyhow::anyhow!("OCR キューへの追加に失敗しました")));
+        }
     }
 
     Ok((StatusCode::CREATED, Json(file_to_response(model))))

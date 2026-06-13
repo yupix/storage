@@ -11,9 +11,11 @@ use tower::ServiceBuilder;
 use tower_http::cors::{AllowHeaders, CorsLayer};
 use utoipa_scalar::{Scalar, Servable};
 
+use tokio_util::sync::CancellationToken;
+
 use crate::AppState;
 
-pub async fn run(state: AppState) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn run(state: AppState, shutdown: CancellationToken) -> Result<(), anyhow::Error> {
     let is_prod = std::env::var("RUST_ENV").unwrap_or_default() == "production";
     let settings = &state.settings;
 
@@ -59,7 +61,12 @@ pub async fn run(state: AppState) -> Result<(), Box<dyn std::error::Error>> {
     println!("Listening on http://{addr}");
 
     axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
+        .with_graceful_shutdown(async move {
+            tokio::select! {
+                _ = shutdown_signal() => {},
+                _ = shutdown.cancelled() => {},
+            }
+        })
         .await?;
 
     Ok(())

@@ -33,6 +33,13 @@ impl StorageDriver for Storage {
         }
     }
 
+    async fn download_to(&self, key: &str, dest: &Path) -> Result<()> {
+        match self {
+            Self::S3(d) => d.download_to(key, dest).await,
+            Self::Local(d) => d.download_to(key, dest).await,
+        }
+    }
+
     async fn get_download_url(&self, key: &str, content_type: &str, expires_in: Duration) -> Result<String> {
         match self {
             Self::S3(d) => d.get_download_url(key, content_type, expires_in).await,
