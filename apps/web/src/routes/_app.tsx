@@ -51,7 +51,26 @@ function AppLayout() {
 
   return (
     <>
-      <Header />
+      <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
+        <Header
+          navigationTrigger={(
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon-sm" className="md:hidden shrink-0">
+                <Menu />
+                <span className="sr-only">メニュー</span>
+              </Button>
+            </SheetTrigger>
+          )}
+        />
+        <SheetContent side="left">
+          <SheetHeader>
+            <SheetTitle>HyperDrive</SheetTitle>
+          </SheetHeader>
+          <div className="px-2">
+            <SidebarNavigation onNavigate={() => setMenuOpen(false)} />
+          </div>
+        </SheetContent>
+      </Sheet>
       <main className="px-2 sm:px-4 pb-8 bg-background min-h-[calc(100vh-4rem)]">
         <div className="flex gap-2 pt-2">
           <aside className="hidden md:block w-52 shrink-0">
@@ -61,27 +80,7 @@ function AppLayout() {
           </aside>
 
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1">
-              <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
-                <SheetTrigger asChild>
-                  <Button variant="ghost" size="icon-sm" className="md:hidden ml-1 my-2 shrink-0">
-                    <Menu />
-                    <span className="sr-only">メニュー</span>
-                  </Button>
-                </SheetTrigger>
-                <SheetContent side="left">
-                  <SheetHeader>
-                    <SheetTitle>HyperDrive</SheetTitle>
-                  </SheetHeader>
-                  <div className="px-2">
-                    <SidebarNavigation onNavigate={() => setMenuOpen(false)} />
-                  </div>
-                </SheetContent>
-              </Sheet>
-              <div className="flex-1 min-w-0">
-                <Outlet />
-              </div>
-            </div>
+            <Outlet />
           </div>
         </div>
       </main>
