@@ -309,7 +309,14 @@ pub async fn upload_file(
             mime: ocr_mime,
         };
         if let Err(e) = state.ocr_queue.clone().push(job).await {
-            eprintln!("[OCR] キューへの追加失敗: file_id={file_id} err={e}");
+            // キュー投入失敗は OCR が永久に実行されない原因となるため、
+            // ベストエフォートでDB・ストレージを補償削除してアップロードをロールバックする。
+            eprintln!("[OCR] キューへの追加失敗、アップロードをロールバック: file_id={file_id} err={e}");
+            let _ = files::Entity::delete_by_id(file_id).exec(&state.db).await;
+            if let Err(se) = state.storage.delete(&storage_key).await {
+                tracing::warn!("補償削除失敗 key={storage_key}: {se}");
+            }
+            return Err(AuthError::Internal(anyhow::anyhow!("OCR キューへの追加に失敗しました")));
         }
     }
 
