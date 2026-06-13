@@ -43,6 +43,8 @@ interface WorkspacePageProps {
   onViewChange: (view: 'grid' | 'list') => void
   sort?: WorkspaceSort
   onSortChange?: (sort: WorkspaceSort) => void
+  preserveOrder?: boolean
+  sortLabelOverride?: string
 }
 
 const emptyFolders: FolderItem[] = []
@@ -58,6 +60,8 @@ export default function WorkspacePage({
   onViewChange,
   sort = 'name-asc',
   onSortChange,
+  preserveOrder = false,
+  sortLabelOverride,
 }: WorkspacePageProps) {
   const router = useRouter()
   const sensors = useSensors(
@@ -265,6 +269,8 @@ export default function WorkspacePage({
   }, [favoritesOnly])
 
   const sortedFolders = useMemo(() => {
+    if (preserveOrder) return folders
+
     const lastDash = sort.lastIndexOf('-')
     const key = sort.slice(0, lastDash)
     const order = sort.slice(lastDash + 1)
@@ -275,9 +281,11 @@ export default function WorkspacePage({
       else if (key === 'size') cmp = (a.total_size ?? 0) - (b.total_size ?? 0)
       return order === 'desc' ? -cmp : cmp
     })
-  }, [folders, sort])
+  }, [folders, preserveOrder, sort])
 
   const sortedFiles = useMemo(() => {
+    if (preserveOrder) return files
+
     const lastDash = sort.lastIndexOf('-')
     const key = sort.slice(0, lastDash)
     const order = sort.slice(lastDash + 1)
@@ -288,7 +296,7 @@ export default function WorkspacePage({
       else if (key === 'size') cmp = a.size - b.size
       return order === 'desc' ? -cmp : cmp
     })
-  }, [files, sort])
+  }, [files, preserveOrder, sort])
 
   const handleDragStart = useCallback(({ active }: DragStartEvent) => {
     setActiveDragItem({
@@ -346,6 +354,7 @@ export default function WorkspacePage({
         onEmptyTrash={() => setEmptyTrashOpen(true)}
         sort={sort}
         onSortChange={onSortChange}
+        sortLabelOverride={sortLabelOverride}
       />
 
       {favoriteError && (

@@ -111,7 +111,6 @@ function SearchPage() {
             onChange={(e) => setInputValue(e.target.value)}
             placeholder={placeholder}
             className="w-full h-9 pl-9 pr-4 bg-muted rounded-lg border border-transparent text-sm focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-ring/30 transition-colors"
-            autoFocus
           />
         </form>
 
@@ -133,10 +132,15 @@ function SearchPage() {
               onViewChange={(v) => navigate({ search: (prev) => ({ ...prev, view: v }) })}
               sort={sort}
               onSortChange={(s) => navigate({ search: (prev) => ({ ...prev, sort: s }) })}
+              preserveOrder={sort === undefined}
+              sortLabelOverride={sort === undefined
+                ? type === 'vector' ? '関連度順' : '検索順'
+                : undefined}
             />
             {totalPages > 1 && (
               <div className="flex items-center justify-center gap-2 py-4">
                 <button
+                  type="button"
                   onClick={() => navigate({ search: (prev) => ({ ...prev, page: page - 1 }) })}
                   disabled={!hasPrev}
                   className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-md border border-border disabled:opacity-40 disabled:cursor-not-allowed hover:bg-muted transition-colors"
@@ -146,6 +150,7 @@ function SearchPage() {
                 </button>
                 <span className="text-sm text-muted-foreground">{page} / {totalPages}</span>
                 <button
+                  type="button"
                   onClick={() => navigate({ search: (prev) => ({ ...prev, page: page + 1 }) })}
                   disabled={!hasNext}
                   className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-md border border-border disabled:opacity-40 disabled:cursor-not-allowed hover:bg-muted transition-colors"
