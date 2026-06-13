@@ -30,12 +30,12 @@ case "$MODEL" in
     ;;
   florence-base)
     SCRIPT="florence2_service.py"
-    PACKAGES="transformers torch pillow fastapi 'uvicorn[standard]' python-multipart einops timm"
+    PACKAGES="'transformers==4.43.3' torch pillow fastapi 'uvicorn[standard]' python-multipart einops timm"
     EXTRA_ARGS="--model microsoft/Florence-2-base"
     ;;
   florence-large)
     SCRIPT="florence2_service.py"
-    PACKAGES="transformers torch pillow fastapi 'uvicorn[standard]' python-multipart einops timm"
+    PACKAGES="'transformers==4.43.3' torch pillow fastapi 'uvicorn[standard]' python-multipart einops timm"
     EXTRA_ARGS="--model microsoft/Florence-2-large"
     ;;
   *)
@@ -48,6 +48,13 @@ esac
 # --- 仮想環境のセットアップ ---
 if [[ ! -d "$VENV_DIR" ]]; then
   echo ">>> 仮想環境を作成しています..."
+  python3 -m venv "$VENV_DIR"
+fi
+
+# Florence-2 向けに venv を再作成するオプション
+if [[ "${RESET_VENV:-}" == "1" ]]; then
+  echo ">>> 仮想環境をリセットしています..."
+  rm -rf "$VENV_DIR"
   python3 -m venv "$VENV_DIR"
 fi
 
