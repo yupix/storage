@@ -8,6 +8,9 @@ pub struct Settings {
     #[serde(default = "default_allow_origin")]
     pub allow_origin: String,
 
+    #[serde(default = "default_qdrant_url")]
+    pub qdrant_url: String,
+
     #[serde(default)]
     pub storage_driver: Option<String>,
 
@@ -22,6 +25,10 @@ pub struct Settings {
     pub local_storage_path: String,
     pub local_base_url: Option<String>,
     pub local_signed_url_secret: Option<String>,
+}
+
+fn default_qdrant_url() -> String {
+    "http://qdrant.catarks.org:6333".to_string()
 }
 
 fn default_true() -> bool {
