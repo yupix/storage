@@ -1,15 +1,18 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useState, useEffect } from 'react'
-import { Search } from 'lucide-react'
+import { Search, ChevronLeft, ChevronRight } from 'lucide-react'
 import { searchFiles } from '../lib/files'
 import WorkspacePage from './-workspace/WorkspacePage'
 import { validateWorkspaceSearch } from './-workspace/route-utils'
 import type { WorkspaceSort } from './-workspace/route-utils'
 
+const SEARCH_LIMIT = 50
+
 interface SearchSearch {
   q?: string
   view?: 'grid' | 'list'
   sort?: WorkspaceSort
+  page?: number
 }
 
 export const Route = createFileRoute('/_app/search')({
@@ -17,23 +20,28 @@ export const Route = createFileRoute('/_app/search')({
   validateSearch: (search: Record<string, unknown>): SearchSearch => ({
     ...validateWorkspaceSearch(search),
     q: typeof search.q === 'string' ? search.q : undefined,
+    page: typeof search.page === 'number' && search.page >= 1 ? Math.floor(search.page) : undefined,
   }),
-  loaderDeps: ({ search }) => ({ q: search.q }),
+  loaderDeps: ({ search }) => ({ q: search.q, page: search.page }),
   loader: async ({ deps }) => {
-    if (!deps.q || deps.q.trim() === '') return { files: [], total: 0, q: '' }
-    const result = await searchFiles(deps.q.trim())
-    return { files: result.files, total: result.total, q: deps.q.trim() }
+    if (!deps.q || deps.q.trim() === '') return { files: [], total: 0, q: '', page: 1, limit: SEARCH_LIMIT }
+    const page = deps.page ?? 1
+    const result = await searchFiles(deps.q.trim(), page, SEARCH_LIMIT)
+    return { files: result.files, total: result.total, q: deps.q.trim(), page, limit: SEARCH_LIMIT }
   },
   component: SearchPage,
 })
 
 function SearchPage() {
-  const { files, total, q } = Route.useLoaderData()
+  const { files, total, q, page, limit } = Route.useLoaderData()
   const { view, sort } = Route.useSearch()
   const navigate = Route.useNavigate()
   const [inputValue, setInputValue] = useState(q)
 
-  // ヘッダーから別の検索語で遷移した場合に入力欄を同期する
+  const totalPages = Math.ceil(total / limit)
+  const hasPrev = page > 1
+  const hasNext = page < totalPages
+
   useEffect(() => {
     setInputValue(q)
   }, [q])
@@ -42,7 +50,7 @@ function SearchPage() {
     e.preventDefault()
     const trimmed = inputValue.trim()
     if (trimmed) {
-      navigate({ search: (prev) => ({ ...prev, q: trimmed }) })
+      navigate({ search: (prev) => ({ ...prev, q: trimmed, page: undefined }) })
     }
   }
 
@@ -63,20 +71,44 @@ function SearchPage() {
         {q && (
           <p className="text-xs text-muted-foreground mt-1.5">
             「{q}」の検索結果 {total} 件
+            {totalPages > 1 && ` （${page} / ${totalPages} ページ）`}
           </p>
         )}
       </div>
 
       {q ? (
         files.length > 0 ? (
-          <WorkspacePage
-            initialFiles={files}
-            initialFolders={[]}
-            view={view ?? 'grid'}
-            onViewChange={(v) => navigate({ search: (prev) => ({ ...prev, view: v }) })}
-            sort={sort}
-            onSortChange={(s) => navigate({ search: (prev) => ({ ...prev, sort: s }) })}
-          />
+          <>
+            <WorkspacePage
+              initialFiles={files}
+              initialFolders={[]}
+              view={view ?? 'grid'}
+              onViewChange={(v) => navigate({ search: (prev) => ({ ...prev, view: v }) })}
+              sort={sort}
+              onSortChange={(s) => navigate({ search: (prev) => ({ ...prev, sort: s }) })}
+            />
+            {totalPages > 1 && (
+              <div className="flex items-center justify-center gap-2 py-4">
+                <button
+                  onClick={() => navigate({ search: (prev) => ({ ...prev, page: page - 1 }) })}
+                  disabled={!hasPrev}
+                  className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-md border border-border disabled:opacity-40 disabled:cursor-not-allowed hover:bg-muted transition-colors"
+                >
+                  <ChevronLeft className="size-4" />
+                  前へ
+                </button>
+                <span className="text-sm text-muted-foreground">{page} / {totalPages}</span>
+                <button
+                  onClick={() => navigate({ search: (prev) => ({ ...prev, page: page + 1 }) })}
+                  disabled={!hasNext}
+                  className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-md border border-border disabled:opacity-40 disabled:cursor-not-allowed hover:bg-muted transition-colors"
+                >
+                  次へ
+                  <ChevronRight className="size-4" />
+                </button>
+              </div>
+            )}
+          </>
         ) : (
           <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-2">
             <Search className="size-10 opacity-30" />
