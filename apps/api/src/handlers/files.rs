@@ -26,6 +26,7 @@ use crate::utils::auth::AuthError;
 use crate::utils::folder_size::adjust_folder_chain;
 use crate::utils::ocr;
 use crate::jobs::ocr::OcrJob;
+use crate::jobs::embed::EmbedJob;
 use crate::AppState;
 use apalis::prelude::TaskSink;
 
@@ -323,6 +324,12 @@ pub async fn upload_file(
             }
             return Err(AuthError::Internal(anyhow::anyhow!("OCR キューへの追加に失敗しました")));
         }
+    }
+
+    // ファイル名でのベクトルインデックスを非同期で生成する。
+    // OCR 対応ファイルは OCR 完了後にも再インデックスされる。
+    if let Err(e) = state.embed_queue.clone().push(EmbedJob { file_id }).await {
+        eprintln!("[upload] EmbedJob のキュー追加失敗 (非致命的): file_id={file_id} err={e}");
     }
 
     Ok((StatusCode::CREATED, Json(file_to_response(model))))
@@ -835,6 +842,11 @@ pub async fn search_files(
     if q.is_empty() {
         return Ok(Json(PaginatedFileResponse { files: vec![], total: 0, page, limit }));
     }
+
+    if query.search_type.as_deref() == Some("vector") {
+        return search_vector(&state, current_user.id, &q, page, limit).await;
+    }
+
     let pattern = format!("%{}%", q);
 
     let paginator = files::Entity::find()
@@ -858,4 +870,80 @@ pub async fn search_files(
         page,
         limit,
     }))
+}
+
+async fn search_vector(
+    state: &AppState,
+    user_id: Uuid,
+    q: &str,
+    page: u64,
+    limit: u64,
+) -> Result<Json<PaginatedFileResponse>, AuthError> {
+    use qdrant_client::qdrant::{Condition, Filter, SearchPointsBuilder};
+    use sea_orm::prelude::Uuid as SeaUuid;
+
+    let embedder = state.embedder.clone();
+    let text = q.to_string();
+    let embeddings = tokio::task::spawn_blocking(move || embedder.embed(vec![text], None))
+        .await
+        .map_err(|e| AuthError::Internal(anyhow::anyhow!("spawn_blocking: {e}")))?
+        .map_err(|e| AuthError::Internal(anyhow::anyhow!("embed: {e}")))?;
+    let query_vec = embeddings
+        .into_iter()
+        .next()
+        .ok_or_else(|| AuthError::Internal(anyhow::anyhow!("no embedding")))?;
+
+    // ページングのため上限を多めに取得してから DB フィルター後にスライスする
+    let fetch_limit = (page * limit + limit) as u64;
+
+    let results = state
+        .qdrant
+        .search_points(
+            SearchPointsBuilder::new(crate::QDRANT_COLLECTION, query_vec, fetch_limit)
+                .filter(Filter::must([Condition::matches(
+                    "user_id",
+                    user_id.to_string(),
+                )])),
+        )
+        .await
+        .map_err(|e| AuthError::Internal(anyhow::anyhow!("qdrant search: {e}")))?;
+
+    let file_ids: Vec<SeaUuid> = results
+        .result
+        .iter()
+        .filter_map(|point| {
+            point
+                .payload
+                .get("file_id")
+                .and_then(|v| v.as_str())
+                .and_then(|s| SeaUuid::parse_str(s).ok())
+        })
+        .collect();
+
+    if file_ids.is_empty() {
+        return Ok(Json(PaginatedFileResponse { files: vec![], total: 0, page, limit }));
+    }
+
+    // Qdrant の返す順序を保持するため DB から一括取得してIDマップを作る
+    let db_files_map: std::collections::HashMap<SeaUuid, files::Model> = files::Entity::find()
+        .filter(files::Column::Id.is_in(file_ids.clone()))
+        .filter(files::Column::IsDeleted.eq(false))
+        .filter(files::Column::AuthorId.eq(user_id))
+        .all(&state.db)
+        .await?
+        .into_iter()
+        .map(|f| (f.id, f))
+        .collect();
+
+    // Qdrant のスコア順を維持して並べる
+    let ordered: Vec<FileResponse> = file_ids
+        .into_iter()
+        .filter_map(|id| db_files_map.get(&id).map(|f| file_to_response(f.clone())))
+        .collect();
+
+    let total = ordered.len() as u64;
+    let offset = ((page - 1) * limit) as usize;
+    let page_files = ordered.into_iter().skip(offset).take(limit as usize).collect();
+
+    Ok(Json(PaginatedFileResponse { files: page_files, total, page, limit }))
 }

@@ -14,6 +14,9 @@ pub struct FileListQuery {
 #[into_params(parameter_in = Query)]
 pub struct FileSearchQuery {
     pub q: String,
+    /// 検索タイプ: "vector" でベクトル検索、省略または "keyword" でキーワード検索
+    #[serde(rename = "type")]
+    pub search_type: Option<String>,
     pub page: Option<u64>,
     pub limit: Option<u64>,
 }
