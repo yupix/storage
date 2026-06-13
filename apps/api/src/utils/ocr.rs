@@ -28,6 +28,13 @@ pub fn extract_text(image_path: &Path) -> Option<String> {
     let out_dir = tempfile::TempDir::new().ok()?;
     let out_path = out_dir.path();
 
+    tracing::info!("OCR 開始: {:?}", image_path);
+
+    // stderr を一時ファイルに向けることでパイプバッファ詰まりによる
+    // デッドロックを避けながら、エラーメッセージを取得できる
+    let stderr_tmp = tempfile::NamedTempFile::new().ok()?;
+    let stderr_file = stderr_tmp.reopen().ok()?;
+
     let mut child = std::process::Command::new("python3")
         .arg(OCR_SCRIPT)
         .arg("--sourceimg")
@@ -36,7 +43,7 @@ pub fn extract_text(image_path: &Path) -> Option<String> {
         .arg(out_path)
         .arg("--json-only")
         .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
+        .stderr(stderr_file)
         .spawn()
         .ok()?;
 
@@ -51,8 +58,16 @@ pub fn extract_text(image_path: &Path) -> Option<String> {
     };
 
     if !status.success() {
+        if let Ok(msg) = std::fs::read_to_string(stderr_tmp.path()) {
+            if !msg.trim().is_empty() {
+                tracing::warn!("ndlocr-lite stderr: {}", msg.trim());
+            }
+        }
+        tracing::warn!("ndlocr-lite OCR 失敗 status={}", status);
         return None;
     }
+
+    tracing::info!("OCR 完了");
 
     // JSON ファイルを探して読み込む（stem.json の名前で出力される）
     let json_path = std::fs::read_dir(out_path)
