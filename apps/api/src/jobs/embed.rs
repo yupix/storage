@@ -1,8 +1,7 @@
 use apalis::prelude::*;
-use qdrant_client::qdrant::{PointStruct, UpsertPointsBuilder};
 use sea_orm::EntityTrait;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use serde_json::json;
 use uuid::Uuid;
 
 use crate::{AppState, QDRANT_COLLECTION, entities::files};
@@ -41,18 +40,14 @@ pub async fn process_embed_job(job: EmbedJob, state: Data<AppState>) -> Result<(
 
     let embedding = embeddings.into_iter().next().ok_or("no embedding returned")?;
 
-    let payload: HashMap<String, qdrant_client::qdrant::Value> = [
-        ("user_id".to_string(), file.author_id.to_string().into()),
-        ("file_id".to_string(), file_id.to_string().into()),
-    ]
-    .into_iter()
-    .collect();
-
-    let point = PointStruct::new(file_id.to_string(), embedding, payload);
+    let payload = json!({
+        "user_id": file.author_id.to_string(),
+        "file_id": file_id.to_string(),
+    });
 
     state
         .qdrant
-        .upsert_points(UpsertPointsBuilder::new(QDRANT_COLLECTION, vec![point]))
+        .upsert_point(QDRANT_COLLECTION, file_id, embedding, payload)
         .await
         .map_err(|e| format!("qdrant upsert: {e}"))?;
 

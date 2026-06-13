@@ -10,6 +10,7 @@ pub struct Settings {
 
     #[serde(default = "default_qdrant_url")]
     pub qdrant_url: String,
+    pub qdrant_api_key: Option<String>,
 
     #[serde(default)]
     pub storage_driver: Option<String>,

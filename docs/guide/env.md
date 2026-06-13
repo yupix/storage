@@ -19,6 +19,7 @@
 | `LOCAL_BASE_URL` | No | ローカルストレージのダウンロードURL生成に使うベースURL。既定値は`http://localhost:3400` |
 | `LOCAL_SIGNED_URL_SECRET` | No* | ローカルストレージの署名付きURL生成用シークレット（32文字以上必須） |
 | `QDRANT_URL` | No | Qdrant接続URL。既定値は`http://qdrant.catarks.org:6333` |
+| `QDRANT_API_KEY` | No | Qdrant認証APIキー。未設定の場合は認証なし |
 | `ALLOW_ORIGIN` | No | CORS許可オリジン。既定値は`http://localhost:3000` |
 | `RUST_ENV` | No | `production`の場合に本番向けCookie設定を使用 |
 

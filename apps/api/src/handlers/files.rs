@@ -879,9 +879,6 @@ async fn search_vector(
     page: u64,
     limit: u64,
 ) -> Result<Json<PaginatedFileResponse>, AuthError> {
-    use qdrant_client::qdrant::{Condition, Filter, SearchPointsBuilder};
-    use sea_orm::prelude::Uuid as SeaUuid;
-
     let embedder = state.embedder.clone();
     let text = q.to_string();
     let embeddings = tokio::task::spawn_blocking(move || embedder.embed(vec![text], None))
@@ -894,29 +891,27 @@ async fn search_vector(
         .ok_or_else(|| AuthError::Internal(anyhow::anyhow!("no embedding")))?;
 
     // ページングのため上限を多めに取得してから DB フィルター後にスライスする
-    let fetch_limit = (page * limit + limit) as u64;
+    let fetch_limit = page * limit + limit;
+
+    let filter = serde_json::json!({
+        "must": [{ "key": "user_id", "match": { "value": user_id.to_string() } }]
+    });
 
     let results = state
         .qdrant
-        .search_points(
-            SearchPointsBuilder::new(crate::QDRANT_COLLECTION, query_vec, fetch_limit)
-                .filter(Filter::must([Condition::matches(
-                    "user_id",
-                    user_id.to_string(),
-                )])),
-        )
+        .search(crate::QDRANT_COLLECTION, query_vec, fetch_limit, Some(filter))
         .await
         .map_err(|e| AuthError::Internal(anyhow::anyhow!("qdrant search: {e}")))?;
 
-    let file_ids: Vec<SeaUuid> = results
-        .result
+    let file_ids: Vec<Uuid> = results
         .iter()
         .filter_map(|point| {
             point
                 .payload
-                .get("file_id")
-                .and_then(|v| v.as_str())
-                .and_then(|s| SeaUuid::parse_str(s).ok())
+                .as_ref()?
+                .get("file_id")?
+                .as_str()
+                .and_then(|s| Uuid::parse_str(s).ok())
         })
         .collect();
 
@@ -925,7 +920,7 @@ async fn search_vector(
     }
 
     // Qdrant の返す順序を保持するため DB から一括取得してIDマップを作る
-    let db_files_map: std::collections::HashMap<SeaUuid, files::Model> = files::Entity::find()
+    let db_files_map: std::collections::HashMap<Uuid, files::Model> = files::Entity::find()
         .filter(files::Column::Id.is_in(file_ids.clone()))
         .filter(files::Column::IsDeleted.eq(false))
         .filter(files::Column::AuthorId.eq(user_id))

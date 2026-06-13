@@ -3,10 +3,8 @@ use std::time::Duration;
 
 use apalis::prelude::*;
 use apalis_redis::RedisStorage;
-use api::{AppState, EMBED_DIM, QDRANT_COLLECTION, jobs::{embed, ocr}, server::run};
+use api::{AppState, EMBED_DIM, QDRANT_COLLECTION, jobs::{embed, ocr}, server::run, utils::qdrant::QdrantRest};
 use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
-use qdrant_client::Qdrant;
-use qdrant_client::qdrant::{CreateCollectionBuilder, Distance, VectorParamsBuilder};
 use tokio_util::sync::CancellationToken;
 
 const WORKER_DRAIN_SECS: u64 = 30;
@@ -29,7 +27,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let ocr_queue = RedisStorage::new(conn.clone());
     let embed_queue = RedisStorage::new(conn);
 
-    let qdrant = Arc::new(Qdrant::from_url(&settings.qdrant_url).build()?);
+    let qdrant = QdrantRest::new(&settings.qdrant_url, settings.qdrant_api_key.as_deref())?;
     ensure_qdrant_collection(&qdrant).await?;
 
     eprintln!("[startup] 埋め込みモデルを初期化中...");
@@ -50,7 +48,7 @@ async fn main() -> Result<(), anyhow::Error> {
         storage,
         ocr_queue: ocr_queue.clone(),
         embed_queue: embed_queue.clone(),
-        qdrant,
+        qdrant: qdrant.clone(),
         embedder,
     };
 
@@ -134,15 +132,10 @@ async fn main() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-async fn ensure_qdrant_collection(qdrant: &Qdrant) -> Result<(), anyhow::Error> {
+async fn ensure_qdrant_collection(qdrant: &QdrantRest) -> Result<(), anyhow::Error> {
     let exists = qdrant.collection_exists(QDRANT_COLLECTION).await?;
     if !exists {
-        qdrant
-            .create_collection(
-                CreateCollectionBuilder::new(QDRANT_COLLECTION)
-                    .vectors_config(VectorParamsBuilder::new(EMBED_DIM, Distance::Cosine)),
-            )
-            .await?;
+        qdrant.create_collection(QDRANT_COLLECTION, EMBED_DIM).await?;
         eprintln!("[startup] Qdrant コレクション '{QDRANT_COLLECTION}' を作成しました");
     }
     Ok(())
