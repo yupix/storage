@@ -1,5 +1,6 @@
 import { Link, useRouter } from '@tanstack/react-router'
 import { LogOut, Search, Settings } from 'lucide-react'
+import { useRef } from 'react'
 import ThemeToggle from './ThemeToggle'
 import { useUser } from '../lib/user-context'
 import { apiClient } from '../api/client'
@@ -25,6 +26,15 @@ interface HeaderProps {
 export default function Header({ navigationTrigger }: HeaderProps) {
   const user = useUser()
   const router = useRouter()
+  const searchRef = useRef<HTMLInputElement>(null)
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    const q = searchRef.current?.value.trim()
+    if (q) {
+      router.navigate({ to: '/search', search: { q } })
+    }
+  }
 
   const handleLogout = async () => {
     try {
@@ -46,15 +56,15 @@ export default function Header({ navigationTrigger }: HeaderProps) {
       </Link>
 
       {/* 検索 */}
-      <div className="relative flex-1 max-w-md">
+      <form onSubmit={handleSearchSubmit} className="relative flex-1 max-w-md">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
         <input
-          type="text"
-          placeholder="検索"
-          name="topSearch"
+          ref={searchRef}
+          type="search"
+          placeholder="ファイル名・画像内テキストで検索"
           className="w-full h-9 pl-9 pr-4 bg-muted rounded-lg border border-transparent text-sm focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-ring/30 transition-colors"
         />
-      </div>
+      </form>
 
       {/* 右側アクション */}
       <div className="flex items-center gap-1 ml-auto">

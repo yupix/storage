@@ -216,6 +216,18 @@ export async function permanentDeleteFile(id: string): Promise<void> {
   if (error) throw new Error('ファイルの完全削除に失敗しました')
 }
 
+export async function searchFiles(
+  q: string,
+  page = 1,
+  limit = 50,
+): Promise<PaginatedFiles> {
+  const res = await fetch(
+    `/v1/files/search?q=${encodeURIComponent(q)}&page=${page}&limit=${limit}`,
+  )
+  if (!res.ok) throw new Error('検索に失敗しました')
+  return res.json() as Promise<PaginatedFiles>
+}
+
 export async function emptyTrash(): Promise<void> {
   const [filesResult, foldersResult] = await Promise.allSettled([
     apiClient.DELETE('/v1/files/trash', {}),
