@@ -2,7 +2,8 @@ use std::ops::Deref;
 
 use axum::{extract::FromRequestParts, http::request::Parts};
 use axum_session_redispool::SessionRedisPool;
-use sea_orm::{EntityTrait, prelude::Uuid};
+use sea_orm::{EntityTrait, QueryFilter, prelude::Uuid};
+use sea_orm::ColumnTrait;
 
 use crate::{AppState, entities::users, utils::auth::AuthError};
 
@@ -56,6 +57,7 @@ impl FromRequestParts<AppState> for CurrentUser {
         let user_id = user_id_from_session(parts, state).await?;
         // ユーザーが存在しない場合は401 Unauthorizedを返す
         let user = users::Entity::find_by_id(user_id)
+            .filter(users::Column::DeletedAt.is_null())
             .one(&state.db)
             .await?
             .ok_or(AuthError::Unauthorized)?;
