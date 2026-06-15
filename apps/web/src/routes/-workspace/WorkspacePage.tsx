@@ -109,7 +109,11 @@ export default function WorkspacePage({
     const allSettled = uploadItems.every((i) => i.status !== 'uploading')
     if (!allSettled) return
 
-    refreshFiles()
+    // お気に入りタブではアップロードしたファイルはお気に入りに含まれないため
+    // router.invalidate() を呼ぶとローダーがフリーズしてナビゲーションがブロックされる
+    if (!favoritesOnly) {
+      refreshFiles()
+    }
 
     const hasError = uploadItems.some((i) => i.status === 'error')
     if (!hasError) {
@@ -121,7 +125,7 @@ export default function WorkspacePage({
       }, 3000)
       return () => clearTimeout(timer)
     }
-  }, [uploadItems, refreshFiles])
+  }, [uploadItems, refreshFiles, favoritesOnly])
 
   const updateItem = useCallback(
     (id: string, patch: Partial<UploadItem>) => {
