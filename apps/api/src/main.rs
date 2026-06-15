@@ -11,11 +11,15 @@ const WORKER_DRAIN_SECS: u64 = 30;
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "info,api=debug".parse().unwrap()),
+        )
+        .init();
+
     let settings = api::settings::load_settings()?;
     let db = sea_orm::Database::connect(&settings.database_url).await?;
-    db.get_schema_registry("backend::entities::*")
-        .sync(&db)
-        .await?;
 
     let redis_client = api::utils::redis::RedisConnection::new(&settings.redis_url);
     redis_client.ping().await?;
