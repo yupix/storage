@@ -5,3 +5,4 @@ target
 **/mutants.out*/
 .idea/
 data/uploads
+.fastembed_cache
