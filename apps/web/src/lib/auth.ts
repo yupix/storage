@@ -12,11 +12,20 @@ export const getUser = createServerFn().handler(async (): Promise<User | null> =
     .map(([k, v]) => `${k}=${v}`)
     .join('; ')
 
+  const baseUrl = globalThis.process?.env.SERVER_URL ?? 'http://localhost:8080'
+  console.log('[getUser] baseUrl:', baseUrl, '| cookies:', Object.keys(cookies).join(', ') || '(none)')
+
   const client = createClient<paths>({
-    baseUrl: globalThis.process?.env.SERVER_URL ?? 'http://localhost:8080',
+    baseUrl,
     headers: cookieHeader ? { cookie: cookieHeader } : {},
   })
 
-  const { data } = await client.GET('/v1/auth/me')
-  return data ?? null
+  try {
+    const { data, error, response } = await client.GET('/v1/auth/me')
+    console.log('[getUser] status:', response?.status, '| data:', !!data, '| error:', error)
+    return data ?? null
+  } catch (e) {
+    console.error('[getUser] fetch error:', e)
+    return null
+  }
 })
