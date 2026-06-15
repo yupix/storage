@@ -9,6 +9,7 @@ use axum_session_redispool::SessionRedisPool;
 use sentry::integrations::tower::NewSentryLayer;
 use tower::ServiceBuilder;
 use tower_http::cors::{AllowHeaders, CorsLayer};
+use tower_http::trace::TraceLayer;
 use utoipa_scalar::{Scalar, Servable};
 
 use tokio_util::sync::CancellationToken;
@@ -54,6 +55,7 @@ pub async fn run(state: AppState, shutdown: CancellationToken) -> Result<(), any
         .with_state(state)
         .layer(cors)
         .layer(SessionLayer::new(session_store))
+        .layer(TraceLayer::new_for_http())
         .layer(ServiceBuilder::new().layer(NewSentryLayer::<Request<Body>>::new_from_top())); // Bind a new Hub per request, to ensure correct error <> request correlation
 
     let addr = "0.0.0.0:3400";

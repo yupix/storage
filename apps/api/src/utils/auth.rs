@@ -10,7 +10,7 @@ use axum::{
 };
 use serde::Serialize;
 use thiserror::Error;
-use tracing::debug;
+use tracing::error;
 use utoipa::ToSchema;
 
 #[derive(Serialize, ToSchema)]
@@ -44,7 +44,7 @@ impl IntoResponse for AuthError {
     fn into_response(self) -> Response {
         match self {
             AuthError::Internal(e) => {
-                debug!("auth error: {:#?}", e);
+                error!("internal auth error: {:#}", e);
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(ServerError {
