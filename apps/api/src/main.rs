@@ -2,20 +2,31 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use apalis::prelude::*;
+use apalis_board::axum::{
+    framework::{ApiBuilder, RegisterRoute},
+    sse::{TracingBroadcaster, TracingSubscriber},
+    ui::ServeUI,
+};
 use apalis_redis::RedisStorage;
 use api::{AppState, EMBED_DIM, QDRANT_COLLECTION, jobs::{caption, embed, ocr}, server::run, utils::caption::build_captioner, utils::qdrant::QdrantRest};
+use axum::{Extension, Router};
 use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
 use tokio_util::sync::CancellationToken;
+use tracing_subscriber::{EnvFilter, Layer as TracingLayer, layer::SubscriberExt, util::SubscriberInitExt};
 
 const WORKER_DRAIN_SECS: u64 = 30;
+const BOARD_ADDR: &str = "0.0.0.0:3401";
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info,api=debug".parse().unwrap()),
-        )
+    let broadcaster = TracingBroadcaster::create();
+    let board_subscriber = TracingSubscriber::new(&broadcaster);
+    let env_filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| "info,api=debug".parse().unwrap());
+
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer().with_filter(env_filter.clone()))
+        .with(board_subscriber.layer().with_filter(env_filter))
         .init();
 
     let settings = api::settings::load_settings()?;
@@ -31,6 +42,22 @@ async fn main() -> Result<(), anyhow::Error> {
     let ocr_queue = RedisStorage::new(conn.clone());
     let embed_queue = RedisStorage::new(conn.clone());
     let caption_queue = RedisStorage::new(conn);
+
+    // apalis-board ダッシュボード (ポート 3401)
+    let board_api = ApiBuilder::new(Router::new())
+        .register(ocr_queue.clone())
+        .register(embed_queue.clone())
+        .register(caption_queue.clone())
+        .build();
+    let board_router = Router::new()
+        .nest("/api/v1", board_api)
+        .fallback_service(ServeUI::new())
+        .layer(Extension(broadcaster));
+    let board_listener = tokio::net::TcpListener::bind(BOARD_ADDR).await?;
+    tokio::spawn(async move {
+        eprintln!("[board] ダッシュボード起動: http://{BOARD_ADDR}");
+        axum::serve(board_listener, board_router).await.unwrap();
+    });
 
     let captioner = build_captioner(&settings)?;
 

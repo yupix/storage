@@ -6,6 +6,7 @@ use crate::AppState;
 pub mod auth;
 pub mod files;
 pub mod folders;
+pub mod jobs;
 pub mod search;
 
 pub fn create_routes() -> OpenApiRouter<AppState> {
@@ -16,6 +17,7 @@ pub fn create_routes() -> OpenApiRouter<AppState> {
             .nest("/files", crate::routes::files::routes())
             .nest("/folders", crate::routes::folders::routes())
             .merge(crate::routes::search::routes())
+            .merge(crate::routes::jobs::routes())
             .route(
                 "/internal/download",
                 get(crate::handlers::internal::download_file),
