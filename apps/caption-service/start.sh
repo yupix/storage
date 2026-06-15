@@ -30,12 +30,12 @@ case "$MODEL" in
     ;;
   florence-base)
     SCRIPT="florence2_service.py"
-    PACKAGES="'transformers==4.43.3' torch pillow fastapi 'uvicorn[standard]' python-multipart einops timm"
+    PACKAGES="'transformers==4.43.3' torch pillow fastapi 'uvicorn[standard]' python-multipart einops timm deep-translator"
     EXTRA_ARGS="--model microsoft/Florence-2-base"
     ;;
   florence-large)
     SCRIPT="florence2_service.py"
-    PACKAGES="'transformers==4.43.3' torch pillow fastapi 'uvicorn[standard]' python-multipart einops timm"
+    PACKAGES="'transformers==4.43.3' torch pillow fastapi 'uvicorn[standard]' python-multipart einops timm deep-translator"
     EXTRA_ARGS="--model microsoft/Florence-2-large"
     ;;
   *)

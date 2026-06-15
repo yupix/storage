@@ -4,7 +4,7 @@ POST /caption  multipart: file=<image>
 Response: { "caption": "..." }
 
 起動:
-  pip install 'transformers==4.43.3' torch pillow fastapi uvicorn python-multipart einops timm
+  pip install 'transformers==4.43.3' torch pillow fastapi uvicorn python-multipart einops timm deep-translator
   python florence2_service.py [--host 0.0.0.0] [--port 8500] [--model microsoft/Florence-2-base]
 """
 import argparse
@@ -24,6 +24,25 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 log = logging.getLogger(__name__)
 
 TASK = "<MORE_DETAILED_CAPTION>"
+
+_translator = None
+
+
+def _get_translator():
+    global _translator
+    if _translator is None:
+        from deep_translator import GoogleTranslator
+        _translator = GoogleTranslator(source="en", target="ja")
+    return _translator
+
+
+def _translate_to_japanese(text: str) -> str:
+    try:
+        translated = _get_translator().translate(text)
+        return translated or text
+    except Exception as e:
+        log.warning("翻訳失敗、英語のまま返します: %s", e)
+        return text
 
 processor = None
 florence_model = None
@@ -122,6 +141,8 @@ async def caption(file: UploadFile = File(...)) -> JSONResponse:
         image_size=(image.width, image.height),
     )
     result = parsed.get(TASK, "").strip()
+    if result:
+        result = _translate_to_japanese(result)
     log.info("キャプション生成: %d 文字", len(result))
     return JSONResponse({"caption": result})
 
