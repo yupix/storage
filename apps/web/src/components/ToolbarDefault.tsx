@@ -63,6 +63,7 @@ interface ToolbarDefaultProps {
   onEmptyTrash?: () => void
   sort?: WorkspaceSort
   onSortChange?: (sort: WorkspaceSort) => void
+  sortLabelOverride?: string
 }
 
 export default function ToolbarDefault({
@@ -77,6 +78,7 @@ export default function ToolbarDefault({
   onEmptyTrash,
   sort = 'name-asc',
   onSortChange,
+  sortLabelOverride,
 }: ToolbarDefaultProps) {
   return (
     <div className="bg-card text-card-foreground h-12 mx-1.5 my-2 px-3 rounded-lg flex items-center gap-1 ring-1 ring-foreground/10 overflow-x-auto">
@@ -129,7 +131,9 @@ export default function ToolbarDefault({
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="sm" title="並び替え" className="gap-1.5">
               <ArrowUpDown className="size-4" />
-              <span className="hidden sm:inline text-xs">{SORT_LABELS[sort]}</span>
+              <span className="hidden sm:inline text-xs">
+                {sortLabelOverride ?? SORT_LABELS[sort]}
+              </span>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">

@@ -8,6 +8,16 @@ pub struct Settings {
     #[serde(default = "default_allow_origin")]
     pub allow_origin: String,
 
+    #[serde(default = "default_qdrant_url")]
+    pub qdrant_url: String,
+    pub qdrant_api_key: Option<String>,
+
+    /// キャプションドライバー: "gemini" / "local_http" / 未設定(無効)
+    pub caption_driver: Option<String>,
+    pub gemini_api_key: Option<String>,
+    /// ローカル HTTP キャプションサービスの URL（既定: http://localhost:8500）
+    pub caption_local_url: Option<String>,
+
     #[serde(default)]
     pub storage_driver: Option<String>,
 
@@ -22,6 +32,10 @@ pub struct Settings {
     pub local_storage_path: String,
     pub local_base_url: Option<String>,
     pub local_signed_url_secret: Option<String>,
+}
+
+fn default_qdrant_url() -> String {
+    "http://qdrant.catarks.org:6333".to_string()
 }
 
 fn default_true() -> bool {

@@ -220,10 +220,15 @@ export async function searchFiles(
   q: string,
   page = 1,
   limit = 50,
+  type?: 'keyword' | 'vector',
 ): Promise<PaginatedFiles> {
-  const res = await fetch(
-    `/v1/search?q=${encodeURIComponent(q)}&page=${page}&limit=${limit}`,
-  )
+  const params = new URLSearchParams({
+    q,
+    page: String(page),
+    limit: String(limit),
+  })
+  if (type) params.set('type', type)
+  const res = await fetch(`/v1/search?${params}`)
   if (!res.ok) throw new Error('検索に失敗しました')
   return res.json() as Promise<PaginatedFiles>
 }

@@ -20,6 +20,8 @@ pub struct Model {
     pub deleted_at: Option<DateTimeWithTimeZone>,
     #[sea_orm(column_type = "Text", nullable)]
     pub ocr_text: Option<String>,
+    #[sea_orm(column_type = "Text", nullable)]
+    pub caption: Option<String>,
     pub created_at: Option<DateTimeWithTimeZone>,
     pub updated_at: Option<DateTimeWithTimeZone>,
     pub is_favorite: bool,

@@ -6,6 +6,7 @@ use uuid::Uuid;
 use crate::{
     AppState,
     entities::files,
+    jobs::embed::EmbedJob,
     utils::{ocr, storage::StorageDriver},
 };
 
@@ -63,8 +64,14 @@ pub async fn process_ocr_job(job: OcrJob, state: Data<AppState>) -> Result<(), S
         Ok(_) => {}
         Err(DbErr::RecordNotUpdated) => {
             eprintln!("[OCR job] ファイルが削除済みのためスキップ: file_id={file_id}");
+            return Ok(());
         }
         Err(e) => return Err(format!("db update: {e}")),
+    }
+
+    // OCR テキストが確定したのでベクトルインデックスを更新する
+    if let Err(e) = state.embed_queue.clone().push(EmbedJob { file_id }).await {
+        eprintln!("[OCR job] EmbedJob のキュー追加失敗: {e}");
     }
 
     Ok(())

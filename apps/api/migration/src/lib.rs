@@ -10,6 +10,7 @@ mod m20260531_190005_create_table_share_links;
 mod m20260611_000001_add_is_favorite_to_files;
 mod m20260611_000002_add_total_size_to_folders;
 mod m20260613_000001_add_is_favorite_to_folders;
+mod m20260613_000002_add_caption_to_files;
 
 pub struct Migrator;
 
@@ -26,6 +27,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260611_000001_add_is_favorite_to_files::Migration),
             Box::new(m20260611_000002_add_total_size_to_folders::Migration),
             Box::new(m20260613_000001_add_is_favorite_to_folders::Migration),
+            Box::new(m20260613_000002_add_caption_to_files::Migration),
         ]
     }
 }

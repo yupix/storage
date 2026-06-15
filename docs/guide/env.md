@@ -18,10 +18,26 @@
 | `LOCAL_STORAGE_PATH` | No | ローカルストレージの保存先。既定値は`./data/uploads` |
 | `LOCAL_BASE_URL` | No | ローカルストレージのダウンロードURL生成に使うベースURL。既定値は`http://localhost:3400` |
 | `LOCAL_SIGNED_URL_SECRET` | No* | ローカルストレージの署名付きURL生成用シークレット（32文字以上必須） |
+| `QDRANT_URL` | No | Qdrant接続URL。既定値は`http://qdrant.catarks.org:6333` |
+| `QDRANT_API_KEY` | No | Qdrant認証APIキー。未設定の場合は認証なし |
+| `CAPTION_DRIVER` | No | 画像キャプション生成ドライバー。`gemini` または `local_http`。省略時は無効 |
+| `GEMINI_API_KEY` | No† | Google Gemini APIキー。`CAPTION_DRIVER=gemini` 時に必須 |
+| `CAPTION_LOCAL_URL` | No | ローカルキャプションサービスURL。`CAPTION_DRIVER=local_http` 時。既定値は`http://localhost:8500` |
 | `ALLOW_ORIGIN` | No | CORS許可オリジン。既定値は`http://localhost:3000` |
 | `RUST_ENV` | No | `production`の場合に本番向けCookie設定を使用 |
 
-\* `S3_*` は4つすべて設定された場合にS3バックエンドが自動選択される。ローカルバックエンド使用時は `LOCAL_SIGNED_URL_SECRET` が必須。
+\* `S3_*` は4つすべて設定された場合にS3バックエンドが自動選択される。ローカルバックエンド使用時は `LOCAL_SIGNED_URL_SECRET` が必須。  
+† `CAPTION_DRIVER=gemini` のときのみ必須。
+
+## キャプションサービス (`apps/caption-service`)
+
+ローカルモデルでキャプション生成を行う場合に使用する。
+詳細は [`apps/caption-service/README.md`](../../apps/caption-service/README.md) を参照。
+
+| 変数名 | 既定値 | 説明 |
+|---|---|---|
+| `HOST` | `0.0.0.0` | バインドするホスト |
+| `PORT` | `8500` | バインドするポート |
 
 ## Web (`apps/web/.env.local`)
 

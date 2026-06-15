@@ -1,6 +1,9 @@
+use std::sync::Arc;
+
+use fastembed::TextEmbedding;
 use sea_orm::DatabaseConnection;
 
-use crate::{settings::Settings, utils::redis::RedisConnection, utils::storage::Storage};
+use crate::{settings::Settings, utils::caption::Captioner, utils::qdrant::QdrantRest, utils::redis::RedisConnection, utils::storage::Storage};
 
 pub mod config;
 pub mod entities;
@@ -16,6 +19,9 @@ pub mod server;
 pub mod settings;
 pub mod utils;
 
+pub const QDRANT_COLLECTION: &str = "files";
+pub const EMBED_DIM: u64 = 384;
+
 #[derive(Clone)]
 pub struct AppState {
     pub settings: Settings,
@@ -23,4 +29,9 @@ pub struct AppState {
     pub redis_client: RedisConnection,
     pub storage: Storage,
     pub ocr_queue: apalis_redis::RedisStorage<jobs::ocr::OcrJob>,
+    pub embed_queue: apalis_redis::RedisStorage<jobs::embed::EmbedJob>,
+    pub caption_queue: apalis_redis::RedisStorage<jobs::caption::CaptionJob>,
+    pub qdrant: QdrantRest,
+    pub embedder: Arc<TextEmbedding>,
+    pub captioner: Captioner,
 }
