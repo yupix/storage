@@ -21,6 +21,7 @@
     "@dnd-kit/modifiers": "^9.0.0",
     "@fontsource-variable/geist": "^5.2.9",
     "@sentry/tanstackstart-react": "^10.42.0",
+    "@tailwindcss/typography": "^0.5.20",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/react-router": "latest",
     "@tanstack/react-start": "latest",
