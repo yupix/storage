@@ -24,35 +24,8 @@ for arg in "$@"; do
   esac
 done
 
-# redis-cli 接続引数を URL からパース
-parse_redis_args() {
-  local url="$1"
-  # redis://[:password@]host[:port][/db]
-  local host port db pass args=()
-  url="${url#redis://}"
-  if [[ "$url" == *"@"* ]]; then
-    pass="${url%%@*}"
-    pass="${pass#:}"
-    url="${url#*@}"
-    args+=(-a "$pass")
-  fi
-  host="${url%%/*}"
-  db="${url#*/}"
-  [[ "$db" == "$url" ]] && db="0"
-  if [[ "$host" == *":"* ]]; then
-    port="${host##*:}"
-    host="${host%:*}"
-  else
-    port="6379"
-  fi
-  args+=(-h "$host" -p "$port" -n "$db")
-  echo "${args[@]}"
-}
-
-REDIS_ARGS=($(parse_redis_args "$REDIS_URL"))
-
 rcli() {
-  redis-cli "${REDIS_ARGS[@]}" --no-auth-warning "$@"
+  redis-cli --no-auth-warning -u "$REDIS_URL" "$@"
 }
 
 del_key() {

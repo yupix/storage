@@ -104,16 +104,24 @@ async fn main() -> Result<(), anyhow::Error> {
         }
     });
 
+    // UUID はプロセス起動時に一度だけ生成する。
+    // クロージャ内で生成すると Monitor がワーカーを再起動するたびに新 ID が発行され
+    // ゴーストワーカーが Redis に蓄積するため、起動時の ID を再利用する。
+    let ocr_worker_id = format!("ocr-worker-{}", Uuid::new_v4());
+    let embed_worker_id = format!("embed-worker-{}", Uuid::new_v4());
+    let caption_worker_id = format!("caption-worker-{}", Uuid::new_v4());
+
     // Monitor でワーカーを管理:
-    // - サーバー終了 or SIGTERM/SIGINT を受けてドレイン開始
-    // - 再起動ごとに新しい UUID を使いマルチインスタンスでも衝突しない
+    // - サーバー終了を受けてドレイン開始
+    // - インスタンスごとに異なる UUID でマルチインスタンス時も衝突しない
     let monitor_result = Monitor::new()
         .shutdown_timeout(Duration::from_secs(WORKER_DRAIN_SECS))
         .register({
             let ocr_queue = ocr_queue.clone();
             let state = state.clone();
+            let id = ocr_worker_id.clone();
             move |_| {
-                WorkerBuilder::new(format!("ocr-worker-{}", Uuid::new_v4()))
+                WorkerBuilder::new(id.clone())
                     .backend(ocr_queue.clone())
                     .concurrency(2)
                     .data(state.clone())
@@ -123,8 +131,9 @@ async fn main() -> Result<(), anyhow::Error> {
         .register({
             let embed_queue = embed_queue.clone();
             let state = state.clone();
+            let id = embed_worker_id.clone();
             move |_| {
-                WorkerBuilder::new(format!("embed-worker-{}", Uuid::new_v4()))
+                WorkerBuilder::new(id.clone())
                     .backend(embed_queue.clone())
                     .concurrency(1)
                     .data(state.clone())
@@ -134,8 +143,9 @@ async fn main() -> Result<(), anyhow::Error> {
         .register({
             let caption_queue = caption_queue.clone();
             let state = state.clone();
+            let id = caption_worker_id.clone();
             move |_| {
-                WorkerBuilder::new(format!("caption-worker-{}", Uuid::new_v4()))
+                WorkerBuilder::new(id.clone())
                     .backend(caption_queue.clone())
                     .concurrency(2)
                     .data(state.clone())
