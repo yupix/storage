@@ -45,9 +45,11 @@ QUEUES=(
   "api::jobs::caption::CaptionJob"
 )
 
-# ワーカー関連キー
-WORKER_SUFFIXES=(
+# ワーカー関連キー（型ごとに分離してエラーを回避）
+WORKER_ZSET_SUFFIXES=(
   ":workers"           # ZSET: ワーカー登録
+)
+WORKER_HASH_SUFFIXES=(
   ":workers:metadata"  # HASH: ワーカーメタデータ
 )
 
@@ -74,11 +76,23 @@ echo ""
 for queue in "${QUEUES[@]}"; do
   echo "--- キュー: $queue ---"
 
-  for suffix in "${WORKER_SUFFIXES[@]}"; do
+  for suffix in "${WORKER_ZSET_SUFFIXES[@]}"; do
     key="${queue}${suffix}"
     exists=$(rcli EXISTS "$key")
     if [[ "$exists" == "1" ]]; then
-      count=$(rcli ZCARD "$key" 2>/dev/null || rcli HLEN "$key" 2>/dev/null || echo "?")
+      count=$(rcli ZCARD "$key")
+      echo "  発見: $key ($count エントリ)"
+      del_key "$key"
+    else
+      echo "  スキップ (存在しない): $key"
+    fi
+  done
+
+  for suffix in "${WORKER_HASH_SUFFIXES[@]}"; do
+    key="${queue}${suffix}"
+    exists=$(rcli EXISTS "$key")
+    if [[ "$exists" == "1" ]]; then
+      count=$(rcli HLEN "$key")
       echo "  発見: $key ($count エントリ)"
       del_key "$key"
     else

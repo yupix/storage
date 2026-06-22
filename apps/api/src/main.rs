@@ -92,7 +92,7 @@ async fn main() -> Result<(), anyhow::Error> {
     // サーバーが終了したことを Monitor に通知するチャネル
     let (server_done_tx, server_done_rx) = tokio::sync::oneshot::channel::<()>();
     let server_shutdown = CancellationToken::new();
-    let worker_shutdown = server_shutdown.clone();
+    let server_cancel_token = server_shutdown.clone();
 
     // HTTPサーバーをバックグラウンドで起動
     let server_task = tokio::spawn({
@@ -161,7 +161,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .await;
 
     // Monitor 終了後にサーバーも停止させる（ワーカー異常時など）
-    worker_shutdown.cancel();
+    server_cancel_token.cancel();
     let server_result = server_task.await?;
 
     monitor_result?;
