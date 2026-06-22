@@ -13,6 +13,7 @@ use axum::{Extension, Router};
 use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
 use tokio_util::sync::CancellationToken;
 use tracing_subscriber::{EnvFilter, Layer as TracingLayer, layer::SubscriberExt, util::SubscriberInitExt};
+use uuid::Uuid;
 
 const WORKER_DRAIN_SECS: u64 = 30;
 const BOARD_ADDR: &str = "0.0.0.0:3401";
@@ -88,112 +89,83 @@ async fn main() -> Result<(), anyhow::Error> {
         captioner,
     };
 
-    let shutdown = CancellationToken::new();
+    // サーバーが終了したことを Monitor に通知するチャネル
+    let (server_done_tx, server_done_rx) = tokio::sync::oneshot::channel::<()>();
+    let server_shutdown = CancellationToken::new();
+    let server_cancel_token = server_shutdown.clone();
 
-    let ocr_shutdown = shutdown.clone();
-    let ocr_worker_id = format!("ocr-worker-{}", uuid::Uuid::new_v4());
-    let ocr_worker = WorkerBuilder::new(&ocr_worker_id)
-        .backend(ocr_queue)
-        .concurrency(2)
-        .data(state.clone())
-        .build(ocr::process_ocr_job);
-    let mut ocr_task = tokio::spawn(async move {
-        tokio::select! {
-            biased;
-            _ = ocr_shutdown.cancelled() => Ok(()),
-            res = ocr_worker.run() => res,
+    // HTTPサーバーをバックグラウンドで起動
+    let server_task = tokio::spawn({
+        let state = state.clone();
+        async move {
+            let res = run(state, server_shutdown).await;
+            let _ = server_done_tx.send(());
+            res
         }
     });
 
-    let embed_shutdown = shutdown.clone();
-    let embed_worker_id = format!("embed-worker-{}", uuid::Uuid::new_v4());
-    let embed_worker = WorkerBuilder::new(&embed_worker_id)
-        .backend(embed_queue)
-        .concurrency(1)
-        .data(state.clone())
-        .build(embed::process_embed_job);
-    let mut embed_task = tokio::spawn(async move {
-        tokio::select! {
-            biased;
-            _ = embed_shutdown.cancelled() => Ok(()),
-            res = embed_worker.run() => res,
-        }
-    });
+    // UUID はプロセス起動時に一度だけ生成する。
+    // クロージャ内で生成すると Monitor がワーカーを再起動するたびに新 ID が発行され
+    // ゴーストワーカーが Redis に蓄積するため、起動時の ID を再利用する。
+    let ocr_worker_id = format!("ocr-worker-{}", Uuid::new_v4());
+    let embed_worker_id = format!("embed-worker-{}", Uuid::new_v4());
+    let caption_worker_id = format!("caption-worker-{}", Uuid::new_v4());
 
-    let caption_shutdown = shutdown.clone();
-    let caption_worker_id = format!("caption-worker-{}", uuid::Uuid::new_v4());
-    let caption_worker = WorkerBuilder::new(&caption_worker_id)
-        .backend(caption_queue)
-        .concurrency(2)
-        .data(state.clone())
-        .build(caption::process_caption_job);
-    let mut caption_task = tokio::spawn(async move {
-        tokio::select! {
-            biased;
-            _ = caption_shutdown.cancelled() => Ok(()),
-            res = caption_worker.run() => res,
-        }
-    });
+    // Monitor でワーカーを管理:
+    // - サーバー終了を受けてドレイン開始
+    // - インスタンスごとに異なる UUID でマルチインスタンス時も衝突しない
+    let monitor_result = Monitor::new()
+        .shutdown_timeout(Duration::from_secs(WORKER_DRAIN_SECS))
+        .register({
+            let ocr_queue = ocr_queue.clone();
+            let state = state.clone();
+            let id = ocr_worker_id.clone();
+            move |_| {
+                WorkerBuilder::new(id.clone())
+                    .backend(ocr_queue.clone())
+                    .concurrency(2)
+                    .data(state.clone())
+                    .build(ocr::process_ocr_job)
+            }
+        })
+        .register({
+            let embed_queue = embed_queue.clone();
+            let state = state.clone();
+            let id = embed_worker_id.clone();
+            move |_| {
+                WorkerBuilder::new(id.clone())
+                    .backend(embed_queue.clone())
+                    .concurrency(1)
+                    .data(state.clone())
+                    .build(embed::process_embed_job)
+            }
+        })
+        .register({
+            let caption_queue = caption_queue.clone();
+            let state = state.clone();
+            let id = caption_worker_id.clone();
+            move |_| {
+                WorkerBuilder::new(id.clone())
+                    .backend(caption_queue.clone())
+                    .concurrency(2)
+                    .data(state.clone())
+                    .build(caption::process_caption_job)
+            }
+        })
+        .run_with_signal(async move {
+            // サーバーが止まったタイミングでワーカーのドレインを開始する
+            let _ = server_done_rx.await;
+            eprintln!("[shutdown] サーバー終了を検知、ワーカーをドレイン中 (最大 {WORKER_DRAIN_SECS} 秒)...");
+            Ok(())
+        })
+        .await;
 
-    let server_shutdown = shutdown.clone();
-    let mut server_task = tokio::spawn(run(state, server_shutdown));
+    // Monitor 終了後にサーバーも停止させる（ワーカー異常時など）
+    server_cancel_token.cancel();
+    let server_result = server_task.await?;
 
-    tokio::select! {
-        result = &mut server_task => {
-            shutdown.cancel();
-            eprintln!("[shutdown] ワーカーの完了を待機中 (最大 {WORKER_DRAIN_SECS} 秒)...");
-            let _ = tokio::time::timeout(
-                Duration::from_secs(WORKER_DRAIN_SECS),
-                async { let _ = tokio::join!(ocr_task, embed_task, caption_task); },
-            ).await;
-            result??;
-        }
-        result = &mut ocr_task => {
-            match result {
-                Ok(Ok(())) => { shutdown.cancel(); let _ = server_task.await; }
-                Ok(Err(e)) => {
-                    eprintln!("[shutdown] OCRワーカー異常終了: {e}");
-                    shutdown.cancel(); let _ = server_task.await;
-                    return Err(e.into());
-                }
-                Err(e) => {
-                    eprintln!("[shutdown] OCRワーカーパニック: {e}");
-                    shutdown.cancel(); let _ = server_task.await;
-                    return Err(e.into());
-                }
-            }
-        }
-        result = &mut embed_task => {
-            match result {
-                Ok(Ok(())) => { shutdown.cancel(); let _ = server_task.await; }
-                Ok(Err(e)) => {
-                    eprintln!("[shutdown] Embedワーカー異常終了: {e}");
-                    shutdown.cancel(); let _ = server_task.await;
-                    return Err(e.into());
-                }
-                Err(e) => {
-                    eprintln!("[shutdown] Embedワーカーパニック: {e}");
-                    shutdown.cancel(); let _ = server_task.await;
-                    return Err(e.into());
-                }
-            }
-        }
-        result = &mut caption_task => {
-            match result {
-                Ok(Ok(())) => { shutdown.cancel(); let _ = server_task.await; }
-                Ok(Err(e)) => {
-                    eprintln!("[shutdown] Captionワーカー異常終了: {e}");
-                    shutdown.cancel(); let _ = server_task.await;
-                    return Err(e.into());
-                }
-                Err(e) => {
-                    eprintln!("[shutdown] Captionワーカーパニック: {e}");
-                    shutdown.cancel(); let _ = server_task.await;
-                    return Err(e.into());
-                }
-            }
-        }
-    }
+    monitor_result?;
+    server_result?;
 
     Ok(())
 }
