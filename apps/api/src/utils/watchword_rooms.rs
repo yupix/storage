@@ -108,8 +108,6 @@ impl WatchwordRooms {
             if existing.user_id != user_id {
                 return Err(RegisterError::RoomFull);
             }
-        } else if room.connected_count() >= 2 {
-            return Err(RegisterError::RoomFull);
         }
 
         room.joiner = Some(PeerSlot { user_id, tx });

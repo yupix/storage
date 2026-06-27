@@ -65,10 +65,8 @@ async fn handle_watchword_socket(socket: WebSocket, state: AppState, auth: AuthU
             break;
         };
 
-        let Message::Text(text) = msg else {
-            continue;
-        };
-
+        match msg {
+            Message::Text(text) => {
         let parsed: WatchwordWsMessage = match serde_json::from_str(&text) {
             Ok(parsed) => parsed,
             Err(_) => {
@@ -144,6 +142,15 @@ async fn handle_watchword_socket(socket: WebSocket, state: AppState, auth: AuthU
                     break;
                 }
             }
+        }
+            }
+            Message::Ping(p) => {
+                if outbound_tx.send(Message::Pong(p)).is_err() {
+                    break;
+                }
+            }
+            Message::Close(_) => break,
+            _ => {}
         }
     }
 
