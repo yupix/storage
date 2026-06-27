@@ -32,6 +32,14 @@ pub struct Settings {
     pub local_storage_path: String,
     pub local_base_url: Option<String>,
     pub local_signed_url_secret: Option<String>,
+
+    /// カンマ区切り STUN URL（既定: stun:stun.l.google.com:19302）
+    #[serde(default = "default_stun_urls")]
+    pub stun_urls: Option<String>,
+    /// カンマ区切り TURN URL
+    pub turn_urls: Option<String>,
+    pub turn_username: Option<String>,
+    pub turn_credential: Option<String>,
 }
 
 fn default_qdrant_url() -> String {
@@ -48,6 +56,10 @@ fn default_allow_origin() -> String {
 
 fn default_local_storage_path() -> String {
     "./data/uploads".to_string()
+}
+
+fn default_stun_urls() -> Option<String> {
+    Some("stun:stun.l.google.com:19302".to_string())
 }
 
 pub fn load_settings() -> Result<Settings, anyhow::Error> {

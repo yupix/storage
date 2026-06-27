@@ -4,6 +4,7 @@ use utoipa_axum::router::OpenApiRouter;
 use crate::AppState;
 
 pub mod auth;
+pub mod config;
 pub mod files;
 pub mod folders;
 pub mod search;
@@ -13,6 +14,7 @@ pub fn create_routes() -> OpenApiRouter<AppState> {
         "/v1",
         OpenApiRouter::new()
             .nest("/auth", crate::routes::auth::routes())
+            .nest("/config", crate::routes::config::routes())
             .nest("/files", crate::routes::files::routes())
             .nest("/folders", crate::routes::folders::routes())
             .merge(crate::routes::search::routes())
