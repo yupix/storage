@@ -31,6 +31,7 @@ const config = defineConfig({
       '/v1': {
         target: process.env.API_BASE_URL ?? 'http://localhost:3400',
         changeOrigin: true,
+        ws: true,
       },
     },
   }

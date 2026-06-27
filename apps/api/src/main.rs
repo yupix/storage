@@ -16,7 +16,6 @@ use tracing_subscriber::{EnvFilter, Layer as TracingLayer, layer::SubscriberExt,
 use uuid::Uuid;
 
 const WORKER_DRAIN_SECS: u64 = 30;
-const BOARD_ADDR: &str = "0.0.0.0:3401";
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
@@ -44,7 +43,9 @@ async fn main() -> Result<(), anyhow::Error> {
     let embed_queue = RedisStorage::new(conn.clone());
     let caption_queue = RedisStorage::new(conn);
 
-    // apalis-board ダッシュボード (ポート 3401)
+    // apalis-board ダッシュボード (既定ポート 3401、API_BOARD_ADDR で上書き可)
+    let board_addr =
+        std::env::var("API_BOARD_ADDR").unwrap_or_else(|_| "0.0.0.0:3401".to_string());
     let board_api = ApiBuilder::new(Router::new())
         .register(ocr_queue.clone())
         .register(embed_queue.clone())
@@ -54,9 +55,9 @@ async fn main() -> Result<(), anyhow::Error> {
         .nest("/api/v1", board_api)
         .fallback_service(ServeUI::new())
         .layer(Extension(broadcaster));
-    let board_listener = tokio::net::TcpListener::bind(BOARD_ADDR).await?;
+    let board_listener = tokio::net::TcpListener::bind(&board_addr).await?;
     tokio::spawn(async move {
-        eprintln!("[board] ダッシュボード起動: http://{BOARD_ADDR}");
+        eprintln!("[board] ダッシュボード起動: http://{board_addr}");
         axum::serve(board_listener, board_router).await.unwrap();
     });
 
