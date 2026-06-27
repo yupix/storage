@@ -56,6 +56,7 @@ export default function WatchwordQrScanner({
 
     try {
       const codes = await detector.detect(video)
+      if (!streamRef.current) return
       const value = codes[0]?.rawValue?.trim()
       if (value) {
         onScan(value)
