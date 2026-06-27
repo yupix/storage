@@ -363,7 +363,7 @@ export class WatchwordReceiver {
 
       const view = new DataView(buffer)
       const index = view.getUint32(0, false)
-      const chunk = new Uint8Array(buffer.slice(4))
+      const chunk = new Uint8Array(buffer, 4)
       this.chunks.set(index, chunk)
 
       const totalChunks = this.meta?.total_chunks ?? 0
