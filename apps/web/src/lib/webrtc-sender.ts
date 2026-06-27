@@ -317,15 +317,30 @@ export class WatchwordSender {
 
   private waitForBuffer(dc: RTCDataChannel): Promise<void> {
     if (dc.bufferedAmount < chunkBackpressureThreshold(dc)) return Promise.resolve()
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const check = () => {
         if (dc.bufferedAmount < chunkBackpressureThreshold(dc)) {
-          dc.removeEventListener('bufferedamountlow', check)
+          cleanup()
           resolve()
         }
       }
+      const onClose = () => {
+        cleanup()
+        reject(new Error('DataChannel closed'))
+      }
+      const onError = () => {
+        cleanup()
+        reject(new Error('DataChannel error'))
+      }
+      const cleanup = () => {
+        dc.removeEventListener('bufferedamountlow', check)
+        dc.removeEventListener('close', onClose)
+        dc.removeEventListener('error', onError)
+      }
       dc.bufferedAmountLowThreshold = chunkBackpressureThreshold(dc)
       dc.addEventListener('bufferedamountlow', check)
+      dc.addEventListener('close', onClose)
+      dc.addEventListener('error', onError)
       check()
     })
   }
