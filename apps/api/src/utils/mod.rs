@@ -5,3 +5,4 @@ pub mod ocr;
 pub mod qdrant;
 pub mod redis;
 pub mod storage;
+pub mod watchword_rooms;

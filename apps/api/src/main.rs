@@ -87,6 +87,7 @@ async fn main() -> Result<(), anyhow::Error> {
         qdrant: qdrant.clone(),
         embedder,
         captioner,
+        watchword_rooms: api::utils::watchword_rooms::WatchwordRooms::new(),
     };
 
     // サーバーが終了したことを Monitor に通知するチャネル

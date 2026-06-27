@@ -3,7 +3,7 @@ use std::sync::Arc;
 use fastembed::TextEmbedding;
 use sea_orm::DatabaseConnection;
 
-use crate::{settings::Settings, utils::caption::Captioner, utils::qdrant::QdrantRest, utils::redis::RedisConnection, utils::storage::Storage};
+use crate::{settings::Settings, utils::caption::Captioner, utils::qdrant::QdrantRest, utils::redis::RedisConnection, utils::storage::Storage, utils::watchword_rooms::WatchwordRooms};
 
 pub mod config;
 pub mod entities;
@@ -34,4 +34,5 @@ pub struct AppState {
     pub qdrant: QdrantRest,
     pub embedder: Arc<TextEmbedding>,
     pub captioner: Captioner,
+    pub watchword_rooms: WatchwordRooms,
 }
