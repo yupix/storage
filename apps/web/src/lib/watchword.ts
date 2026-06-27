@@ -30,11 +30,29 @@ export async function createWatchwordRoom(
 
 export async function computeFileHash(file: File): Promise<string> {
   const buffer = await file.arrayBuffer()
+  return hashArrayBuffer(buffer)
+}
+
+export async function computeBlobHash(blob: Blob): Promise<string> {
+  const buffer = await blob.arrayBuffer()
+  return hashArrayBuffer(buffer)
+}
+
+async function hashArrayBuffer(buffer: ArrayBuffer): Promise<string> {
   const hashBuffer = await crypto.subtle.digest('SHA-256', buffer)
   const hex = Array.from(new Uint8Array(hashBuffer))
     .map((byte) => byte.toString(16).padStart(2, '0'))
     .join('')
   return `sha256:${hex}`
+}
+
+/** 受信 Blob の SHA-256 が metadata filehash（sha256:hex）と一致するか照合 */
+export async function verifyBlobHash(
+  blob: Blob,
+  expectedFilehash: string,
+): Promise<{ match: boolean; actualHash: string }> {
+  const actualHash = await computeBlobHash(blob)
+  return { match: actualHash === expectedFilehash, actualHash }
 }
 
 export function getWatchwordWsUrl(): string {
