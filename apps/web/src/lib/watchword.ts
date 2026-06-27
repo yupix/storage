@@ -55,8 +55,21 @@ export async function verifyBlobHash(
   return { match: actualHash === expectedFilehash, actualHash }
 }
 
+function apiBaseToWsOrigin(apiBaseUrl: string): string {
+  const parsed = new URL(apiBaseUrl)
+  const protocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${protocol}//${parsed.host}`
+}
+
 export function getWatchwordWsUrl(): string {
   if (typeof window === 'undefined') return ''
+
+  // Dev: Vite の /v1 WebSocket プロキシは upgrade でハングするため API へ直接接続
+  const wsApiBase = import.meta.env.VITE_API_WS_BASE_URL as string | undefined
+  if (import.meta.env.DEV && wsApiBase) {
+    return `${apiBaseToWsOrigin(wsApiBase)}/v1/ws/watchword`
+  }
+
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   return `${protocol}//${window.location.host}/v1/ws/watchword`
 }
