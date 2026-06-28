@@ -1,5 +1,5 @@
 import { createFileRoute, Link, Outlet } from '@tanstack/react-router'
-import { Clock, Folder, Home, Menu, Star, Trash2 } from 'lucide-react'
+import { Clock, Download, Folder, Home, Menu, Share2, Star, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import Footer from '../components/Footer'
 import Header from '../components/Header'
@@ -19,6 +19,8 @@ export const Route = createFileRoute('/_app')({
 const navigation = [
   { to: '/home', label: 'ホーム', icon: Home },
   { to: '/drive', label: 'マイドライブ', icon: Folder },
+  { to: '/share', label: '合言葉共有', icon: Share2 },
+  { to: '/receive', label: '合言葉受信', icon: Download },
   { to: '/favorites', label: 'お気に入り', icon: Star },
   { to: '/recent', label: '最近使用', icon: Clock },
   { to: '/trash', label: 'ゴミ箱', icon: Trash2 },

@@ -64,8 +64,8 @@ pub async fn run(state: AppState, shutdown: CancellationToken) -> Result<(), any
         )
         .layer(ServiceBuilder::new().layer(NewSentryLayer::<Request<Body>>::new_from_top())); // Bind a new Hub per request, to ensure correct error <> request correlation
 
-    let addr = "0.0.0.0:3400";
-    let listener = tokio::net::TcpListener::bind(addr).await?;
+    let addr = std::env::var("API_LISTEN_ADDR").unwrap_or_else(|_| "0.0.0.0:3400".to_string());
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
     println!("Listening on http://{addr}");
 
     axum::serve(listener, app)

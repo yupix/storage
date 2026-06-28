@@ -14,8 +14,10 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppTrashRouteImport } from './routes/_app.trash'
+import { Route as AppShareRouteImport } from './routes/_app.share'
 import { Route as AppSearchRouteImport } from './routes/_app.search'
 import { Route as AppRecentRouteImport } from './routes/_app.recent'
+import { Route as AppReceiveRouteImport } from './routes/_app.receive'
 import { Route as AppHomeRouteImport } from './routes/_app.home'
 import { Route as AppFavoritesRouteImport } from './routes/_app.favorites'
 import { Route as AppDriveRouteImport } from './routes/_app.drive'
@@ -48,6 +50,11 @@ const AppTrashRoute = AppTrashRouteImport.update({
   path: '/trash',
   getParentRoute: () => AppRoute,
 } as any)
+const AppShareRoute = AppShareRouteImport.update({
+  id: '/share',
+  path: '/share',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppSearchRoute = AppSearchRouteImport.update({
   id: '/search',
   path: '/search',
@@ -56,6 +63,11 @@ const AppSearchRoute = AppSearchRouteImport.update({
 const AppRecentRoute = AppRecentRouteImport.update({
   id: '/recent',
   path: '/recent',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppReceiveRoute = AppReceiveRouteImport.update({
+  id: '/receive',
+  path: '/receive',
   getParentRoute: () => AppRoute,
 } as any)
 const AppHomeRoute = AppHomeRouteImport.update({
@@ -102,8 +114,10 @@ export interface FileRoutesByFullPath {
   '/drive': typeof AppDriveRouteWithChildren
   '/favorites': typeof AppFavoritesRoute
   '/home': typeof AppHomeRoute
+  '/receive': typeof AppReceiveRoute
   '/recent': typeof AppRecentRoute
   '/search': typeof AppSearchRoute
+  '/share': typeof AppShareRoute
   '/trash': typeof AppTrashRoute
   '/drive/$folderId': typeof AppDriveFolderIdRoute
   '/demo/sentry/testing': typeof DemoSentryTestingRoute
@@ -116,8 +130,10 @@ export interface FileRoutesByTo {
   '/about': typeof AppAboutRoute
   '/favorites': typeof AppFavoritesRoute
   '/home': typeof AppHomeRoute
+  '/receive': typeof AppReceiveRoute
   '/recent': typeof AppRecentRoute
   '/search': typeof AppSearchRoute
+  '/share': typeof AppShareRoute
   '/trash': typeof AppTrashRoute
   '/drive/$folderId': typeof AppDriveFolderIdRoute
   '/demo/sentry/testing': typeof DemoSentryTestingRoute
@@ -133,8 +149,10 @@ export interface FileRoutesById {
   '/_app/drive': typeof AppDriveRouteWithChildren
   '/_app/favorites': typeof AppFavoritesRoute
   '/_app/home': typeof AppHomeRoute
+  '/_app/receive': typeof AppReceiveRoute
   '/_app/recent': typeof AppRecentRoute
   '/_app/search': typeof AppSearchRoute
+  '/_app/share': typeof AppShareRoute
   '/_app/trash': typeof AppTrashRoute
   '/_app/drive/$folderId': typeof AppDriveFolderIdRoute
   '/demo/sentry/testing': typeof DemoSentryTestingRoute
@@ -150,8 +168,10 @@ export interface FileRouteTypes {
     | '/drive'
     | '/favorites'
     | '/home'
+    | '/receive'
     | '/recent'
     | '/search'
+    | '/share'
     | '/trash'
     | '/drive/$folderId'
     | '/demo/sentry/testing'
@@ -164,8 +184,10 @@ export interface FileRouteTypes {
     | '/about'
     | '/favorites'
     | '/home'
+    | '/receive'
     | '/recent'
     | '/search'
+    | '/share'
     | '/trash'
     | '/drive/$folderId'
     | '/demo/sentry/testing'
@@ -180,8 +202,10 @@ export interface FileRouteTypes {
     | '/_app/drive'
     | '/_app/favorites'
     | '/_app/home'
+    | '/_app/receive'
     | '/_app/recent'
     | '/_app/search'
+    | '/_app/share'
     | '/_app/trash'
     | '/_app/drive/$folderId'
     | '/demo/sentry/testing'
@@ -233,6 +257,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppTrashRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/share': {
+      id: '/_app/share'
+      path: '/share'
+      fullPath: '/share'
+      preLoaderRoute: typeof AppShareRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/search': {
       id: '/_app/search'
       path: '/search'
@@ -245,6 +276,13 @@ declare module '@tanstack/react-router' {
       path: '/recent'
       fullPath: '/recent'
       preLoaderRoute: typeof AppRecentRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/receive': {
+      id: '/_app/receive'
+      path: '/receive'
+      fullPath: '/receive'
+      preLoaderRoute: typeof AppReceiveRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/home': {
@@ -318,8 +356,10 @@ interface AppRouteChildren {
   AppDriveRoute: typeof AppDriveRouteWithChildren
   AppFavoritesRoute: typeof AppFavoritesRoute
   AppHomeRoute: typeof AppHomeRoute
+  AppReceiveRoute: typeof AppReceiveRoute
   AppRecentRoute: typeof AppRecentRoute
   AppSearchRoute: typeof AppSearchRoute
+  AppShareRoute: typeof AppShareRoute
   AppTrashRoute: typeof AppTrashRoute
 }
 
@@ -328,8 +368,10 @@ const AppRouteChildren: AppRouteChildren = {
   AppDriveRoute: AppDriveRouteWithChildren,
   AppFavoritesRoute: AppFavoritesRoute,
   AppHomeRoute: AppHomeRoute,
+  AppReceiveRoute: AppReceiveRoute,
   AppRecentRoute: AppRecentRoute,
   AppSearchRoute: AppSearchRoute,
+  AppShareRoute: AppShareRoute,
   AppTrashRoute: AppTrashRoute,
 }
 

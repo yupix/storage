@@ -14,6 +14,7 @@ pub fn routes() -> OpenApiRouter<AppState> {
 
     OpenApiRouter::<AppState>::new()
         .merge(upload)
+        .routes(routes!(crate::handlers::watchword::create_watchword))
         .routes(routes!(crate::handlers::files::get_files))
         .routes(routes!(crate::handlers::files::get_trash))
         .routes(routes!(crate::handlers::files::empty_trash))

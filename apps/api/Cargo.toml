@@ -4,7 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-axum = { version = "0.8.8", features = ["macros", "multipart"] }
+axum = { version = "0.8.8", features = ["macros", "multipart", "ws"] }
+futures-util = "0.3"
 sha2 = "0.10"
 tempfile = "3"
 sea-orm = { version = "2.0.0-rc.38", features = [

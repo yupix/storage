@@ -39,7 +39,19 @@
 | キー | 値の種類 |
 |----|----|
 | 合言葉 | String |
-|    |    |
+
+合言葉は **サーバー側で自動生成**（8 文字英数字）。クライアントからの指定は不可（A2）。
+
+## 実装メモ
+
+| 項目 | 方針 |
+|------|------|
+| receiver_id | メタデータとして保存・監査用。WS join 時の ID 照合は MVP では行わない（A1） |
+| filehash | `sha256:<64hex>` 形式（A6） |
+| chunk_size | 既定 16384、最大 65536（A5） |
+| expire_at | `min(expire_at, now+10min)` で Valkey TTL を設定（A4） |
+
+WebSocket シグナリングの詳細は [WebSocketシグナリング](../../../spec/infra/websocket.md) を参照。
 
 ## 実装要件
 
