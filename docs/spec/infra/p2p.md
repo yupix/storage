@@ -19,6 +19,8 @@ HyperDrive の「合言葉共有」機能が WebRTC DataChannel を使って
 
 ## 通信フロー全体図
 
+### v1（1:1）
+
 ```
 [送信者ブラウザ]  ←(1)WS→  [HyperDrive サーバー]  ←(1)WS→  [受信者ブラウザ]
        ↕                          ↕
@@ -28,11 +30,69 @@ HyperDrive の「合言葉共有」機能が WebRTC DataChannel を使って
                          （ファイルデータはここを通る）
 ```
 
+### v2（段階1 — スター型・複数受信者）
+
+```
+                    [HyperDrive サーバー]
+                    (WS シグナリング中継)
+                           |
+        +------------------+------------------+
+        |                  |                  |
+   [送信者 Creator]    [受信者 J1]        [受信者 J2] ... [JN]
+        |                  |                  |
+        +----(3) DataChannel ----+            |
+        +----(3) DataChannel --------+        |
+        +----(3) DataChannel ----------------+
+```
+
+- 送信者（creator）は **受信者ごとに独立した** `RTCPeerConnection` + `RTCDataChannel` を張る
+- サーバーは SDP/ICE のみ中継。ファイルバイナリはサーバーを通過しない
+- 遅い受信者の backpressure は **peer 単位**で管理し、他 peer の転送をブロックしない
+
 各番号について:
 
-1. WebSocket シグナリング（SDP offer/answer・ICE candidates）— **サーバー経由**
+1. WebSocket シグナリング（SDP offer/answer・ICE candidates）— **サーバー経由**（v2 では `target_peer_id` でルーティング）
 2. STUN による外部IP確認（異なるネットワーク間でのP2P確立に必要）
-3. WebRTC DataChannel によるファイル直接転送 — **サーバー不経由**
+3. WebRTC DataChannel によるファイル直接転送 — **サーバー不経由**（peer ごとに独立チャネル）
+
+## 段階1: スター型複数受信者アーキテクチャ（cmd_028）
+
+### 目的
+
+同一合言葉で **複数の受信者**が同時（または逐次）に同一ファイルを受信できるようにする。
+
+### コンポーネント構成
+
+| 層 | v1 | v2（段階1） |
+|----|-----|-------------|
+| Valkey ルーム | creator_id + joiner_id（単数） | `version: 2`, `joiner_ids[]`, `max_joiners`, `status` |
+| in-process 接続 | creator + joiner（各1席） | creator + `joiners: HashMap<peer_id, PeerSlot>` |
+| WS ルーティング | `other_tx()` 相互中継 | `target_peer_id` による宛先指定 |
+| 送信側 Web | 単一 PC + DC | `Map<peer_id, SenderPeerState>`（peer ごとに独立 ICE キュー） |
+| 受信側 Web | 単一 PC + DC | 単一 PC（各 joiner は creator との 1 接続のみ） |
+
+### peer_id と識別
+
+- join 成功時、サーバが UUID v4 の `peer_id` を各 joiner に発行
+- offer / answer / ice には `target_peer_id` を付与し、該当 peer のみに配送
+- creator の `peer_id` は creator のユーザー ID またはサーバ割当 ID（実装で統一）
+
+### 帯域・backpressure
+
+- 同一ファイルを N peer へ **独立送信**（P2P の本質。サーバは中継しない）
+- `waitForBuffer(dc)` は **peer 単位**。`Promise.all` による一括送信は禁止（遅い peer が全体をブロックしない）
+- デフォルト `WATCHWORD_MAX_JOINERS=5` で同時受信者を cap（DoS 防止）
+
+### v1 との後方互換
+
+| 項目 | 対策 |
+|------|------|
+| Valkey | `version` フィールドで deserialize 分岐。v1 ルームは読み取り専用互換 |
+| WS | `peer_id` 省略時は現行 1:1 relay |
+| REST | 単一ファイル POST は維持。`protocol: 2` 指定で v2 ルーム作成 |
+| Frontend | `room.protocol` または join 応答の `protocol` で v1/v2 分岐 |
+
+段階2以降で「継続共有」（1 人完了後もルーム維持）、段階3で複数ファイル、段階4で UI 統合を追加予定。
 
 ## サーバーを経由するものとしないもの
 
@@ -109,6 +169,11 @@ HyperDrive は同一LAN内だけでなく、インターネット越しの異な
 - 第三者TURNサービス（coturn等をクラウドで動かす場合）を使用する際は
   そのサーバー管理者が暗号化データを通過させることを認識すること
 
+**複数受信者時の帯域**
+
+- 送信者は同一ファイルを N peer 分だけ再送する（P2P の性質上、サーバ帯域は消費しないが送信者 uplink は N 倍に近い）
+- 大容量 × 多数 peer は実用上の上限あり。`WATCHWORD_MAX_JOINERS` で cap
+
 ### 結論
 
 「**ファイル実体がHyperDriveサーバーに保存されない**」という意味では
@@ -130,6 +195,8 @@ HyperDrive は同一LAN内だけでなく、インターネット越しの異な
 - 進捗表示のためのチャンク番号管理
   - 各チャンクに連番（0始まり）を付与し、UI は `受信済みチャンク数 / 総チャンク数` で進捗を表示する
 
+段階3以降、複数ファイル時は DataChannel 制御メッセージ `session_meta` / `file_start` / `file_complete` / `session_complete` を使用（段階1では単一ファイル・現行 `meta` / `complete` を維持）。
+
 ## HyperDriveでの利用前提・制約
 
 | 項目 | 内容 |
@@ -139,8 +206,9 @@ HyperDrive は同一LAN内だけでなく、インターネット越しの異な
 | STUNサーバー | LAN内なら不要 / LAN外では外部IP取得のために必要 |
 | ブラウザ要件 | WebRTC DataChannel 対応ブラウザ（Chrome/Firefox/Safari/Edge） |
 | 最大ファイルサイズ | 未定義（メモリ制限に依存） |
-| 同時接続 | 1対1（合言葉1つにつき1ペア） |
-| セッション有効期限 | 10分（Valkey TTL） |
+| 同時接続（v1） | 1対1（合言葉1つにつき1ペア） |
+| 同時接続（v2・段階1） | 1対N（スター型、既定 max 5 joiner） |
+| セッション有効期限 | 10分（Valkey TTL、段階2で open/closed 状態管理を追加予定） |
 
 ## 関連ドキュメント
 
