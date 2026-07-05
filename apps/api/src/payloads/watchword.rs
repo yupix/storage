@@ -8,6 +8,8 @@ pub const MAX_CHUNK_SIZE: i64 = 65536;
 pub const MAX_ROOM_TTL_SECS: u64 = 600;
 pub const PASSPHRASE_LEN: usize = 8;
 pub const MAX_PASSPHRASE_RETRIES: u32 = 16;
+pub const DEFAULT_MAX_JOINERS: u32 = 5;
+pub const WATCHWORD_ROOM_VERSION_V2: u32 = 2;
 
 #[derive(Validate, Debug, Deserialize, utoipa::ToSchema)]
 pub struct CreateWatchwordRequest {
@@ -52,7 +54,7 @@ pub struct WatchwordRoomMetadata {
     pub sender_id: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WatchwordRoom {
     pub passphrase: String,
     pub creator_id: String,
@@ -60,6 +62,132 @@ pub struct WatchwordRoom {
     pub joiner_id: Option<String>,
     pub metadata: WatchwordRoomMetadata,
     pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct WatchwordFileEntry {
+    pub file_id: String,
+    pub filename: String,
+    pub file_type: String,
+    pub filesize: i64,
+    pub mime_type: String,
+    pub filehash: String,
+    #[serde(default = "default_chunk_size")]
+    pub chunk_size: i64,
+    #[serde(default)]
+    pub downloadable: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WatchwordRoomV2 {
+    pub version: u32,
+    pub passphrase: String,
+    pub creator_id: String,
+    pub status: String,
+    pub max_joiners: u32,
+    pub files: Vec<WatchwordFileEntry>,
+    pub joiner_ids: Vec<String>,
+    pub created_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expire_at: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub enum ParsedWatchwordRoom {
+    V1(WatchwordRoom),
+    V2(WatchwordRoomV2),
+}
+
+impl ParsedWatchwordRoom {
+    pub fn creator_id(&self) -> &str {
+        match self {
+            Self::V1(room) => &room.creator_id,
+            Self::V2(room) => &room.creator_id,
+        }
+    }
+
+    pub fn passphrase(&self) -> &str {
+        match self {
+            Self::V1(room) => &room.passphrase,
+            Self::V2(room) => &room.passphrase,
+        }
+    }
+
+    pub fn is_v2(&self) -> bool {
+        matches!(self, Self::V2(_))
+    }
+
+    pub fn active_joiner_count(&self) -> usize {
+        match self {
+            Self::V1(room) => usize::from(room.joiner_id.is_some()),
+            Self::V2(room) => room.joiner_ids.len(),
+        }
+    }
+
+    pub fn max_joiners(&self) -> u32 {
+        match self {
+            Self::V1(_) => 1,
+            Self::V2(room) => room.max_joiners,
+        }
+    }
+
+    pub fn status(&self) -> &str {
+        match self {
+            Self::V1(_) => "open",
+            Self::V2(room) => &room.status,
+        }
+    }
+
+    pub fn room_meta_for_join(&self) -> JoinWatchwordRoomMeta {
+        match self {
+            Self::V1(room) => JoinWatchwordRoomMeta {
+                status: "open".into(),
+                files: vec![WatchwordFileEntry {
+                    file_id: "f1".into(),
+                    filename: room.metadata.filename.clone(),
+                    file_type: room.metadata.file_type.clone(),
+                    filesize: room.metadata.filesize,
+                    mime_type: room.metadata.mime_type.clone(),
+                    filehash: room.metadata.filehash.clone(),
+                    chunk_size: room.metadata.chunk_size,
+                    downloadable: room.metadata.downloadable,
+                }],
+                max_joiners: 1,
+                active_joiners: self.active_joiner_count() as u32,
+            },
+            Self::V2(room) => JoinWatchwordRoomMeta {
+                status: room.status.clone(),
+                files: room.files.clone(),
+                max_joiners: room.max_joiners,
+                active_joiners: room.joiner_ids.len() as u32,
+            },
+        }
+    }
+}
+
+pub fn parse_stored_room(raw: &str) -> Result<ParsedWatchwordRoom, serde_json::Error> {
+    let value: serde_json::Value = serde_json::from_str(raw)?;
+    let version = value.get("version").and_then(|v| v.as_u64()).unwrap_or(1);
+    if version >= WATCHWORD_ROOM_VERSION_V2 as u64 {
+        Ok(ParsedWatchwordRoom::V2(serde_json::from_value(value)?))
+    } else {
+        Ok(ParsedWatchwordRoom::V1(serde_json::from_value(value)?))
+    }
+}
+
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub struct JoinWatchwordRoomMeta {
+    pub status: String,
+    pub files: Vec<WatchwordFileEntry>,
+    pub max_joiners: u32,
+    pub active_joiners: u32,
+}
+
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub struct JoinWatchwordResponse {
+    pub peer_id: String,
+    pub protocol: u32,
+    pub room: JoinWatchwordRoomMeta,
 }
 
 pub fn room_key(passphrase: &str) -> String {
@@ -129,5 +257,56 @@ mod tests {
     fn ttl_rejects_past_expire_at() {
         let past = Utc::now() - Duration::seconds(1);
         assert!(compute_ttl_secs(Some(past)).is_err());
+    }
+
+    #[test]
+    fn parses_v1_room_without_version_field() {
+        let raw = r#"{
+            "passphrase": "abcd1234",
+            "creator_id": "550e8400-e29b-41d4-a716-446655440000",
+            "joiner_id": null,
+            "metadata": {
+                "filename": "a.pdf",
+                "file_type": "pdf",
+                "filesize": 1024,
+                "mime_type": "application/pdf",
+                "filehash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "chunk_size": 16384,
+                "downloadable": true,
+                "receiver_id": "660e8400-e29b-41d4-a716-446655440001",
+                "sender_id": "550e8400-e29b-41d4-a716-446655440000"
+            },
+            "created_at": "2026-07-05T06:00:00Z"
+        }"#;
+        let room = parse_stored_room(raw).unwrap();
+        assert!(!room.is_v2());
+        assert_eq!(room.max_joiners(), 1);
+    }
+
+    #[test]
+    fn parses_v2_room_with_multi_joiner_fields() {
+        let raw = r#"{
+            "version": 2,
+            "passphrase": "x7k9m2pq",
+            "creator_id": "550e8400-e29b-41d4-a716-446655440000",
+            "status": "open",
+            "max_joiners": 5,
+            "files": [{
+                "file_id": "f1",
+                "filename": "doc.pdf",
+                "file_type": "pdf",
+                "filesize": 1048576,
+                "mime_type": "application/pdf",
+                "filehash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "chunk_size": 16384,
+                "downloadable": true
+            }],
+            "joiner_ids": [],
+            "created_at": "2026-07-05T06:00:00Z"
+        }"#;
+        let room = parse_stored_room(raw).unwrap();
+        assert!(room.is_v2());
+        assert_eq!(room.max_joiners(), 5);
+        assert_eq!(room.active_joiner_count(), 0);
     }
 }
