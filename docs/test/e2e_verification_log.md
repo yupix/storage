@@ -93,3 +93,64 @@ Playwright UI 自動検証: **SKIP**（API ポート不一致により WS ハン
 1. 単一 API ポートに統一して `lan-e2e-test.mjs --scenario all` を再実行
 2. 100MB シナリオは時間確保時に `--scenario large`
 3. 軍師 batch3_003 最終 QC
+
+---
+
+## 段階1 — 複数 joiner E2E（cmd_028 / subtask_028_phase1_test_multi_joiner_e2e）
+
+**実施日**: 2026-07-05  
+**担当**: ashigaru6  
+**ブランチ**: `fix/cmd-026-phase2-routeRules-restore`（storage）  
+**手順書**: [e2e_scenario.md §11](./e2e_scenario.md)
+
+### 環境
+
+| 項目 | 値 |
+|------|-----|
+| API | http://localhost:3412（v2 create + notify_existing_joiners ビルド） |
+| Web | http://localhost:5181（`API_BASE_URL` / `VITE_API_WS_BASE_URL` 一致） |
+| ユーザー | turn_a（送信）/ turn_b + e2e_c（受信） |
+
+### 単体テスト
+
+| スイート | 結果 |
+|----------|------|
+| `cargo test watchword` | PASS（23 tests, 0 skipped） |
+| `cargo build` | PASS |
+| vitest `webrtc-sender.test.ts` + `watchword.test.ts` | PASS（17 tests, 0 skipped） |
+
+### E2E 自動検証
+
+```bash
+API_BASE_URL=http://localhost:3412 WEB_BASE_URL=http://localhost:5181 \
+  node scripts/multi-joiner-e2e-test.mjs
+```
+
+| シナリオ | 結果 | 備考 |
+|----------|------|------|
+| 2 joiner 同時受信（256KB） | **PASS** | Receiver A/B とも hash 照合成功 |
+| room_full（max_joiners=2） | **PASS** | 3 人目 REST join → HTTP 409 `room-full` |
+
+### 実装修正（テスト中に検出・修正）
+
+| 領域 | 内容 |
+|------|------|
+| API `create_watchword` | `protocol: 2` で Valkey v2 ルーム作成 |
+| API `handle_create` | `notify_existing_joiners`（create 前に join した受信者へ peer_joined 再送）、`seed_room_limits` |
+| Web `watchword.ts` | ルーム作成時 `protocol: 2` |
+| Web `webrtc-receiver.ts` | v2 ICE を offer 受信まで保留、`target_peer_id` フィルタ |
+| Web `webrtc-sender.ts` | WS create に `protocol: 2` |
+
+### 合格基準（§11.5）
+
+- [x] 2 joiner が同時に同一ファイルを受信完了
+- [x] 各 joiner で filehash 照合成功
+- [x] room_full が `max_joiners` 超過時に返る
+- [x] `cargo build` / vitest / Rust unit PASS（SKIP なし）
+
+### 成果物追記
+
+| ファイル | 内容 |
+|----------|------|
+| `scripts/multi-joiner-e2e-test.mjs` | 複数 joiner Playwright E2E + room_full REST 検証 |
+| `docs/test/e2e_scenario.md` §11 | 手順書（先行タスクで追加済み） |

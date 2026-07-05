@@ -117,6 +117,7 @@ export class WatchwordReceiver {
   private completeReceived = false
   private iceQueue = new PendingIceCandidateQueue()
   private promiseSettled = false
+  private pendingLocalIce: RTCIceCandidateInit[] = []
 
   async start(options: WatchwordReceiverOptions): Promise<ReceivedFile> {
     const { passphrase, iceServers, onProgress, signal } = options
@@ -126,6 +127,7 @@ export class WatchwordReceiver {
     this.chunks.clear()
     this.completeReceived = false
     this.promiseSettled = false
+    this.pendingLocalIce = []
     clearWatchwordPeerId()
     signal?.addEventListener('abort', () => this.stop(), { once: true })
 
@@ -245,6 +247,14 @@ export class WatchwordReceiver {
         }
 
         if (payload.action === 'offer' && payload.data?.sdp && this.pc) {
+          if (
+            joinResult.protocol === 2 &&
+            payload.target_peer_id &&
+            joinResult.peerId &&
+            payload.target_peer_id !== joinResult.peerId
+          ) {
+            return
+          }
           if (payload.peer_id) {
             signaling.targetPeerId = payload.peer_id
           }
@@ -279,6 +289,7 @@ export class WatchwordReceiver {
                 ),
               ),
             )
+            this.flushPendingLocalIce(ws, signaling)
           } catch (err) {
             fail(err)
           }
@@ -286,6 +297,14 @@ export class WatchwordReceiver {
         }
 
         if (payload.action === 'ice' && payload.data?.candidate && this.pc) {
+          if (
+            joinResult.protocol === 2 &&
+            payload.target_peer_id &&
+            joinResult.peerId &&
+            payload.target_peer_id !== joinResult.peerId
+          ) {
+            return
+          }
           this.iceQueue.enqueue(this.pc, {
             candidate: payload.data.candidate,
             sdpMid: payload.data.sdpMid ?? undefined,
@@ -307,6 +326,37 @@ export class WatchwordReceiver {
     clearWatchwordPeerId()
   }
 
+  private sendLocalIce(
+    ws: WebSocket,
+    signaling: SignalingContext,
+    data: {
+      candidate: string
+      sdpMid: string | null
+      sdpMLineIndex: number | null
+    },
+  ): void {
+    ws.send(
+      JSON.stringify(
+        buildSignalingPayload(
+          {
+            action: 'ice',
+            passphrase: signaling.passphrase,
+            data,
+          },
+          signaling,
+        ),
+      ),
+    )
+  }
+
+  private flushPendingLocalIce(ws: WebSocket, signaling: SignalingContext): void {
+    if (signaling.protocol !== 2 || !signaling.targetPeerId) return
+    for (const data of this.pendingLocalIce) {
+      this.sendLocalIce(ws, signaling, data)
+    }
+    this.pendingLocalIce = []
+  }
+
   private setupPeerConnection(
     signaling: SignalingContext,
     iceServers: IceServerConfig[],
@@ -321,22 +371,16 @@ export class WatchwordReceiver {
 
     pc.onicecandidate = (event) => {
       if (!event.candidate) return
-      ws.send(
-        JSON.stringify(
-          buildSignalingPayload(
-            {
-              action: 'ice',
-              passphrase: signaling.passphrase,
-              data: {
-                candidate: event.candidate.candidate,
-                sdpMid: event.candidate.sdpMid,
-                sdpMLineIndex: event.candidate.sdpMLineIndex,
-              },
-            },
-            signaling,
-          ),
-        ),
-      )
+      const candidatePayload = {
+        candidate: event.candidate.candidate,
+        sdpMid: event.candidate.sdpMid,
+        sdpMLineIndex: event.candidate.sdpMLineIndex,
+      }
+      if (signaling.protocol === 2 && !signaling.targetPeerId) {
+        this.pendingLocalIce.push(candidatePayload)
+        return
+      }
+      this.sendLocalIce(ws, signaling, candidatePayload)
     }
 
     pc.onconnectionstatechange = () => {

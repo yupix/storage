@@ -107,7 +107,7 @@ export class WatchwordSender {
       this.ws = ws
 
       ws.onopen = () => {
-        ws.send(JSON.stringify({ action: 'create', passphrase }))
+        ws.send(JSON.stringify({ action: 'create', passphrase, protocol: 2 }))
       }
 
       ws.onerror = () => {

@@ -318,6 +318,25 @@ impl WatchwordRooms {
         Ok(())
     }
 
+    pub async fn notify_existing_joiners(&self, passphrase: &str) {
+        let peer_ids: Vec<String> = {
+            let rooms = self.rooms.read().await;
+            let Some(room) = rooms.get(passphrase) else {
+                return;
+            };
+            room.joiners.keys().cloned().collect()
+        };
+        for peer_id in peer_ids {
+            self.notify_peer_joined(passphrase, &peer_id).await;
+        }
+    }
+
+    pub async fn seed_room_limits(&self, passphrase: &str, max_joiners: usize) {
+        let mut rooms = self.rooms.write().await;
+        let room = rooms.entry(passphrase.to_string()).or_default();
+        room.max_joiners = max_joiners.max(room.max_joiners);
+    }
+
     pub async fn register_joiner(
         &self,
         passphrase: &str,

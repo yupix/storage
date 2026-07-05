@@ -14,9 +14,10 @@ use tracing::warn;
 use crate::extractors::AuthUser;
 use crate::openapi::UnauthorizedErrors;
 use crate::payloads::watchword::{
-    CreateWatchwordRequest, CreateWatchwordResponse,     JoinWatchwordResponse, MAX_PASSPHRASE_RETRIES, PASSPHRASE_LEN, ParsedWatchwordRoom,
-    WATCHWORD_ROOM_VERSION_V2, WatchwordRoom, WatchwordRoomMetadata,
-    compute_ttl_secs, parse_stored_room, room_key, validate_filehash,
+    CreateWatchwordRequest, CreateWatchwordResponse, JoinWatchwordResponse, MAX_PASSPHRASE_RETRIES,
+    PASSPHRASE_LEN, ParsedWatchwordRoom, WATCHWORD_ROOM_VERSION_V2, WatchwordFileEntry,
+    WatchwordRoom, WatchwordRoomMetadata, WatchwordRoomV2, DEFAULT_MAX_JOINERS, compute_ttl_secs,
+    parse_stored_room, room_key, validate_filehash,
 };
 use crate::utils::auth::AuthError;
 use crate::utils::watchword_rooms::{JoinPeerError, RegisterError, WatchwordRooms};
@@ -244,12 +245,14 @@ pub async fn create_watchword(
     let ttl_secs = compute_ttl_secs(body.expire_at).map_err(AuthError::InvalidInput)?;
 
     let created_at = Utc::now().to_rfc3339();
+    let expire_at = body.expire_at.map(|dt| dt.to_rfc3339());
+    let use_v2 = body.protocol == Some(WATCHWORD_ROOM_VERSION_V2);
     let metadata = WatchwordRoomMetadata {
-        filename: body.filename,
-        file_type: body.file_type,
+        filename: body.filename.clone(),
+        file_type: body.file_type.clone(),
         filesize: body.filesize,
-        mime_type: body.mime_type,
-        filehash: body.filehash,
+        mime_type: body.mime_type.clone(),
+        filehash: body.filehash.clone(),
         chunk_size: body.chunk_size,
         downloadable: body.downloadable,
         receiver_id: body.receiver_id.to_string(),
@@ -258,15 +261,43 @@ pub async fn create_watchword(
 
     for _ in 0..MAX_PASSPHRASE_RETRIES {
         let passphrase = generate_passphrase();
-        let room = WatchwordRoom {
-            passphrase: passphrase.clone(),
-            creator_id: auth.user_id.to_string(),
-            joiner_id: None,
-            metadata: metadata.clone(),
-            created_at: created_at.clone(),
-        };
-        let payload = serde_json::to_string(&room)
-            .map_err(|e| AuthError::Internal(anyhow::anyhow!("room json: {e}")))?;
+        let payload = if use_v2 {
+            let max_joiners = body
+                .max_joiners
+                .unwrap_or(DEFAULT_MAX_JOINERS)
+                .min(DEFAULT_MAX_JOINERS);
+            let room = WatchwordRoomV2 {
+                version: WATCHWORD_ROOM_VERSION_V2,
+                passphrase: passphrase.clone(),
+                creator_id: auth.user_id.to_string(),
+                status: "open".into(),
+                max_joiners,
+                files: vec![WatchwordFileEntry {
+                    file_id: "f1".into(),
+                    filename: body.filename.clone(),
+                    file_type: body.file_type.clone(),
+                    filesize: body.filesize,
+                    mime_type: body.mime_type.clone(),
+                    filehash: body.filehash.clone(),
+                    chunk_size: body.chunk_size,
+                    downloadable: body.downloadable,
+                }],
+                joiner_ids: vec![],
+                created_at: created_at.clone(),
+                expire_at: expire_at.clone(),
+            };
+            serde_json::to_string(&room)
+        } else {
+            let room = WatchwordRoom {
+                passphrase: passphrase.clone(),
+                creator_id: auth.user_id.to_string(),
+                joiner_id: None,
+                metadata: metadata.clone(),
+                created_at: created_at.clone(),
+            };
+            serde_json::to_string(&room)
+        }
+        .map_err(|e| AuthError::Internal(anyhow::anyhow!("room json: {e}")))?;
 
         let inserted = state
             .redis_client
@@ -277,7 +308,11 @@ pub async fn create_watchword(
         if inserted {
             return Ok((
                 StatusCode::CREATED,
-                Json(CreateWatchwordResponse { passphrase }),
+                Json(CreateWatchwordResponse {
+                    passphrase,
+                    protocol: use_v2.then_some(WATCHWORD_ROOM_VERSION_V2),
+                    file_count: use_v2.then_some(1),
+                }),
             ));
         }
     }

@@ -99,12 +99,16 @@ async fn handle_watchword_socket(socket: WebSocket, state: AppState, auth: AuthU
                         .await
                         {
                             Ok(creator_peer_id) => {
-                                active_passphrase = Some(passphrase);
+                                active_passphrase = Some(passphrase.clone());
                                 let mut ack = json!({ "action": "create", "status": "ok" });
                                 if let Some(id) = creator_peer_id {
                                     ack["peer_id"] = json!(id);
                                 }
-                                if is_v2 {
+                                let room_is_v2 = load_parsed_room(&redis, &passphrase)
+                                    .await
+                                    .map(|room| room.is_v2())
+                                    .unwrap_or(false);
+                                if is_v2 || room_is_v2 {
                                     ack["protocol"] = json!(PROTOCOL_V2_MULTI);
                                 }
                                 let _ = outbound_tx.send(Message::Text(ack.to_string().into()));
@@ -270,6 +274,10 @@ async fn handle_create(
         return Err("forbidden");
     }
 
+    rooms
+        .seed_room_limits(passphrase, room.max_joiners() as usize)
+        .await;
+
     if room.is_v2() {
         let creator_peer_id = peer_id.unwrap_or_else(|| Uuid::new_v4().to_string());
         rooms
@@ -285,6 +293,7 @@ async fn handle_create(
                 RegisterError::AlreadyJoiner => "already_joiner",
                 RegisterError::RoomFull | RegisterError::AlreadyCreator => "room_full",
             })?;
+        rooms.notify_existing_joiners(passphrase).await;
         return Ok(Some(creator_peer_id));
     }
 

@@ -30,6 +30,12 @@ pub struct CreateWatchwordRequest {
     pub downloadable: bool,
     #[schema(value_type = Option<String>, format = DateTime, example = "2026-06-27T14:00:00Z")]
     pub expire_at: Option<DateTime<Utc>>,
+    /// v2 ルーム作成時は `2`
+    #[serde(default)]
+    pub protocol: Option<u32>,
+    /// v2 のみ。省略時は `DEFAULT_MAX_JOINERS`
+    #[serde(default)]
+    pub max_joiners: Option<u32>,
 }
 
 fn default_chunk_size() -> i64 {
@@ -39,6 +45,10 @@ fn default_chunk_size() -> i64 {
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct CreateWatchwordResponse {
     pub passphrase: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub protocol: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_count: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

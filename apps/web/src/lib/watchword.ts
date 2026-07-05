@@ -17,7 +17,11 @@ export async function createWatchwordRoom(
   body: CreateWatchwordRequest,
 ): Promise<string> {
   const { data, error, response } = await apiClient.POST('/v1/files/watchword', {
-    body,
+    body: {
+      ...body,
+      protocol: 2,
+      max_joiners: 5,
+    },
   })
   if (error || !data) {
     const status = response?.status

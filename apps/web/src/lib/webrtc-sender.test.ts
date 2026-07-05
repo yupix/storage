@@ -111,6 +111,7 @@ describe('WatchwordSender multi-peer', () => {
     expect(JSON.parse(ws!.sent[0]!)).toEqual({
       action: 'create',
       passphrase: 'abcd1234',
+      protocol: 2,
     })
 
     ws!.receive({
