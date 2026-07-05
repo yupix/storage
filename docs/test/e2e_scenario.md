@@ -220,7 +220,24 @@ API_BASE_URL=http://localhost:3400 WEB_BASE_URL=http://localhost:5175 \
 
 ---
 
-## 7. トラブルシューティング
+## 7. リモート dev 環境での WebSocket シグナリング
+
+Coder 等の https リモート環境で合言葉 P2P 共有を利用する場合、
+watchword WS は同一オリジン（same-origin）で接続する。
+`apps/web/src/lib/watchword.ts` の `getWatchwordWsUrl()` がホスト判定を行い、
+localhost 以外ではプロキシ経由（`wss://{host}/v1/ws/watchword`）で接続される。
+
+| 環境 | WS URL 例 | 経路 |
+|------|-----------|------|
+| localhost dev | `ws://localhost:3400/v1/ws/watchword` | API 直結（Vite WS プロキシ迂回） |
+| Coder https dev | `wss://{coder-host}/v1/ws/watchword` | Nitro `routeRules`（same-origin） |
+| production | `wss://{app-host}/v1/ws/watchword` | Nitro `routeRules` proxy |
+
+詳細・切り分け表: [vite-ws.md](../spec/infra/vite-ws.md)
+
+---
+
+## 8. トラブルシューティング
 
 | 症状 | 確認 |
 |------|------|
@@ -231,7 +248,7 @@ API_BASE_URL=http://localhost:3400 WEB_BASE_URL=http://localhost:5175 \
 
 ---
 
-## 8. 参照
+## 9. 参照
 
 - [turn_verification_log.md](./turn_verification_log.md)
 - [TURN_SETUP.md](../TURN_SETUP.md)
