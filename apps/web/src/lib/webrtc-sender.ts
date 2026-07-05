@@ -1,3 +1,4 @@
+import { PendingIceCandidateQueue } from './webrtc-ice'
 import {
   DEFAULT_CHUNK_SIZE,
   getWatchwordWsUrl,
@@ -49,6 +50,7 @@ export class WatchwordSender {
   private dc: RTCDataChannel | null = null
   private offerRetryTimer: ReturnType<typeof setTimeout> | null = null
   private aborted = false
+  private iceQueue = new PendingIceCandidateQueue()
 
   async start(options: WatchwordSenderOptions): Promise<void> {
     const {
@@ -129,11 +131,12 @@ export class WatchwordSender {
             type: 'answer',
             sdp: payload.data.sdp,
           })
+          await this.iceQueue.flush(this.pc)
           return
         }
 
         if (payload.action === 'ice' && payload.data?.candidate && this.pc) {
-          await this.pc.addIceCandidate({
+          this.iceQueue.enqueue(this.pc, {
             candidate: payload.data.candidate,
             sdpMid: payload.data.sdpMid ?? undefined,
             sdpMLineIndex: payload.data.sdpMLineIndex ?? undefined,
