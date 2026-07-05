@@ -3,7 +3,13 @@ import {
   PendingIceCandidateQueue,
 } from './webrtc-ice'
 import {
-  getWatchwordWsUrl,
+  clearWatchwordPeerId,
+  joinWatchwordRoom,
+  mapWatchwordWsError,
+  primaryWatchwordRoomFile,
+  type JoinWatchwordRoomResult,
+  type WatchwordProtocol,
+  type WatchwordRoomMeta,
   type IceServerConfig,
   toRtcIceServers,
 } from './watchword'
@@ -32,6 +38,9 @@ export interface ReceiverProgress {
   totalChunks: number
   message?: string
   meta?: FileTransferMeta
+  protocol?: WatchwordProtocol
+  room?: WatchwordRoomMeta
+  peerId?: string | null
 }
 
 /** batch2_003（filehash 照合）への入力 */
@@ -45,12 +54,49 @@ interface WsPayload {
   status?: string
   error?: string
   passphrase?: string
+  peer_id?: string
+  target_peer_id?: string
+  protocol?: number
   data?: {
     sdp?: string
     type?: string
     candidate?: string
     sdpMid?: string | null
     sdpMLineIndex?: number | null
+  }
+}
+
+interface SignalingContext {
+  passphrase: string
+  protocol: WatchwordProtocol
+  peerId: string | null
+  targetPeerId: string | null
+}
+
+function buildSignalingPayload(
+  base: Record<string, unknown>,
+  context: SignalingContext,
+): Record<string, unknown> {
+  if (context.protocol !== 2 || !context.peerId) return base
+  return {
+    ...base,
+    protocol: 2,
+    peer_id: context.peerId,
+    ...(context.targetPeerId ? { target_peer_id: context.targetPeerId } : {}),
+  }
+}
+
+function roomFileToTransferMeta(
+  file: NonNullable<ReturnType<typeof primaryWatchwordRoomFile>>,
+): FileTransferMeta {
+  const chunkSize = file.chunk_size ?? 16384
+  return {
+    filename: file.filename,
+    filesize: file.filesize,
+    filehash: file.filehash,
+    chunk_size: chunkSize,
+    total_chunks: Math.max(1, Math.ceil(file.filesize / chunkSize)),
+    mime_type: file.mime_type || 'application/octet-stream',
   }
 }
 
@@ -80,6 +126,7 @@ export class WatchwordReceiver {
     this.chunks.clear()
     this.completeReceived = false
     this.promiseSettled = false
+    clearWatchwordPeerId()
     signal?.addEventListener('abort', () => this.stop(), { once: true })
 
     onProgress({
@@ -88,6 +135,36 @@ export class WatchwordReceiver {
       totalChunks: 0,
       message: 'シグナリングサーバーに接続中…',
     })
+
+    let joinResult: JoinWatchwordRoomResult
+    try {
+      joinResult = await joinWatchwordRoom(passphrase)
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'シグナリング接続に失敗しました'
+      onProgress({
+        phase: 'error',
+        receivedChunks: 0,
+        totalChunks: 0,
+        message,
+      })
+      throw err instanceof Error ? err : new Error(message)
+    }
+
+    const primaryRoomFile = primaryWatchwordRoomFile(joinResult.room)
+    const previewMeta = primaryRoomFile
+      ? roomFileToTransferMeta(primaryRoomFile)
+      : undefined
+    if (previewMeta) {
+      this.meta = previewMeta
+    }
+
+    const signaling: SignalingContext = {
+      passphrase,
+      protocol: joinResult.protocol,
+      peerId: joinResult.peerId,
+      targetPeerId: joinResult.room?.creator_id ?? null,
+    }
 
     return new Promise<ReceivedFile>((resolve, reject) => {
       const fail = (err: unknown) => {
@@ -101,11 +178,14 @@ export class WatchwordReceiver {
           totalChunks: this.meta?.total_chunks ?? 0,
           message,
           meta: this.meta ?? undefined,
+          protocol: joinResult.protocol,
+          room: joinResult.room ?? undefined,
+          peerId: joinResult.peerId,
         })
         reject(err instanceof Error ? err : new Error(message))
       }
 
-      const ws = new WebSocket(getWatchwordWsUrl())
+      const ws = joinResult.ws
       this.ws = ws
 
       ws.onerror = () => fail(new Error('シグナリング接続に失敗しました'))
@@ -119,12 +199,36 @@ export class WatchwordReceiver {
           totalChunks: this.meta?.total_chunks ?? 0,
           message: '接続が切断されました',
           meta: this.meta ?? undefined,
+          protocol: joinResult.protocol,
+          room: joinResult.room ?? undefined,
+          peerId: joinResult.peerId,
         })
         fail(new Error('シグナリング接続が切断されました'))
       }
 
-      ws.onopen = () => {
-        ws.send(JSON.stringify({ action: 'join', passphrase }))
+      try {
+        this.setupPeerConnection(
+          signaling,
+          iceServers,
+          ws,
+          onProgress,
+          joinResult,
+          resolve,
+          fail,
+        )
+        onProgress({
+          phase: 'waiting_offer',
+          receivedChunks: 0,
+          totalChunks: previewMeta?.total_chunks ?? 0,
+          message: '送信者の接続を待っています…',
+          meta: previewMeta,
+          protocol: joinResult.protocol,
+          room: joinResult.room ?? undefined,
+          peerId: joinResult.peerId,
+        })
+      } catch (err) {
+        fail(err)
+        return
       }
 
       ws.onmessage = async (event) => {
@@ -136,32 +240,24 @@ export class WatchwordReceiver {
         }
 
         if (payload.error) {
-          fail(new Error(this.mapWsError(payload.error)))
-          return
-        }
-
-        if (payload.action === 'join' && payload.status === 'ok') {
-          try {
-            this.setupPeerConnection(passphrase, iceServers, ws, onProgress, resolve, fail)
-            onProgress({
-              phase: 'waiting_offer',
-              receivedChunks: 0,
-              totalChunks: 0,
-              message: '送信者の接続を待っています…',
-            })
-          } catch (err) {
-            fail(err)
-          }
+          fail(new Error(mapWatchwordWsError(payload.error)))
           return
         }
 
         if (payload.action === 'offer' && payload.data?.sdp && this.pc) {
+          if (payload.peer_id) {
+            signaling.targetPeerId = payload.peer_id
+          }
           try {
             onProgress({
               phase: 'negotiating',
               receivedChunks: 0,
-              totalChunks: 0,
+              totalChunks: this.meta?.total_chunks ?? 0,
               message: 'P2P 接続を確立中…',
+              meta: this.meta ?? undefined,
+              protocol: joinResult.protocol,
+              room: joinResult.room ?? undefined,
+              peerId: joinResult.peerId,
             })
             await delayOfferIfConfigured()
             await this.pc.setRemoteDescription({
@@ -172,11 +268,16 @@ export class WatchwordReceiver {
             const answer = await this.pc.createAnswer()
             await this.pc.setLocalDescription(answer)
             ws.send(
-              JSON.stringify({
-                action: 'answer',
-                passphrase,
-                data: { sdp: answer.sdp, type: answer.type },
-              }),
+              JSON.stringify(
+                buildSignalingPayload(
+                  {
+                    action: 'answer',
+                    passphrase,
+                    data: { sdp: answer.sdp, type: answer.type },
+                  },
+                  signaling,
+                ),
+              ),
             )
           } catch (err) {
             fail(err)
@@ -203,34 +304,15 @@ export class WatchwordReceiver {
     this.dc = null
     this.pc = null
     this.ws = null
-  }
-
-  private mapWsError(code: string): string {
-    switch (code) {
-      case 'unauthorized':
-        return 'ログインが必要です'
-      case 'room_not_found':
-        return '合言葉が正しくないか、ルームの有効期限が切れています'
-      case 'room_full':
-        return 'ルームが満員です'
-      case 'joiner_taken':
-        return 'このルームには既に別の受信者が接続しています'
-      case 'already_creator':
-        return '送信者は受信者として参加できません'
-      case 'peer_unavailable':
-        return '送信者がまだ接続していません'
-      case 'invalid_message':
-        return 'シグナリングメッセージが不正です'
-      default:
-        return `シグナリングエラー: ${code}`
-    }
+    clearWatchwordPeerId()
   }
 
   private setupPeerConnection(
-    passphrase: string,
+    signaling: SignalingContext,
     iceServers: IceServerConfig[],
     ws: WebSocket,
     onProgress: (progress: ReceiverProgress) => void,
+    joinResult: JoinWatchwordRoomResult,
     resolve: (file: ReceivedFile) => void,
     fail: (err: unknown) => void,
   ): void {
@@ -240,15 +322,20 @@ export class WatchwordReceiver {
     pc.onicecandidate = (event) => {
       if (!event.candidate) return
       ws.send(
-        JSON.stringify({
-          action: 'ice',
-          passphrase,
-          data: {
-            candidate: event.candidate.candidate,
-            sdpMid: event.candidate.sdpMid,
-            sdpMLineIndex: event.candidate.sdpMLineIndex,
-          },
-        }),
+        JSON.stringify(
+          buildSignalingPayload(
+            {
+              action: 'ice',
+              passphrase: signaling.passphrase,
+              data: {
+                candidate: event.candidate.candidate,
+                sdpMid: event.candidate.sdpMid,
+                sdpMLineIndex: event.candidate.sdpMLineIndex,
+              },
+            },
+            signaling,
+          ),
+        ),
       )
     }
 
@@ -264,6 +351,9 @@ export class WatchwordReceiver {
           totalChunks: this.meta?.total_chunks ?? 0,
           message: 'P2P 接続が切断されました',
           meta: this.meta ?? undefined,
+          protocol: joinResult.protocol,
+          room: joinResult.room ?? undefined,
+          peerId: joinResult.peerId,
         })
       }
     }
@@ -279,11 +369,20 @@ export class WatchwordReceiver {
           totalChunks: this.meta?.total_chunks ?? 0,
           message: 'ファイル受信を待機中…',
           meta: this.meta ?? undefined,
+          protocol: joinResult.protocol,
+          room: joinResult.room ?? undefined,
+          peerId: joinResult.peerId,
         })
       }
 
       dc.onmessage = (messageEvent) => {
-        void this.handleDataChannelMessage(messageEvent, onProgress, resolve, fail)
+        void this.handleDataChannelMessage(
+          messageEvent,
+          onProgress,
+          joinResult,
+          resolve,
+          fail,
+        )
       }
 
       dc.onerror = () => fail(new Error('DataChannel でエラーが発生しました'))
@@ -295,6 +394,9 @@ export class WatchwordReceiver {
             totalChunks: this.meta?.total_chunks ?? 0,
             message: '転送中に接続が切断されました',
             meta: this.meta ?? undefined,
+            protocol: joinResult.protocol,
+            room: joinResult.room ?? undefined,
+            peerId: joinResult.peerId,
           })
         }
       }
@@ -304,6 +406,7 @@ export class WatchwordReceiver {
   private async handleDataChannelMessage(
     messageEvent: MessageEvent,
     onProgress: (progress: ReceiverProgress) => void,
+    joinResult: JoinWatchwordRoomResult,
     resolve: (file: ReceivedFile) => void,
     fail: (err: unknown) => void,
   ): Promise<void> {
@@ -345,6 +448,9 @@ export class WatchwordReceiver {
             totalChunks: this.meta.total_chunks,
             message: `${this.meta.filename} を受信中…`,
             meta: this.meta,
+            protocol: joinResult.protocol,
+            room: joinResult.room ?? undefined,
+            peerId: joinResult.peerId,
           })
           return
         }
@@ -360,6 +466,9 @@ export class WatchwordReceiver {
             totalChunks: file.meta.total_chunks,
             message: 'ファイルの受信が完了しました',
             meta: file.meta,
+            protocol: joinResult.protocol,
+            room: joinResult.room ?? undefined,
+            peerId: joinResult.peerId,
           })
           resolve(file)
         }
@@ -384,6 +493,9 @@ export class WatchwordReceiver {
             ? `受信中 ${this.chunks.size} / ${totalChunks}`
             : 'チャンクを受信中…',
         meta: this.meta ?? undefined,
+        protocol: joinResult.protocol,
+        room: joinResult.room ?? undefined,
+        peerId: joinResult.peerId,
       })
     } catch (err) {
       fail(err)

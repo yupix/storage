@@ -92,3 +92,192 @@ export function toRtcIceServers(servers: IceServerConfig[]): RTCIceServer[] {
     ...(server.credential ? { credential: server.credential } : {}),
   }))
 }
+
+export type WatchwordProtocol = 1 | 2
+
+export interface WatchwordRoomFile {
+  file_id: string
+  filename: string
+  filesize: number
+  filehash: string
+  mime_type?: string
+  file_type?: string
+  chunk_size?: number
+  downloadable?: boolean
+}
+
+export interface WatchwordRoomMeta {
+  protocol: WatchwordProtocol
+  status: 'open' | 'closed'
+  files: WatchwordRoomFile[]
+  max_joiners?: number
+  active_joiners?: number
+  creator_id?: string
+}
+
+export interface JoinWatchwordRoomResult {
+  peerId: string | null
+  protocol: WatchwordProtocol
+  room: WatchwordRoomMeta | null
+  ws: WebSocket
+}
+
+export interface WatchwordJoinWsPayload {
+  action?: string
+  status?: string
+  error?: string
+  peer_id?: string
+  protocol?: number
+  room?: {
+    protocol?: number
+    status?: string
+    files?: WatchwordRoomFile[]
+    max_joiners?: number
+    active_joiners?: number
+    creator_id?: string
+  }
+}
+
+let lastWatchwordPeerId: string | null = null
+
+export function getWatchwordPeerId(): string | null {
+  return lastWatchwordPeerId
+}
+
+export function clearWatchwordPeerId(): void {
+  lastWatchwordPeerId = null
+}
+
+export function mapWatchwordWsError(code: string): string {
+  switch (code) {
+    case 'unauthorized':
+      return 'ログインが必要です'
+    case 'room_not_found':
+      return '合言葉が正しくないか、ルームの有効期限が切れています'
+    case 'room_full':
+      return 'ルームが満員です'
+    case 'joiner_taken':
+      return 'このルームには既に別の受信者が接続しています'
+    case 'already_creator':
+      return '送信者は受信者として参加できません'
+    case 'peer_unavailable':
+      return '送信者がまだ接続していません'
+    case 'invalid_message':
+      return 'シグナリングメッセージが不正です'
+    default:
+      return `シグナリングエラー: ${code}`
+  }
+}
+
+export function parseWatchwordProtocol(
+  payload: Pick<WatchwordJoinWsPayload, 'protocol' | 'room'>,
+): WatchwordProtocol {
+  const value = payload.protocol ?? payload.room?.protocol
+  return value === 2 ? 2 : 1
+}
+
+function parseWatchwordRoomFile(raw: WatchwordRoomFile): WatchwordRoomFile | null {
+  if (!raw.file_id || !raw.filename || raw.filesize == null || !raw.filehash) {
+    return null
+  }
+  return {
+    file_id: raw.file_id,
+    filename: raw.filename,
+    filesize: raw.filesize,
+    filehash: raw.filehash,
+    mime_type: raw.mime_type,
+    file_type: raw.file_type,
+    chunk_size: raw.chunk_size,
+    downloadable: raw.downloadable,
+  }
+}
+
+export function parseWatchwordRoomMeta(
+  payload: WatchwordJoinWsPayload,
+): WatchwordRoomMeta | null {
+  if (!payload.room) return null
+
+  const protocol = parseWatchwordProtocol(payload)
+  const files = Array.isArray(payload.room.files)
+    ? payload.room.files
+        .map((file) => parseWatchwordRoomFile(file))
+        .filter((file): file is WatchwordRoomFile => file != null)
+    : []
+
+  return {
+    protocol,
+    status: payload.room.status === 'closed' ? 'closed' : 'open',
+    files,
+    max_joiners: payload.room.max_joiners,
+    active_joiners: payload.room.active_joiners,
+    creator_id: payload.room.creator_id,
+  }
+}
+
+export function parseJoinWatchwordResponse(
+  payload: WatchwordJoinWsPayload,
+): Omit<JoinWatchwordRoomResult, 'ws'> | null {
+  if (payload.action !== 'join' || payload.status !== 'ok') return null
+
+  const protocol = parseWatchwordProtocol(payload)
+  const room = parseWatchwordRoomMeta(payload)
+
+  return {
+    peerId: payload.peer_id ?? null,
+    protocol,
+    room,
+  }
+}
+
+export function primaryWatchwordRoomFile(
+  room: WatchwordRoomMeta | null,
+): WatchwordRoomFile | null {
+  if (!room || room.files.length === 0) return null
+  return room.files[0] ?? null
+}
+
+export function joinWatchwordRoom(passphrase: string): Promise<JoinWatchwordRoomResult> {
+  return new Promise((resolve, reject) => {
+    let settled = false
+    const ws = new WebSocket(getWatchwordWsUrl())
+
+    const fail = (message: string) => {
+      if (settled) return
+      settled = true
+      ws.close()
+      reject(new Error(message))
+    }
+
+    ws.onerror = () => fail('シグナリング接続に失敗しました')
+
+    ws.onclose = () => {
+      if (!settled) fail('シグナリング接続が切断されました')
+    }
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ action: 'join', passphrase }))
+    }
+
+    ws.onmessage = (event) => {
+      let payload: WatchwordJoinWsPayload
+      try {
+        payload = JSON.parse(String(event.data)) as WatchwordJoinWsPayload
+      } catch {
+        return
+      }
+
+      if (payload.error) {
+        fail(mapWatchwordWsError(payload.error))
+        return
+      }
+
+      const parsed = parseJoinWatchwordResponse(payload)
+      if (!parsed) return
+
+      settled = true
+      lastWatchwordPeerId = parsed.peerId
+      ws.onclose = null
+      resolve({ ...parsed, ws })
+    }
+  })
+}
