@@ -1,4 +1,8 @@
 import {
+  delayOfferIfConfigured,
+  PendingIceCandidateQueue,
+} from './webrtc-ice'
+import {
   getWatchwordWsUrl,
   type IceServerConfig,
   toRtcIceServers,
@@ -65,6 +69,8 @@ export class WatchwordReceiver {
   private meta: FileTransferMeta | null = null
   private chunks = new Map<number, Uint8Array>()
   private completeReceived = false
+  private iceQueue = new PendingIceCandidateQueue()
+  private promiseSettled = false
 
   async start(options: WatchwordReceiverOptions): Promise<ReceivedFile> {
     const { passphrase, iceServers, onProgress, signal } = options
@@ -73,6 +79,7 @@ export class WatchwordReceiver {
     this.meta = null
     this.chunks.clear()
     this.completeReceived = false
+    this.promiseSettled = false
     signal?.addEventListener('abort', () => this.stop(), { once: true })
 
     onProgress({
@@ -84,6 +91,7 @@ export class WatchwordReceiver {
 
     return new Promise<ReceivedFile>((resolve, reject) => {
       const fail = (err: unknown) => {
+        this.promiseSettled = true
         if (this.aborted) return
         const message =
           err instanceof Error ? err.message : '受信に失敗しました'
@@ -155,10 +163,12 @@ export class WatchwordReceiver {
               totalChunks: 0,
               message: 'P2P 接続を確立中…',
             })
+            await delayOfferIfConfigured()
             await this.pc.setRemoteDescription({
               type: 'offer',
               sdp: payload.data.sdp,
             })
+            await this.iceQueue.flush(this.pc)
             const answer = await this.pc.createAnswer()
             await this.pc.setLocalDescription(answer)
             ws.send(
@@ -175,15 +185,11 @@ export class WatchwordReceiver {
         }
 
         if (payload.action === 'ice' && payload.data?.candidate && this.pc) {
-          try {
-            await this.pc.addIceCandidate({
-              candidate: payload.data.candidate,
-              sdpMid: payload.data.sdpMid ?? undefined,
-              sdpMLineIndex: payload.data.sdpMLineIndex ?? undefined,
-            })
-          } catch (err) {
-            fail(err)
-          }
+          this.iceQueue.enqueue(this.pc, {
+            candidate: payload.data.candidate,
+            sdpMid: payload.data.sdpMid ?? undefined,
+            sdpMLineIndex: payload.data.sdpMLineIndex ?? undefined,
+          })
         }
       }
     })
@@ -344,6 +350,8 @@ export class WatchwordReceiver {
         }
 
         if (control.type === 'complete') {
+          if (this.promiseSettled) return
+          this.promiseSettled = true
           this.completeReceived = true
           const file = this.assembleReceivedFile()
           onProgress({
