@@ -13,7 +13,7 @@ const config = defineConfig(({ mode }) => {
 
   return {
   define: {
-    // REST は Vite プロキシ維持。WS のみ API 直接接続用（dev プロキシ upgrade ハング回避）
+    // REST は Nitro routeRules プロキシ。WS 直結用（localhost dev フォールバック）
     'import.meta.env.VITE_API_WS_BASE_URL': JSON.stringify(apiBaseUrl),
   },
   resolve: { tsconfigPaths: true },
@@ -40,6 +40,10 @@ const config = defineConfig(({ mode }) => {
         target: apiBaseUrl,
         changeOrigin: true,
         ws: true,
+        // REST: Nitro routeRules 経由（dev/prod 共通）。Vite server.proxy は REST では効かない。
+        // WS: localhost dev は watchword.ts API 直結。リモート dev は routeRules 経由 same-origin。
+        // ws:true は upgrade イベントの補助として残置（f6fcf95 構成）。
+        // secure: false,  // API が self-signed HTTPS の場合のみ有効化
       },
     },
   },
