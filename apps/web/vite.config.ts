@@ -42,7 +42,10 @@ const config = defineConfig(({ mode }) => {
         ws: true,
       },
     },
-  }
+  },
+  test: {
+    environment: 'node',
+  },
   }
 })
 

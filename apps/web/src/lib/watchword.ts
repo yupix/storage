@@ -64,14 +64,25 @@ function apiBaseToWsOrigin(apiBaseUrl: string): string {
 export function getWatchwordWsUrl(): string {
   if (typeof window === 'undefined') return ''
 
-  // Dev: Vite の /v1 WebSocket プロキシは upgrade でハングするため API へ直接接続
+  const sameOrigin = () => {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    return `${protocol}//${window.location.host}/v1/ws/watchword`
+  }
+
+  if (!import.meta.env.DEV) return sameOrigin()
+
   const wsApiBase = import.meta.env.VITE_API_WS_BASE_URL as string | undefined
-  if (import.meta.env.DEV && wsApiBase) {
+  const host = window.location.hostname
+  const isLocalDev =
+    host === 'localhost' || host === '127.0.0.1' || host === '[::1]'
+
+  // localhost dev のみ: Vite WS プロキシ回避のため API 直結
+  if (isLocalDev && wsApiBase) {
     return `${apiBaseToWsOrigin(wsApiBase)}/v1/ws/watchword`
   }
 
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${protocol}//${window.location.host}/v1/ws/watchword`
+  // Coder 等リモート dev / LAN IP アクセス: same-origin（Vite/Nitro プロキシ経由）
+  return sameOrigin()
 }
 
 export function toRtcIceServers(servers: IceServerConfig[]): RTCIceServer[] {
