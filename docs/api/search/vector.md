@@ -23,7 +23,7 @@
 | キー | 値の種類 | 必須 | デフォルト | 説明 |
 |------|---------|------|-----------|------|
 | q | String | True | - | 検索キーワード（最大255文字）|
-| type | String | False | keyword | `vector` を指定するとベクトル検索、省略またはその他はキーワード検索 |
+| type | String | False | hybrid | 検索モード。`vector` でベクトル検索のみ、`keyword` でキーワード検索のみ、`hybrid` または省略でハイブリッド検索（[hybrid.md](hybrid.md) 参照） |
 | page | Integer | False | 1 | ページ番号 |
 | limit | Integer | False | 50 | 件数（最大: 100）|
 
@@ -35,6 +35,13 @@
 | total | Integer | 全件数 |
 | page | Integer | 現在ページ番号 |
 | limit | Integer | 1ページ件数 |
+
+## 後方互換性
+
+- `type=vector` を明示指定した場合、従来どおりベクトル検索のみを実行する
+- `type=keyword` を明示指定した場合、キーワード検索のみを実行する
+- `type` を省略した場合、デフォルトは **hybrid**（キーワード + ベクトルの RRF 統合）に変更される
+- 既存の `?type=vector` 付き URL は影響を受けない
 
 ## 実装要件
 
