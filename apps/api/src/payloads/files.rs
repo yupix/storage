@@ -14,7 +14,8 @@ pub struct FileListQuery {
 #[into_params(parameter_in = Query)]
 pub struct FileSearchQuery {
     pub q: String,
-    /// 検索タイプ: "vector" でベクトル検索、省略または "keyword" でキーワード検索
+    /// 検索タイプ: 省略または "hybrid" でハイブリッド検索（キーワード+ベクトル RRF 統合）、
+    /// "keyword" / "vector" で単経路検索
     #[serde(rename = "type")]
     pub search_type: Option<String>,
     pub page: Option<u64>,
@@ -30,6 +31,9 @@ pub struct FileResponse {
     pub updated_at: String,
     pub sender_id: String,
     pub is_favorite: bool,
+    /// hybrid 検索時のマッチ理由: "keyword" | "vector" | "both"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub match_reason: Option<String>,
 }
 
 #[derive(Debug, Serialize, utoipa::ToSchema)]
@@ -38,6 +42,12 @@ pub struct PaginatedFileResponse {
     pub total: u64,
     pub page: u64,
     pub limit: u64,
+    /// vector 経路障害時に true（キーワード結果のみ返却）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub degraded: Option<bool>,
+    /// degraded 時の理由（例: "vector_unavailable"）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub degradation_reason: Option<String>,
 }
 
 #[derive(Debug, Serialize, utoipa::ToSchema)]

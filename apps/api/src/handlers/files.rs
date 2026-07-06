@@ -28,10 +28,15 @@ use crate::utils::ocr;
 use crate::jobs::caption::CaptionJob;
 use crate::jobs::embed::EmbedJob;
 use crate::jobs::ocr::OcrJob;
+use crate::search::{MatchReason, RRF_K, fuse_rrf, fusion_depth};
 use crate::AppState;
 use apalis::prelude::TaskSink;
 
 fn file_to_response(file: files::Model) -> FileResponse {
+    file_to_response_with_reason(file, None)
+}
+
+fn file_to_response_with_reason(file: files::Model, match_reason: Option<MatchReason>) -> FileResponse {
     FileResponse {
         id: file.id.to_string(),
         name: file.filename,
@@ -40,6 +45,25 @@ fn file_to_response(file: files::Model) -> FileResponse {
         updated_at: file.updated_at.map(|dt| dt.to_string()).unwrap_or_default(),
         sender_id: file.author_id.to_string(),
         is_favorite: file.is_favorite,
+        match_reason: match_reason.map(|r| r.as_str().to_string()),
+    }
+}
+
+fn paginated_response(
+    files: Vec<FileResponse>,
+    total: u64,
+    page: u64,
+    limit: u64,
+    degraded: Option<bool>,
+    degradation_reason: Option<String>,
+) -> PaginatedFileResponse {
+    PaginatedFileResponse {
+        files,
+        total,
+        page,
+        limit,
+        degraded,
+        degradation_reason,
     }
 }
 
@@ -116,12 +140,14 @@ pub async fn get_files(
     let total = paginator.num_items().await?;
     let db_files = paginator.fetch_page(page - 1).await?;
 
-    Ok(Json(PaginatedFileResponse {
-        files: db_files.into_iter().map(file_to_response).collect(),
+    Ok(Json(paginated_response(
+        db_files.into_iter().map(file_to_response).collect(),
         total,
         page,
         limit,
-    }))
+        None,
+        None,
+    )))
 }
 
 #[utoipa::path(
@@ -622,12 +648,14 @@ pub async fn get_trash(
     let total = paginator.num_items().await?;
     let db_files = paginator.fetch_page(page - 1).await?;
 
-    Ok(Json(PaginatedFileResponse {
-        files: db_files.into_iter().map(file_to_response).collect(),
+    Ok(Json(paginated_response(
+        db_files.into_iter().map(file_to_response).collect(),
         total,
         page,
         limit,
-    }))
+        None,
+        None,
+    )))
 }
 
 #[utoipa::path(
@@ -835,7 +863,7 @@ pub async fn empty_trash(
     path = "/search",
     params(FileSearchQuery),
     responses(
-        (status = 200, description = "検索結果", body = PaginatedFileResponse),
+        (status = 200, description = "検索結果（type 省略時は hybrid: キーワード+ベクトル RRF 統合）", body = PaginatedFileResponse),
         (status = 401, description = "未認証"),
     )
 )]
@@ -855,17 +883,50 @@ pub async fn search_files(
 
     let q = query.q.trim().to_string();
     if q.is_empty() {
-        return Ok(Json(PaginatedFileResponse { files: vec![], total: 0, page, limit }));
+        return Ok(Json(paginated_response(vec![], 0, page, limit, None, None)));
     }
 
-    if query.search_type.as_deref() == Some("vector") {
-        return search_vector(&state, current_user.id, &q, page, limit).await;
+    match query.search_type.as_deref() {
+        Some("vector") => search_vector(&state, current_user.id, &q, page, limit).await,
+        Some("keyword") => search_keyword(&state, current_user.id, &q, page, limit).await,
+        Some("hybrid") | None => search_hybrid(&state, current_user.id, &q, page, limit).await,
+        Some(other) => Err(AuthError::InvalidInput(format!("invalid search type: {other}"))),
     }
+}
 
-    let pattern = format!("%{}%", q);
+async fn search_keyword_internal(
+    db: &DatabaseConnection,
+    user_id: Uuid,
+    q: &str,
+    fetch_limit: u64,
+) -> Result<Vec<files::Model>, AuthError> {
+    let pattern = format!("%{q}%");
+    let models = files::Entity::find()
+        .filter(files::Column::AuthorId.eq(user_id))
+        .filter(files::Column::IsDeleted.eq(false))
+        .filter(
+            Condition::any()
+                .add(files::Column::Filename.ilike(&pattern))
+                .add(files::Column::OcrText.ilike(&pattern)),
+        )
+        .order_by_desc(files::Column::UpdatedAt)
+        .order_by_asc(files::Column::Id)
+        .limit(fetch_limit)
+        .all(db)
+        .await?;
+    Ok(models)
+}
 
+async fn search_keyword(
+    state: &AppState,
+    user_id: Uuid,
+    q: &str,
+    page: u64,
+    limit: u64,
+) -> Result<Json<PaginatedFileResponse>, AuthError> {
+    let pattern = format!("%{q}%");
     let paginator = files::Entity::find()
-        .filter(files::Column::AuthorId.eq(current_user.id))
+        .filter(files::Column::AuthorId.eq(user_id))
         .filter(files::Column::IsDeleted.eq(false))
         .filter(
             Condition::any()
@@ -879,23 +940,23 @@ pub async fn search_files(
     let total = paginator.num_items().await?;
     let db_files = paginator.fetch_page(page - 1).await?;
 
-    Ok(Json(PaginatedFileResponse {
-        files: db_files.into_iter().map(file_to_response).collect(),
+    Ok(Json(paginated_response(
+        db_files.into_iter().map(file_to_response).collect(),
         total,
         page,
         limit,
-    }))
+        None,
+        None,
+    )))
 }
 
-async fn search_vector(
+async fn search_vector_internal(
     state: &AppState,
     user_id: Uuid,
     q: &str,
-    page: u64,
-    limit: u64,
-) -> Result<Json<PaginatedFileResponse>, AuthError> {
+    fetch_limit: u64,
+) -> Result<Vec<files::Model>, AuthError> {
     let embedder = state.embedder.clone();
-    // multilingual-e5 はクエリ側に "query: " プレフィックスが必要
     let text = format!("query: {q}");
     let embeddings = tokio::task::spawn_blocking(move || embedder.embed(vec![text], None))
         .await
@@ -905,9 +966,6 @@ async fn search_vector(
         .into_iter()
         .next()
         .ok_or_else(|| AuthError::Internal(anyhow::anyhow!("no embedding")))?;
-
-    // ページングのため上限を多めに取得してから DB フィルター後にスライスする
-    let fetch_limit = page * limit + limit;
 
     let filter = serde_json::json!({
         "must": [{ "key": "user_id", "match": { "value": user_id.to_string() } }]
@@ -932,10 +990,9 @@ async fn search_vector(
         .collect();
 
     if file_ids.is_empty() {
-        return Ok(Json(PaginatedFileResponse { files: vec![], total: 0, page, limit }));
+        return Ok(vec![]);
     }
 
-    // Qdrant の返す順序を保持するため DB から一括取得してIDマップを作る
     let db_files_map: std::collections::HashMap<Uuid, files::Model> = files::Entity::find()
         .filter(files::Column::Id.is_in(file_ids.clone()))
         .filter(files::Column::IsDeleted.eq(false))
@@ -946,15 +1003,80 @@ async fn search_vector(
         .map(|f| (f.id, f))
         .collect();
 
-    // Qdrant のスコア順を維持して並べる
-    let ordered: Vec<FileResponse> = file_ids
+    Ok(file_ids
         .into_iter()
-        .filter_map(|id| db_files_map.get(&id).map(|f| file_to_response(f.clone())))
-        .collect();
+        .filter_map(|id| db_files_map.get(&id).cloned())
+        .collect())
+}
 
+async fn search_vector(
+    state: &AppState,
+    user_id: Uuid,
+    q: &str,
+    page: u64,
+    limit: u64,
+) -> Result<Json<PaginatedFileResponse>, AuthError> {
+    let fetch_limit = fusion_depth(page, limit);
+    let ordered = search_vector_internal(state, user_id, q, fetch_limit).await?;
     let total = ordered.len() as u64;
     let offset = ((page - 1) * limit) as usize;
-    let page_files = ordered.into_iter().skip(offset).take(limit as usize).collect();
+    let page_files = ordered
+        .into_iter()
+        .skip(offset)
+        .take(limit as usize)
+        .map(file_to_response)
+        .collect();
 
-    Ok(Json(PaginatedFileResponse { files: page_files, total, page, limit }))
+    Ok(Json(paginated_response(page_files, total, page, limit, None, None)))
+}
+
+async fn search_hybrid(
+    state: &AppState,
+    user_id: Uuid,
+    q: &str,
+    page: u64,
+    limit: u64,
+) -> Result<Json<PaginatedFileResponse>, AuthError> {
+    let depth = fusion_depth(page, limit);
+    let db = state.db.clone();
+    let state_vec = state.clone();
+    let q_kw = q.to_string();
+    let q_vec = q.to_string();
+
+    let (keyword_result, vector_result) = tokio::join!(
+        search_keyword_internal(&db, user_id, &q_kw, depth),
+        search_vector_internal(&state_vec, user_id, &q_vec, depth),
+    );
+
+    let keyword_hits = keyword_result?;
+    let (vector_hits, degraded, degradation_reason) = match vector_result {
+        Ok(hits) => (hits, None, None),
+        Err(e) => {
+            tracing::warn!("vector search degraded in hybrid: {e}");
+            (
+                vec![],
+                Some(true),
+                Some("vector_unavailable".to_string()),
+            )
+        }
+    };
+
+    let fused = fuse_rrf(&keyword_hits, &vector_hits, RRF_K);
+    let total = fused.len() as u64;
+    let offset = ((page - 1) * limit) as usize;
+    let page_files: Vec<FileResponse> = fused
+        .into_iter()
+        .skip(offset)
+        .take(limit as usize)
+        .map(|hit| file_to_response_with_reason(hit.file, Some(hit.match_reason)))
+        .collect();
+
+    Ok(Json(paginated_response(
+        page_files,
+        total,
+        page,
+        limit,
+        degraded,
+        degradation_reason,
+    )))
 }

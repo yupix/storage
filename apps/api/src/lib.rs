@@ -15,6 +15,7 @@ pub mod models;
 pub mod openapi;
 pub mod payloads;
 pub mod routes;
+pub mod search;
 pub mod server;
 pub mod settings;
 pub mod utils;
