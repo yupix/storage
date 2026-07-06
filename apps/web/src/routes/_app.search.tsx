@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useState, useEffect } from 'react'
-import { Search, ChevronLeft, ChevronRight, Sparkles, Type } from 'lucide-react'
+import { Search, ChevronLeft, ChevronRight, Sparkles, Type, Layers, AlertTriangle } from 'lucide-react'
 import { searchFiles } from '../lib/files'
 import WorkspacePage from './-workspace/WorkspacePage'
 import { validateWorkspaceSearch } from './-workspace/route-utils'
@@ -8,14 +8,28 @@ import type { WorkspaceSort } from './-workspace/route-utils'
 
 const SEARCH_LIMIT = 50
 
-type SearchType = 'keyword' | 'vector'
+type SearchFilter = 'keyword' | 'vector'
 
 interface SearchSearch {
   q?: string
-  type?: SearchType
+  type?: SearchFilter
   view?: 'grid' | 'list'
   sort?: WorkspaceSort
   page?: number
+}
+
+type ActiveFilter = 'all' | SearchFilter
+
+function toActiveFilter(type?: SearchFilter): ActiveFilter {
+  if (type === 'vector') return 'vector'
+  if (type === 'keyword') return 'keyword'
+  return 'all'
+}
+
+function filterLabel(filter: ActiveFilter): string {
+  if (filter === 'vector') return '意味検索'
+  if (filter === 'keyword') return 'キーワード検索'
+  return '検索'
 }
 
 export const Route = createFileRoute('/_app/search')({
@@ -23,22 +37,53 @@ export const Route = createFileRoute('/_app/search')({
   validateSearch: (search: Record<string, unknown>): SearchSearch => ({
     ...validateWorkspaceSearch(search),
     q: typeof search.q === 'string' ? search.q : undefined,
-    type: search.type === 'vector' ? 'vector' : 'keyword',
+    type: search.type === 'vector'
+      ? 'vector'
+      : search.type === 'keyword'
+        ? 'keyword'
+        : undefined,
     page: typeof search.page === 'number' && search.page >= 1 ? Math.floor(search.page) : undefined,
   }),
   loaderDeps: ({ search }) => ({ q: search.q, type: search.type, page: search.page }),
   loader: async ({ deps }) => {
-    if (!deps.q || deps.q.trim() === '') return { files: [], total: 0, q: '', type: deps.type ?? 'keyword', page: 1, limit: SEARCH_LIMIT }
+    const activeFilter = toActiveFilter(deps.type)
+    if (!deps.q || deps.q.trim() === '') {
+      return {
+        files: [],
+        total: 0,
+        q: '',
+        type: deps.type,
+        filter: activeFilter,
+        page: 1,
+        limit: SEARCH_LIMIT,
+        degraded: false,
+      }
+    }
+
     const page = deps.page ?? 1
-    const type = deps.type ?? 'keyword'
-    const result = await searchFiles(deps.q.trim(), page, SEARCH_LIMIT, type === 'vector' ? 'vector' : undefined)
-    return { files: result.files, total: result.total, q: deps.q.trim(), type, page, limit: SEARCH_LIMIT }
+    const apiType = deps.type === 'vector'
+      ? 'vector' as const
+      : deps.type === 'keyword'
+        ? 'keyword' as const
+        : undefined
+    const result = await searchFiles(deps.q.trim(), page, SEARCH_LIMIT, apiType)
+
+    return {
+      files: result.files,
+      total: result.total,
+      q: deps.q.trim(),
+      type: deps.type,
+      filter: activeFilter,
+      page,
+      limit: SEARCH_LIMIT,
+      degraded: result.degraded ?? false,
+    }
   },
   component: SearchPage,
 })
 
 function SearchPage() {
-  const { files, total, q, type, page, limit } = Route.useLoaderData()
+  const { files, total, q, filter, page, limit, degraded } = Route.useLoaderData()
   const { view, sort } = Route.useSearch()
   const navigate = Route.useNavigate()
   const [inputValue, setInputValue] = useState(q)
@@ -59,48 +104,63 @@ function SearchPage() {
     }
   }
 
-  const handleTypeChange = (newType: SearchType) => {
-    navigate({ search: (prev) => ({ ...prev, type: newType, page: undefined }) })
+  const handleFilterChange = (newFilter: ActiveFilter) => {
+    navigate({
+      search: (prev) => ({
+        ...prev,
+        type: newFilter === 'all' ? undefined : newFilter,
+        page: undefined,
+      }),
+    })
   }
 
-  const placeholder = type === 'vector'
-    ? '抽象的なキーワードで意味検索（例: 走る人）'
-    : 'ファイル名・画像内テキストで検索'
+  const placeholder = 'ファイル名・内容・意味で検索'
+  const resultLabel = filterLabel(filter)
 
   return (
     <div className="flex flex-col gap-2">
       <div className="mx-1.5 mt-2 px-3 flex flex-col gap-2">
-        {/* 検索モード切り替え */}
         <div className="flex items-center gap-1 w-fit rounded-lg border border-border bg-muted p-0.5 text-sm">
           <button
             type="button"
-            onClick={() => handleTypeChange('keyword')}
+            onClick={() => handleFilterChange('all')}
             className={`flex items-center gap-1.5 px-3 py-1 rounded-md transition-colors ${
-              type !== 'vector'
+              filter === 'all'
+                ? 'bg-background shadow-sm text-foreground'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <Layers className="size-3.5" />
+            すべて
+          </button>
+          <button
+            type="button"
+            onClick={() => handleFilterChange('keyword')}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-md transition-colors ${
+              filter === 'keyword'
                 ? 'bg-background shadow-sm text-foreground'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             <Type className="size-3.5" />
-            キーワード
+            キーワードのみ
           </button>
           <button
             type="button"
-            onClick={() => handleTypeChange('vector')}
+            onClick={() => handleFilterChange('vector')}
             className={`flex items-center gap-1.5 px-3 py-1 rounded-md transition-colors ${
-              type === 'vector'
+              filter === 'vector'
                 ? 'bg-background shadow-sm text-foreground'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             <Sparkles className="size-3.5" />
-            意味検索
+            意味のみ
           </button>
         </div>
 
-        {/* 検索フォーム */}
         <form onSubmit={handleSubmit} className="relative max-w-lg">
-          {type === 'vector' ? (
+          {filter === 'vector' ? (
             <Sparkles className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
           ) : (
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
@@ -116,11 +176,21 @@ function SearchPage() {
 
         {q && (
           <p className="text-xs text-muted-foreground">
-            「{q}」の{type === 'vector' ? '意味検索' : '検索'}結果 {total} 件
+            「{q}」の{resultLabel}結果 {total} 件
             {totalPages > 1 && ` （${page} / ${totalPages} ページ）`}
           </p>
         )}
       </div>
+
+      {degraded && (
+        <div
+          role="status"
+          className="mx-1.5 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100"
+        >
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+          <p>意味検索が一時的に利用できません。キーワード検索結果のみ表示しています。</p>
+        </div>
+      )}
 
       {q ? (
         files.length > 0 ? (
@@ -134,8 +204,9 @@ function SearchPage() {
               onSortChange={(s) => navigate({ search: (prev) => ({ ...prev, sort: s }) })}
               preserveOrder={sort === undefined}
               sortLabelOverride={sort === undefined
-                ? type === 'vector' ? '関連度順' : '検索順'
+                ? filter === 'vector' || filter === 'all' ? '関連度順' : '検索順'
                 : undefined}
+              showMatchReason={filter === 'all'}
             />
             {totalPages > 1 && (
               <div className="flex items-center justify-center gap-2 py-4">
@@ -163,15 +234,19 @@ function SearchPage() {
           </>
         ) : (
           <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-2">
-            {type === 'vector' ? <Sparkles className="size-10 opacity-30" /> : <Search className="size-10 opacity-30" />}
+            {filter === 'vector' ? <Sparkles className="size-10 opacity-30" /> : <Search className="size-10 opacity-30" />}
             <p className="text-sm">一致するファイルが見つかりませんでした</p>
           </div>
         )
       ) : (
         <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-2">
-          {type === 'vector' ? <Sparkles className="size-10 opacity-30" /> : <Search className="size-10 opacity-30" />}
+          <Search className="size-10 opacity-30" />
           <p className="text-sm">
-            {type === 'vector' ? '意味の近いファイルをAIで探します' : '検索キーワードを入力してください'}
+            {filter === 'vector'
+              ? '意味の近いファイルをAIで探します'
+              : filter === 'keyword'
+                ? 'キーワードでファイルを探します'
+                : 'ファイル名・内容・意味で横断検索できます'}
           </p>
         </div>
       )}

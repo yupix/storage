@@ -45,6 +45,7 @@ interface WorkspacePageProps {
   onSortChange?: (sort: WorkspaceSort) => void
   preserveOrder?: boolean
   sortLabelOverride?: string
+  showMatchReason?: boolean
 }
 
 const emptyFolders: FolderItem[] = []
@@ -62,6 +63,7 @@ export default function WorkspacePage({
   onSortChange,
   preserveOrder = false,
   sortLabelOverride,
+  showMatchReason = false,
 }: WorkspacePageProps) {
   const router = useRouter()
   const sensors = useSensors(
@@ -391,6 +393,7 @@ export default function WorkspacePage({
               onFolderMove={mode === 'trash' ? undefined : setMoveFolderTargetId}
               onFolderRename={mode === 'trash' ? undefined : (id, name) => setRenameTarget({ id, name, kind: 'folder' })}
               onFolderToggleFavorite={mode === 'trash' ? undefined : handleToggleFolderFavorite}
+              showMatchReason={showMatchReason}
             />
       </div>
 

@@ -20,6 +20,7 @@ import { Button } from './ui/button'
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from './ui/empty'
 import type { FileItem, FolderItem } from '../lib/files'
 import { formatFileSize, downloadFile } from '../lib/files'
+import MatchReasonBadge from './MatchReasonBadge'
 
 // ドラッグが有効かどうかを子コンポーネントへ伝播するコンテキスト
 const DragEnabledContext = createContext(false)
@@ -91,6 +92,7 @@ interface FileItemActionsProps {
   onMove: (id: string) => void
   onRename: (id: string, currentName: string) => void
   onToggleFavorite: (id: string, current: boolean) => void
+  showMatchReason?: boolean
 }
 
 function FileDropdownMenuContent({
@@ -178,7 +180,7 @@ function FileContextMenuContent({
 }
 
 function FileCard({
-  file, onPreview, onDelete, onMove, onRename, onToggleFavorite,
+  file, onPreview, onDelete, onMove, onRename, onToggleFavorite, showMatchReason,
 }: FileItemActionsProps) {
   const date = file.updated_at ? new Date(file.updated_at).toLocaleDateString('ja-JP') : ''
   const isImage = file.file_type.startsWith('image/')
@@ -213,6 +215,7 @@ function FileCard({
           <CardContent className="pt-2 pb-3">
             <div className="flex items-center justify-between gap-1">
               <p className="text-sm font-medium truncate flex-1" title={file.name}>{file.name}</p>
+              {showMatchReason && <MatchReasonBadge reason={file.match_reason} />}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -254,7 +257,7 @@ function FileCard({
 }
 
 function FileRow({
-  file, onPreview, onDelete, onMove, onRename, onToggleFavorite,
+  file, onPreview, onDelete, onMove, onRename, onToggleFavorite, showMatchReason,
 }: FileItemActionsProps) {
   const date = file.updated_at ? new Date(file.updated_at).toLocaleDateString('ja-JP') : ''
   const dragEnabled = useContext(DragEnabledContext)
@@ -286,6 +289,7 @@ function FileRow({
         >
           <FileTypeIcon name={file.name} size={20} />
           <p className="flex-1 text-sm truncate min-w-0" title={file.name}>{file.name}</p>
+          {showMatchReason && <MatchReasonBadge reason={file.match_reason} />}
           {file.is_favorite && <Star className="size-3.5 fill-yellow-400 text-yellow-400 shrink-0" />}
           <p className="text-xs text-muted-foreground w-20 text-right shrink-0">{formatFileSize(file.size)}</p>
           <p className="text-xs text-muted-foreground w-24 text-right shrink-0 hidden sm:block">{date}</p>
@@ -769,6 +773,7 @@ interface MainContentsProps {
   onFolderMove?: (id: string) => void
   onFolderRename?: (id: string, currentName: string) => void
   onFolderToggleFavorite?: (id: string, current: boolean) => void
+  showMatchReason?: boolean
 }
 
 export default function MainContentsDefault({
@@ -792,6 +797,7 @@ export default function MainContentsDefault({
   onFolderMove,
   onFolderRename,
   onFolderToggleFavorite,
+  showMatchReason = false,
 }: MainContentsProps) {
   const noop = () => {}
   const handlePreview = onPreview ?? noop
@@ -926,6 +932,7 @@ export default function MainContentsDefault({
               onMove={handleMove}
               onRename={handleRename}
               onToggleFavorite={handleToggleFavorite}
+              showMatchReason={showMatchReason}
             />
           ))}
         </div>
@@ -956,6 +963,7 @@ export default function MainContentsDefault({
             onMove={handleMove}
             onRename={handleRename}
             onToggleFavorite={handleToggleFavorite}
+            showMatchReason={showMatchReason}
           />
         ))}
       </div>

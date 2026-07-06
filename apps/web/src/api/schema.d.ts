@@ -366,6 +366,8 @@ export interface components {
             file_type: string;
             id: string;
             is_favorite: boolean;
+            /** @description ハイブリッド検索時のマッチ理由 (keyword | vector | both) */
+            match_reason?: string | null;
             name: string;
             sender_id: string;
             /** Format: int64 */
@@ -420,6 +422,10 @@ export interface components {
             username: string;
         };
         PaginatedFileResponse: {
+            /** @description vector 検索が利用不可のとき true */
+            degraded?: boolean;
+            /** @description デグラデーション理由 (例: vector_unavailable) */
+            degradation_reason?: string | null;
             files: components["schemas"]["FileResponse"][];
             /** Format: int64 */
             limit: number;

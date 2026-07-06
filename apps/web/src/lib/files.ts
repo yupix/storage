@@ -12,6 +12,11 @@ export interface PaginatedFiles {
   limit: number
 }
 
+export interface SearchFilesResult extends PaginatedFiles {
+  degraded?: boolean
+  degradation_reason?: string | null
+}
+
 export interface PaginatedFolders {
   folders: FolderItem[]
   total: number
@@ -221,7 +226,7 @@ export async function searchFiles(
   page = 1,
   limit = 50,
   type?: 'keyword' | 'vector',
-): Promise<PaginatedFiles> {
+): Promise<SearchFilesResult> {
   const params = new URLSearchParams({
     q,
     page: String(page),
@@ -230,7 +235,7 @@ export async function searchFiles(
   if (type) params.set('type', type)
   const res = await fetch(`/v1/search?${params}`)
   if (!res.ok) throw new Error('検索に失敗しました')
-  return res.json() as Promise<PaginatedFiles>
+  return res.json() as Promise<SearchFilesResult>
 }
 
 export async function emptyTrash(): Promise<void> {
