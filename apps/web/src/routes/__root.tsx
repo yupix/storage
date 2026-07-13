@@ -13,7 +13,10 @@ export const Route = createRootRoute({
       { name: 'viewport', content: 'width=device-width, initial-scale=1' },
       { title: 'HyperDrive' },
     ],
-    links: [{ rel: 'stylesheet', href: appCss }],
+    links: [
+      { rel: 'stylesheet', href: appCss },
+      { rel: 'icon', type: 'image/png', href: '/hyperdrive-favicon.png' }
+    ],
   }),
   beforeLoad: async ({ location }) => {
     let user = null
