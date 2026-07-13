@@ -16,16 +16,16 @@ function flattenTree(
   folders: FolderItem[],
   expanded: Set<string>,
   childrenMap: Map<string, FolderItem[]>,
-  excludeId: string | null,
+  excludeIds: Set<string>,
   depth = 0,
 ): TreeNode[] {
   const result: TreeNode[] = []
   for (const folder of folders) {
-    if (folder.id === excludeId) continue
+    if (excludeIds.has(folder.id)) continue
     result.push({ folder, depth })
     if (expanded.has(folder.id)) {
       const subs = childrenMap.get(folder.id) ?? []
-      result.push(...flattenTree(subs, expanded, childrenMap, excludeId, depth + 1))
+      result.push(...flattenTree(subs, expanded, childrenMap, excludeIds, depth + 1))
     }
   }
   return result
@@ -33,13 +33,16 @@ function flattenTree(
 
 interface Props {
   open: boolean
+  /** 単体移動用。複数移動する場合は fileIds / folderIds を使う */
   fileId?: string | null
   folderId?: string | null
+  fileIds?: string[]
+  folderIds?: string[]
   onClose: () => void
   onMoved: () => void
 }
 
-export default function MoveToFolderDialog({ open, fileId, folderId, onClose, onMoved }: Props) {
+export default function MoveToFolderDialog({ open, fileId, folderId, fileIds, folderIds, onClose, onMoved }: Props) {
   const [roots, setRoots] = useState<FolderItem[]>([])
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [childrenMap, setChildrenMap] = useState<Map<string, FolderItem[]>>(new Map())
@@ -49,7 +52,11 @@ export default function MoveToFolderDialog({ open, fileId, folderId, onClose, on
   const [moving, setMoving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const targetId = fileId ?? folderId ?? null
+  const fileList = fileIds ?? (fileId ? [fileId] : [])
+  const folderList = folderIds ?? (folderId ? [folderId] : [])
+  const totalTargets = fileList.length + folderList.length
+  // 移動元フォルダー自身は移動先ツリーから除外する（自分の中には移動できない）
+  const excludeIds = new Set(folderList)
 
   useEffect(() => {
     if (!open) return
@@ -94,21 +101,22 @@ export default function MoveToFolderDialog({ open, fileId, folderId, onClose, on
     })
   }, [])
 
-  const nodes = flattenTree(roots, expanded, childrenMap, folderId ?? null)
+  const nodes = flattenTree(roots, expanded, childrenMap, excludeIds)
 
   const selectedName = selected === null
     ? 'マイドライブ'
     : (nodes.find((n) => n.folder.id === selected)?.folder.name ?? '選択したフォルダー')
 
   async function handleMove() {
-    if (!targetId) return
+    if (totalTargets === 0) return
     setMoving(true)
     setError(null)
     try {
-      if (fileId) {
-        await moveFile(fileId, selected)
-      } else if (folderId) {
-        await moveFolder(folderId, selected)
+      for (const id of folderList) {
+        await moveFolder(id, selected)
+      }
+      for (const id of fileList) {
+        await moveFile(id, selected)
       }
       onMoved()
       onClose()
@@ -193,7 +201,7 @@ export default function MoveToFolderDialog({ open, fileId, folderId, onClose, on
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={moving}>キャンセル</Button>
-          <Button onClick={handleMove} disabled={moving || !targetId}>
+          <Button onClick={handleMove} disabled={moving || totalTargets === 0}>
             {moving ? '移動中...' : `「${selectedName}」へ移動`}
           </Button>
         </DialogFooter>

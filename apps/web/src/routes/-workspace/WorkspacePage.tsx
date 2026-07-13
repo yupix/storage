@@ -12,6 +12,7 @@ import {
 import { snapCenterToCursor } from '@dnd-kit/modifiers'
 import { Folder } from 'lucide-react'
 import ToolbarDefault from '../../components/ToolbarDefault'
+import SelectionToolbar from '../../components/SelectionToolbar'
 import MainContentsDefault from '#/components/MainContents'
 import UploadProgress from '../../components/UploadProgress'
 import FilePreviewDialog from '../../components/FilePreviewDialog'
@@ -23,7 +24,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '../../components/ui/alert-dialog'
-import { uploadFileWithProgress, createUploadItem, deleteFile, toggleFavorite, toggleFolderFavorite, moveFile, moveFolder, renameFile, renameFolder, restoreFile, restoreFolder, emptyTrash, permanentDeleteFile, permanentDeleteFolder } from '../../lib/files'
+import { uploadFileWithProgress, createUploadItem, deleteFile, deleteFolder, toggleFavorite, toggleFolderFavorite, moveFile, moveFolder, renameFile, renameFolder, restoreFile, restoreFolder, emptyTrash, permanentDeleteFile, permanentDeleteFolder, downloadFile } from '../../lib/files'
 import type { FileItem, FolderItem, UploadItem } from '../../lib/files'
 import type { WorkspaceSort } from './route-utils'
 
@@ -88,9 +89,42 @@ export default function WorkspacePage({
   const [purgingFolder, setPurgingFolder] = useState(false)
   const [favoriteError, setFavoriteError] = useState<string | null>(null)
 
+  // 複数選択
+  const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(new Set())
+  const [selectedFolderIds, setSelectedFolderIds] = useState<Set<string>>(new Set())
+  const [batchMoveOpen, setBatchMoveOpen] = useState(false)
+  const [batchDeleteOpen, setBatchDeleteOpen] = useState(false)
+  const [batchDeleting, setBatchDeleting] = useState(false)
+  const selectionCount = selectedFileIds.size + selectedFolderIds.size
+  const selectionActive = selectionCount > 0
+
+  const toggleFileSelect = useCallback((id: string) => {
+    setSelectedFileIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+  const toggleFolderSelect = useCallback((id: string) => {
+    setSelectedFolderIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+  const clearSelection = useCallback(() => {
+    setSelectedFileIds(new Set())
+    setSelectedFolderIds(new Set())
+  }, [])
+
   useEffect(() => {
     setFiles(initialFiles)
     setFolders(initialFolders)
+    // ナビゲーションやローダー再取得のたびに選択を解除する
+    setSelectedFileIds(new Set())
+    setSelectedFolderIds(new Set())
   }, [initialFiles, initialFolders])
 
   useEffect(() => {
@@ -272,6 +306,57 @@ export default function WorkspacePage({
     }
   }, [favoritesOnly])
 
+  const handleBatchDelete = useCallback(async () => {
+    setBatchDeleting(true)
+    try {
+      for (const id of selectedFolderIds) {
+        await deleteFolder(id)
+      }
+      for (const id of selectedFileIds) {
+        await deleteFile(id)
+      }
+      clearSelection()
+      await refreshFiles()
+    } catch {
+      // エラー時は何もしない
+    } finally {
+      setBatchDeleting(false)
+      setBatchDeleteOpen(false)
+    }
+  }, [selectedFileIds, selectedFolderIds, clearSelection, refreshFiles])
+
+  const handleBatchFavorite = useCallback(async () => {
+    const selFiles = files.filter((f) => selectedFileIds.has(f.id))
+    const selFolders = folders.filter((f) => selectedFolderIds.has(f.id))
+    // 選択内がすべてお気に入りなら解除、そうでなければお気に入りに追加する
+    const allFavorite = [...selFiles, ...selFolders].every((item) => item.is_favorite)
+    const next = !allFavorite
+    setFavoriteError(null)
+    try {
+      for (const folder of selFolders) {
+        await toggleFolderFavorite(folder.id, next)
+      }
+      for (const file of selFiles) {
+        await toggleFavorite(file.id, next)
+      }
+      clearSelection()
+      await refreshFiles()
+    } catch {
+      setFavoriteError('お気に入りを更新できませんでした')
+    }
+  }, [files, folders, selectedFileIds, selectedFolderIds, clearSelection, refreshFiles])
+
+  const handleBatchDownload = useCallback(async () => {
+    const selFiles = files.filter((f) => selectedFileIds.has(f.id))
+    for (const file of selFiles) {
+      try {
+        await downloadFile(file.id, file.name)
+      } catch {
+        // 個別の失敗は無視して次へ
+      }
+    }
+  }, [files, selectedFileIds])
+
   const sortedFolders = useMemo(() => {
     if (preserveOrder) return folders
 
@@ -340,26 +425,38 @@ export default function WorkspacePage({
       onDragEnd={handleDragEnd}
       onDragCancel={() => setActiveDragItem(null)}
     >
-      <ToolbarDefault
-        onFileSelect={handleFileSelect}
-        uploading={uploading}
-        view={view}
-        onViewChange={onViewChange}
-        onCreateFolder={() => setCreateFolderOpen(true)}
-        breadcrumb={breadcrumb}
-        onBreadcrumbNavigate={(id) => {
-          if (id) {
-            router.navigate({ to: '/drive/$folderId', params: { folderId: id } })
-          } else {
-            router.navigate({ to: '/drive' })
-          }
-        }}
-        mode={mode}
-        onEmptyTrash={() => setEmptyTrashOpen(true)}
-        sort={sort}
-        onSortChange={onSortChange}
-        sortLabelOverride={sortLabelOverride}
-      />
+      {mode === 'normal' && selectionActive ? (
+        <SelectionToolbar
+          count={selectionCount}
+          fileCount={selectedFileIds.size}
+          onClear={clearSelection}
+          onFavorite={handleBatchFavorite}
+          onMove={() => setBatchMoveOpen(true)}
+          onDownload={handleBatchDownload}
+          onDelete={() => setBatchDeleteOpen(true)}
+        />
+      ) : (
+        <ToolbarDefault
+          onFileSelect={handleFileSelect}
+          uploading={uploading}
+          view={view}
+          onViewChange={onViewChange}
+          onCreateFolder={() => setCreateFolderOpen(true)}
+          breadcrumb={breadcrumb}
+          onBreadcrumbNavigate={(id) => {
+            if (id) {
+              router.navigate({ to: '/drive/$folderId', params: { folderId: id } })
+            } else {
+              router.navigate({ to: '/drive' })
+            }
+          }}
+          mode={mode}
+          onEmptyTrash={() => setEmptyTrashOpen(true)}
+          sort={sort}
+          onSortChange={onSortChange}
+          sortLabelOverride={sortLabelOverride}
+        />
+      )}
 
       {favoriteError && (
         <div
@@ -391,6 +488,11 @@ export default function WorkspacePage({
               onFolderMove={mode === 'trash' ? undefined : setMoveFolderTargetId}
               onFolderRename={mode === 'trash' ? undefined : (id, name) => setRenameTarget({ id, name, kind: 'folder' })}
               onFolderToggleFavorite={mode === 'trash' ? undefined : handleToggleFolderFavorite}
+              selectionActive={mode === 'trash' ? undefined : selectionActive}
+              selectedFileIds={mode === 'trash' ? undefined : selectedFileIds}
+              selectedFolderIds={mode === 'trash' ? undefined : selectedFolderIds}
+              onToggleFileSelect={mode === 'trash' ? undefined : toggleFileSelect}
+              onToggleFolderSelect={mode === 'trash' ? undefined : toggleFolderSelect}
             />
       </div>
 
@@ -426,6 +528,14 @@ export default function WorkspacePage({
         folderId={moveFolderTargetId}
         onClose={() => setMoveFolderTargetId(null)}
         onMoved={() => refreshFiles()}
+      />
+
+      <MoveToFolderDialog
+        open={batchMoveOpen}
+        fileIds={[...selectedFileIds]}
+        folderIds={[...selectedFolderIds]}
+        onClose={() => setBatchMoveOpen(false)}
+        onMoved={() => { clearSelection(); refreshFiles() }}
       />
 
       <RenameDialog
@@ -495,6 +605,23 @@ export default function WorkspacePage({
             <AlertDialogCancel disabled={purging}>キャンセル</AlertDialogCancel>
             <AlertDialogAction onClick={handleConfirmPurge} disabled={purging}>
               {purging ? '削除中...' : '完全削除'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={batchDeleteOpen} onOpenChange={(open) => { if (!open) setBatchDeleteOpen(false) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{selectionCount} 件を削除しますか？</AlertDialogTitle>
+            <AlertDialogDescription>
+              選択したファイル・フォルダーをゴミ箱に移動します。ゴミ箱から復元できます。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={batchDeleting}>キャンセル</AlertDialogCancel>
+            <AlertDialogAction onClick={handleBatchDelete} disabled={batchDeleting}>
+              {batchDeleting ? '削除中...' : '削除'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
