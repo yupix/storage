@@ -17,7 +17,7 @@ services:
     image: postgres:17
     environment:
       POSTGRES_USER: hyperdrive
-      POSTGRES_PASSWORD: hyperdrive
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hyperdrive}
       POSTGRES_DB: hyperdrive
     volumes:
       - pg-data:/var/lib/postgresql/data
@@ -55,7 +55,7 @@ services:
     image: rustfs/rustfs:latest
     environment:
       RUSTFS_ACCESS_KEY: hyperdrive
-      RUSTFS_SECRET_KEY: hyperdrive-secret
+      RUSTFS_SECRET_KEY: ${S3_SECRET_KEY:-hyperdrive-secret}
     volumes:
       - rustfs-data:/data
 
@@ -66,7 +66,7 @@ services:
       - rustfs
     environment:
       AWS_ACCESS_KEY_ID: hyperdrive
-      AWS_SECRET_ACCESS_KEY: hyperdrive-secret
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:-hyperdrive-secret}
       AWS_DEFAULT_REGION: us-east-1
     entrypoint: ["/bin/sh", "-c"]
     command:
@@ -87,7 +87,7 @@ services:
     build: ./apps/api
     command: ["migration", "up"]
     environment:
-      DATABASE_URL: postgres://hyperdrive:hyperdrive@postgres:5432/hyperdrive
+      DATABASE_URL: postgres://hyperdrive:${POSTGRES_PASSWORD:-hyperdrive}@postgres:5432/hyperdrive
     depends_on:
       postgres:
         condition: service_healthy
@@ -96,13 +96,13 @@ services:
     restart: unless-stopped
     build: ./apps/api
     environment:
-      DATABASE_URL: postgres://hyperdrive:hyperdrive@postgres:5432/hyperdrive
+      DATABASE_URL: postgres://hyperdrive:${POSTGRES_PASSWORD:-hyperdrive}@postgres:5432/hyperdrive
       REDIS_URL: redis://valkey:6379
       QDRANT_URL: http://qdrant:6333
       STORAGE_DRIVER: s3
       S3_ENDPOINT: http://rustfs:9000
       S3_ACCESS_KEY: hyperdrive
-      S3_SECRET_KEY: hyperdrive-secret
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-hyperdrive-secret}
       S3_BUCKET: hyperdrive
       S3_FORCE_PATH_STYLE: "true"
       # 署名付き URL はブラウザから見えるオリジン（gateway）で署名する
@@ -110,6 +110,10 @@ services:
       ALLOW_ORIGIN: ${HYPERDRIVE_ORIGIN:-http://localhost:8080}
       API_LISTEN_ADDR: 0.0.0.0:3400
       API_BOARD_ADDR: 0.0.0.0:3401
+      # production で secure cookie 化（HTTPS 配下でのデプロイ時に設定）
+      RUST_ENV: ${RUST_ENV:-}
+      # 空文字だと STUN なしになるため既定値をここでも維持する
+      STUN_URLS: ${STUN_URLS:-stun:stun.l.google.com:19302}
       # 画像キャプション（--profile caption 時に CAPTION_DRIVER=local_http を指定）
       CAPTION_DRIVER: ${CAPTION_DRIVER:-}
       CAPTION_LOCAL_URL: http://caption:8500
