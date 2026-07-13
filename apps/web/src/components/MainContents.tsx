@@ -4,7 +4,7 @@ import { useDraggable, useDroppable } from '@dnd-kit/core'
 import {
   EllipsisVertical, Download, SquarePen, Trash2, Share2,
   Star, MoveRight, Lock, Info, CloudUpload, Folder, RotateCcw,
-  Circle, CircleCheck,
+  Circle, CircleCheck, FolderPlus,
 } from 'lucide-react'
 import { FileIcon, defaultStyles } from 'react-file-icon'
 import type { FileIconProps } from 'react-file-icon'
@@ -63,6 +63,46 @@ function SelectCircle({
         : <Circle className="size-5 bg-background/70 rounded-full" />
       }
     </button>
+  )
+}
+
+// 何もない場所を右クリックしたときのメニュー（新しいフォルダー / アップロード）。
+// カードは各自の ContextMenu を持つため、カード側で contextmenu を stopPropagation して
+// このコンテナメニューが二重に開かないようにしている。
+function EmptyAreaContextMenu({
+  children,
+  onCreateFolder,
+  onFileSelect,
+}: {
+  children: React.ReactNode
+  onCreateFolder?: () => void
+  onFileSelect?: (e: React.ChangeEvent<HTMLInputElement>) => void
+}) {
+  const uploadInputRef = useRef<HTMLInputElement>(null)
+  if (!onCreateFolder && !onFileSelect) return <>{children}</>
+  return (
+    <>
+      <ContextMenu>
+        <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+        <ContextMenuContent>
+          {onCreateFolder && (
+            <ContextMenuItem onSelect={onCreateFolder}>
+              <FolderPlus className="mr-2 size-4" />
+              新しいフォルダー
+            </ContextMenuItem>
+          )}
+          {onFileSelect && (
+            <ContextMenuItem onSelect={() => uploadInputRef.current?.click()}>
+              <CloudUpload className="mr-2 size-4" />
+              ファイルをアップロード
+            </ContextMenuItem>
+          )}
+        </ContextMenuContent>
+      </ContextMenu>
+      {onFileSelect && (
+        <input ref={uploadInputRef} type="file" multiple className="sr-only" onChange={onFileSelect} />
+      )}
+    </>
   )
 }
 
@@ -236,7 +276,7 @@ function FileCard({
 
   return (
     <ContextMenu>
-      <ContextMenuTrigger>
+      <ContextMenuTrigger onContextMenu={(e) => e.stopPropagation()}>
         <div ref={setNodeRef} {...attributes} {...listeners} className={isDragging ? 'opacity-40' : ''}>
         <Card
           size="sm"
@@ -321,7 +361,7 @@ function FileRow({
 
   return (
     <ContextMenu>
-      <ContextMenuTrigger>
+      <ContextMenuTrigger onContextMenu={(e) => e.stopPropagation()}>
         {/* biome-ignore lint/a11y/useSemanticElements: The row contains a nested menu button. */}
         <div
           ref={setNodeRef}
@@ -439,7 +479,7 @@ function TrashFileCard({ file, onRestore, onPurge }: TrashFileItemActionsProps) 
   const isImage = file.file_type.startsWith('image/')
   return (
     <ContextMenu>
-      <ContextMenuTrigger>
+      <ContextMenuTrigger onContextMenu={(e) => e.stopPropagation()}>
         <Card size="sm" className="opacity-75">
           <div className="relative flex items-center justify-center h-24 bg-muted/50 rounded-t-xl overflow-hidden">
             {isImage
@@ -474,7 +514,7 @@ function TrashFileRow({ file, onRestore, onPurge }: TrashFileItemActionsProps) {
   const date = file.updated_at ? new Date(file.updated_at).toLocaleDateString('ja-JP') : ''
   return (
     <ContextMenu>
-      <ContextMenuTrigger>
+      <ContextMenuTrigger onContextMenu={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-3 px-3 py-2 hover:bg-muted/50 cursor-default transition-colors border-b border-border/50 last:border-0 opacity-75">
           <FileTypeIcon name={file.name} size={20} />
           <p className="flex-1 text-sm truncate min-w-0" title={file.name}>{file.name}</p>
@@ -537,7 +577,7 @@ function TrashFolderCard({ folder, onRestore, onPurge }: TrashFolderItemActionsP
   const date = folder.updated_at ? new Date(folder.updated_at).toLocaleDateString('ja-JP') : ''
   return (
     <ContextMenu>
-      <ContextMenuTrigger>
+      <ContextMenuTrigger onContextMenu={(e) => e.stopPropagation()}>
         <Card size="sm" className="opacity-75">
           <div className="flex items-center justify-center h-24 bg-muted/50 rounded-t-xl">
             <Folder className="size-12 text-muted-foreground" />
@@ -569,7 +609,7 @@ function TrashFolderRow({ folder, onRestore, onPurge }: TrashFolderItemActionsPr
   const date = folder.updated_at ? new Date(folder.updated_at).toLocaleDateString('ja-JP') : ''
   return (
     <ContextMenu>
-      <ContextMenuTrigger>
+      <ContextMenuTrigger onContextMenu={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-3 px-3 py-2 hover:bg-muted/50 cursor-default transition-colors border-b border-border/50 last:border-0 opacity-75">
           <Folder className="size-5 shrink-0 text-muted-foreground" />
           <p className="flex-1 text-sm truncate min-w-0 font-medium" title={folder.name}>{folder.name}</p>
@@ -679,7 +719,7 @@ function FolderCard({ folder, onOpen, onDelete, onMove, onRename, onToggleFavori
 
   return (
     <ContextMenu>
-      <ContextMenuTrigger>
+      <ContextMenuTrigger onContextMenu={(e) => e.stopPropagation()}>
         <div
           ref={setRef}
           {...attributes}
@@ -773,7 +813,7 @@ function FolderRow({ folder, onOpen, onDelete, onMove, onRename, onToggleFavorit
 
   return (
     <ContextMenu>
-      <ContextMenuTrigger>
+      <ContextMenuTrigger onContextMenu={(e) => e.stopPropagation()}>
         {/* biome-ignore lint/a11y/useSemanticElements: The row contains a nested menu button. */}
         <div
           ref={setRef}
@@ -861,6 +901,8 @@ interface MainContentsProps {
   onFolderMove?: (id: string) => void
   onFolderRename?: (id: string, currentName: string) => void
   onFolderToggleFavorite?: (id: string, current: boolean) => void
+  // 何もない場所を右クリックしたときのメニュー用（通常モードのみ）
+  onCreateFolder?: () => void
   // 複数選択（通常モードのみ。未指定なら選択 UI を出さない）
   selectionActive?: boolean
   selectedFileIds?: Set<string>
@@ -890,6 +932,7 @@ export default function MainContentsDefault({
   onFolderMove,
   onFolderRename,
   onFolderToggleFavorite,
+  onCreateFolder,
   selectionActive = false,
   selectedFileIds,
   selectedFolderIds,
@@ -1014,7 +1057,8 @@ export default function MainContentsDefault({
     return (
       <DragEnabledContext.Provider value={mode === 'normal'}>
         <SelectionContext.Provider value={selectionCtx}>
-        <div className="p-2">
+        <EmptyAreaContextMenu onCreateFolder={onCreateFolder} onFileSelect={onFileSelect}>
+        <div className="p-2 min-h-full">
           <div className="flex items-center gap-3 px-3 py-1.5 border-b border-border text-xs text-muted-foreground font-medium">
             {selectionCtx && <span className="size-5 shrink-0" />}
             <span className="size-5 shrink-0" />
@@ -1046,6 +1090,7 @@ export default function MainContentsDefault({
             />
           ))}
         </div>
+        </EmptyAreaContextMenu>
         </SelectionContext.Provider>
       </DragEnabledContext.Provider>
     )
@@ -1054,7 +1099,8 @@ export default function MainContentsDefault({
   return (
     <DragEnabledContext.Provider value={mode === 'normal'}>
       <SelectionContext.Provider value={selectionCtx}>
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 p-3">
+      <EmptyAreaContextMenu onCreateFolder={onCreateFolder} onFileSelect={onFileSelect}>
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 p-3 min-h-full">
         {folders.map((folder) => (
           <FolderCard
             key={folder.id}
@@ -1078,6 +1124,7 @@ export default function MainContentsDefault({
           />
         ))}
       </div>
+      </EmptyAreaContextMenu>
       </SelectionContext.Provider>
     </DragEnabledContext.Provider>
   )
