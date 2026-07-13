@@ -125,7 +125,8 @@ services:
     volumes:
       - fastembed-cache:/app/.fastembed_cache
     ports:
-      - "3401:3401" # apalis-board ダッシュボード
+      # apalis-board ダッシュボード（認証なしのため localhost 限定）
+      - "127.0.0.1:3401:3401"
     depends_on:
       migration:
         condition: service_completed_successfully
@@ -154,7 +155,12 @@ services:
     volumes:
       - ./infrastructure/gateway/nginx.conf:/etc/nginx/nginx.conf:ro
     ports:
-      - "8080:8080"
+      # 公開サーバーでは Traefik 等のリバースプロキシが proxy ネットワーク経由で
+      # 直接 8080 に届くため、host バインドは localhost に限定している
+      - "127.0.0.1:8080:8080"
+    networks:
+      - default
+      - proxy
     depends_on:
       - web
       - api
@@ -165,6 +171,15 @@ services:
     profiles: ["caption"]
     volumes:
       - hf-cache:/app/.hf-cache
+
+# リバースプロキシ用ネットワーク。
+# ローカル: 既定値のまま（compose が自前で作成）
+# Dokploy: PROXY_NETWORK=dokploy-network / PROXY_EXTERNAL=true を設定すると
+#          Traefik と同じネットワークに gateway が参加してドメインルーティングが通る
+networks:
+  proxy:
+    name: ${PROXY_NETWORK:-hyperdrive-proxy}
+    external: ${PROXY_EXTERNAL:-false}
 
 volumes:
   pg-data:
