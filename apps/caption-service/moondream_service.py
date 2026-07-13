@@ -7,6 +7,8 @@ Response: { "caption": "..." }
   pip install moondream pillow fastapi uvicorn python-multipart
   python moondream_service.py [--host 0.0.0.0] [--port 8500]
 """
+from __future__ import annotations
+
 import argparse
 import io
 import logging

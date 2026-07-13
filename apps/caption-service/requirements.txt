@@ -1,11 +1,12 @@
+# 既定は Florence-2（microsoft/Florence-2-base を HF から自動 DL・ローカル推論）。
+# torch は Dockerfile で CPU 版を先に入れる。
 fastapi>=0.115
 uvicorn[standard]>=0.30
 pillow>=10.0
 python-multipart>=0.0.9
-# moondream
-moondream>=0.0.5
-# florence-2 (4.44+ は Florence-2 の config コードと非互換)
+# Florence-2 (4.44+ は Florence-2 の config コードと非互換)
 transformers==4.43.3
-torch>=2.2
 einops>=0.8
 timm>=0.9
+# 生成した英語キャプションを日本語へ翻訳
+deep-translator>=1.11

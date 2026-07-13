@@ -15,6 +15,12 @@ const SUPPORTED_MIMES: &[&str] = &[
 /// ndlocr-lite の ocr.py へのパス（コンパイル時に CARGO_MANIFEST_DIR から解決）
 const OCR_SCRIPT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../extern/ndlocr-lite/src/ocr.py");
 
+/// ocr.py のパス。Docker 等でソースツリー外に配置する場合は
+/// OCR_SCRIPT_PATH 環境変数で上書きする（未設定ならコンパイル時パス）
+fn ocr_script() -> String {
+    std::env::var("OCR_SCRIPT_PATH").unwrap_or_else(|_| OCR_SCRIPT.to_string())
+}
+
 /// OCR タイムアウト（秒）
 const TIMEOUT_SECS: u64 = 120;
 
@@ -38,8 +44,9 @@ pub fn mime_to_ext(mime: &str) -> &'static str {
 pub async fn extract_text(image_path: &Path) -> Option<String> {
     eprintln!("[OCR] 開始: image={image_path:?}");
 
-    if !std::path::Path::new(OCR_SCRIPT).exists() {
-        eprintln!("[OCR] ERROR: スクリプトが見つかりません: {OCR_SCRIPT}");
+    let script = ocr_script();
+    if !std::path::Path::new(&script).exists() {
+        eprintln!("[OCR] ERROR: スクリプトが見つかりません: {script}");
         return None;
     }
 
@@ -48,7 +55,7 @@ pub async fn extract_text(image_path: &Path) -> Option<String> {
 
     // kill_on_drop(true) により、タイムアウトで Child が drop されると自動的に SIGKILL する
     let mut child = Command::new("python3")
-        .arg(OCR_SCRIPT)
+        .arg(&script)
         .arg("--sourceimg")
         .arg(image_path)
         .arg("--output")

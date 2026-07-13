@@ -3,12 +3,16 @@
 #   docker compose up -d --build
 #   → http://localhost:8080 （gateway 経由で UI / API / WS すべて同一オリジン）
 #
-# ローカルキャプション生成も動かす場合（初回 ~1.7GB のモデル DL が走る）:
-#   CAPTION_DRIVER=local_http docker compose --profile caption up -d --build
-#
 # 注意:
+# - api イメージのビルドコンテキストはリポジトリルート（OCR の
+#   extern/ndlocr-lite を取り込むため）。事前に submodule の取得が必要:
+#     git submodule update --init extern/ndlocr-lite
 # - API は初回起動時に埋め込みモデル（MultilingualE5Small, ~100MB）を DL する。
 #   fastembed-cache volume にキャッシュされるので2回目以降は速い
+# - caption サービス（Florence-2）は既定で起動し、初回に公開モデル
+#   （microsoft/Florence-2-base, ~0.5GB）を DL する。英語キャプションを
+#   deep-translator で日本語化するため推論時にネットワークを使う。
+#   不要なら CAPTION_DRIVER= を空で渡し、caption サービスを起動しない
 # - Grafana / Prometheus / Loki は API 側に metrics エンドポイントが未実装のため未収録
 
 services:
@@ -84,7 +88,9 @@ services:
 
   # DB マイグレーション one-shot（api と同じイメージ）
   migration:
-    build: ./apps/api
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
     command: ["migration", "up"]
     environment:
       DATABASE_URL: postgres://hyperdrive:${POSTGRES_PASSWORD:-hyperdrive}@postgres:5432/hyperdrive
@@ -94,7 +100,9 @@ services:
 
   api:
     restart: unless-stopped
-    build: ./apps/api
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
     environment:
       DATABASE_URL: postgres://hyperdrive:${POSTGRES_PASSWORD:-hyperdrive}@postgres:5432/hyperdrive
       REDIS_URL: redis://valkey:6379
@@ -114,8 +122,9 @@ services:
       RUST_ENV: ${RUST_ENV:-}
       # 空文字だと STUN なしになるため既定値をここでも維持する
       STUN_URLS: ${STUN_URLS:-stun:stun.l.google.com:19302}
-      # 画像キャプション（--profile caption 時に CAPTION_DRIVER=local_http を指定）
-      CAPTION_DRIVER: ${CAPTION_DRIVER:-}
+      # 画像キャプション（既定でローカル caption サービスを使う）。
+      # 無効化するなら CAPTION_DRIVER= を空で渡す
+      CAPTION_DRIVER: ${CAPTION_DRIVER:-local_http}
       CAPTION_LOCAL_URL: http://caption:8500
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       # WebRTC ICE（必要なら .env で上書き。既定は Google STUN のみ）
@@ -165,12 +174,12 @@ services:
       - web
       - api
 
-  # ローカル画像キャプション（重いので opt-in）
+  # ローカル画像キャプション（Florence-2。初回起動時にモデルを DL）
   caption:
+    restart: unless-stopped
     build: ./apps/caption-service
-    profiles: ["caption"]
     volumes:
-      - hf-cache:/app/.hf-cache
+      - hf-cache:/root/.cache
 
 # リバースプロキシ用ネットワーク。
 # ローカル: 既定値のまま（compose が自前で作成）

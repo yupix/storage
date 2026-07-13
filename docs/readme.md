@@ -9,17 +9,23 @@
 
 ## クイックスタート（Docker Compose・全部入り）
 
-PostgreSQL / Valkey / Qdrant / RustFS / API / Web / ゲートウェイをまとめて起動できます。
+PostgreSQL / Valkey / Qdrant / RustFS / API / Web / ゲートウェイ / OCR / キャプションを
+まとめて起動できます。
 
 ```bash
+# OCR 用のサブモジュールを取得（api イメージに焼き込むため必須）
+git submodule update --init extern/ndlocr-lite
+
 docker compose up -d --build
 # → http://localhost:8080 （UI・API・WebSocket すべて同一オリジン）
 ```
 
 - 初回は API 起動時に埋め込みモデル（~100MB）のダウンロードが走ります
+- OCR（ndlocr-lite）は api イメージに同梱され、対応画像のアップロードで自動実行されます
+- キャプション生成（Florence-2）は既定で有効。caption サービスが初回に公開モデル
+  （microsoft/Florence-2-base, ~0.5GB）を DL します。
+  不要なら `CAPTION_DRIVER= docker compose up -d` で無効化できます
 - apalis ジョブダッシュボード → http://localhost:3401
-- ローカル画像キャプションも使う場合（モデル ~1.7GB）:
-  `CAPTION_DRIVER=local_http docker compose --profile caption up -d --build`
 
 ## クイックスタート（手動セットアップ）
 

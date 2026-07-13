@@ -1,0 +1,20 @@
+# api イメージのビルドコンテキスト（リポジトリルート）から除外するもの。
+# extern/ndlocr-lite（モデル含む）と apps/api は残す。
+.git
+**/.git
+**/node_modules
+**/target
+**/.output
+**/.nitro
+**/.tanstack
+apps/web
+next-app
+docs
+infrastructure
+scripts
+**/.env
+**/.env.local
+**/data
+**/*.log
+apps/api/.cargo
+**/.fastembed_cache
