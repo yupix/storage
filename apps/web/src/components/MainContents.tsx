@@ -1,9 +1,10 @@
 import type React from 'react'
-import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useDraggable, useDroppable } from '@dnd-kit/core'
 import {
   EllipsisVertical, Download, SquarePen, Trash2, Share2,
   Star, MoveRight, Lock, Info, CloudUpload, Folder, RotateCcw,
+  Circle, CircleCheck,
 } from 'lucide-react'
 import { FileIcon, defaultStyles } from 'react-file-icon'
 import type { FileIconProps } from 'react-file-icon'
@@ -23,6 +24,47 @@ import { formatFileSize, downloadFile } from '../lib/files'
 
 // ドラッグが有効かどうかを子コンポーネントへ伝播するコンテキスト
 const DragEnabledContext = createContext(false)
+
+// 複数選択の状態と操作を子コンポーネントへ伝播するコンテキスト。
+// null のとき（ゴミ箱など）は選択 UI を表示しない。
+interface SelectionCtx {
+  active: boolean
+  isFileSelected: (id: string) => boolean
+  isFolderSelected: (id: string) => boolean
+  toggleFile: (id: string) => void
+  toggleFolder: (id: string) => void
+}
+const SelectionContext = createContext<SelectionCtx | null>(null)
+
+// カードやリスト行の左上に出す選択用の丸ボタン
+function SelectCircle({
+  selected,
+  onToggle,
+  className = '',
+}: {
+  selected: boolean
+  onToggle: () => void
+  className?: string
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      title={selected ? '選択を解除' : '選択'}
+      className={`flex items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground ${className}`}
+      onClick={(e) => {
+        e.stopPropagation()
+        onToggle()
+      }}
+      onPointerDown={(e) => e.stopPropagation()}
+    >
+      {selected
+        ? <CircleCheck className="size-5 fill-primary text-primary-foreground" />
+        : <Circle className="size-5 bg-background/70 rounded-full" />
+      }
+    </button>
+  )
+}
 
 const skeletonItemIds = [
   'skeleton-1',
@@ -183,6 +225,8 @@ function FileCard({
   const date = file.updated_at ? new Date(file.updated_at).toLocaleDateString('ja-JP') : ''
   const isImage = file.file_type.startsWith('image/')
   const dragEnabled = useContext(DragEnabledContext)
+  const selection = useContext(SelectionContext)
+  const selected = selection?.isFileSelected(file.id) ?? false
 
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `file-${file.id}`,
@@ -196,14 +240,22 @@ function FileCard({
         <div ref={setNodeRef} {...attributes} {...listeners} className={isDragging ? 'opacity-40' : ''}>
         <Card
           size="sm"
-          className="cursor-pointer hover:ring-primary/40 transition-shadow"
-          onClick={() => onPreview(file.id)}
+          className={`group cursor-pointer transition-shadow ${selected ? 'ring-2 ring-primary' : 'hover:ring-primary/40'}`}
+          onClick={() => {
+            if (selection?.active) selection.toggleFile(file.id)
+            else onPreview(file.id)
+          }}
         >
           <div className="relative flex items-center justify-center h-24 bg-muted/50 rounded-t-xl overflow-hidden">
             {isImage
               ? <ImageThumbnail fileId={file.id} name={file.name} />
               : <FileTypeIcon name={file.name} size={48} />
             }
+            {selection && (
+              <div className={`absolute top-1 left-1 z-10 transition-opacity ${selected || selection.active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                <SelectCircle selected={selected} onToggle={() => selection.toggleFile(file.id)} />
+              </div>
+            )}
             {file.is_favorite && (
               <div className="absolute top-1 right-1">
                 <Star className="size-3.5 fill-yellow-400 text-yellow-400 drop-shadow" />
@@ -258,6 +310,8 @@ function FileRow({
 }: FileItemActionsProps) {
   const date = file.updated_at ? new Date(file.updated_at).toLocaleDateString('ja-JP') : ''
   const dragEnabled = useContext(DragEnabledContext)
+  const selection = useContext(SelectionContext)
+  const selected = selection?.isFileSelected(file.id) ?? false
 
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `file-${file.id}`,
@@ -275,15 +329,26 @@ function FileRow({
           {...listeners}
           role="button"
           tabIndex={0}
-          className={`flex items-center gap-3 px-3 py-2 hover:bg-muted/50 cursor-pointer transition-colors border-b border-border/50 last:border-0 ${isDragging ? 'opacity-40' : ''}`}
-          onClick={() => onPreview(file.id)}
+          className={`group flex items-center gap-3 px-3 py-2 cursor-pointer transition-colors border-b border-border/50 last:border-0 ${selected ? 'bg-primary/10' : 'hover:bg-muted/50'} ${isDragging ? 'opacity-40' : ''}`}
+          onClick={() => {
+            if (selection?.active) selection.toggleFile(file.id)
+            else onPreview(file.id)
+          }}
           onKeyDown={(event) => {
             if (event.key === 'Enter' || event.key === ' ') {
               event.preventDefault()
-              onPreview(file.id)
+              if (selection?.active) selection.toggleFile(file.id)
+              else onPreview(file.id)
             }
           }}
         >
+          {selection
+            ? (
+              <div className={`shrink-0 transition-opacity ${selected || selection.active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                <SelectCircle selected={selected} onToggle={() => selection.toggleFile(file.id)} />
+              </div>
+            )
+            : null}
           <FileTypeIcon name={file.name} size={20} />
           <p className="flex-1 text-sm truncate min-w-0" title={file.name}>{file.name}</p>
           {file.is_favorite && <Star className="size-3.5 fill-yellow-400 text-yellow-400 shrink-0" />}
@@ -597,6 +662,8 @@ function FolderContextMenuContent({
 function FolderCard({ folder, onOpen, onDelete, onMove, onRename, onToggleFavorite }: FolderItemActionsProps) {
   const date = folder.updated_at ? new Date(folder.updated_at).toLocaleDateString('ja-JP') : ''
   const dragEnabled = useContext(DragEnabledContext)
+  const selection = useContext(SelectionContext)
+  const selected = selection?.isFolderSelected(folder.id) ?? false
 
   const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({
     id: `folder-${folder.id}`,
@@ -621,11 +688,23 @@ function FolderCard({ folder, onOpen, onDelete, onMove, onRename, onToggleFavori
         >
           <Card
             size="sm"
-            className={`cursor-pointer hover:ring-primary/40 transition-shadow ${isOver ? 'ring-2 ring-primary bg-primary/5' : ''}`}
-            onClick={() => onOpen(folder)}
+            className={`group cursor-pointer transition-shadow ${
+              isOver ? 'ring-2 ring-primary bg-primary/5'
+              : selected ? 'ring-2 ring-primary'
+              : 'hover:ring-primary/40'
+            }`}
+            onClick={() => {
+              if (selection?.active) selection.toggleFolder(folder.id)
+              else onOpen(folder)
+            }}
           >
             <div className="relative flex items-center justify-center h-24 bg-muted/50 rounded-t-xl">
               <Folder className="size-12 text-muted-foreground" />
+              {selection && (
+                <div className={`absolute top-1 left-1 z-10 transition-opacity ${selected || selection.active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                  <SelectCircle selected={selected} onToggle={() => selection.toggleFolder(folder.id)} />
+                </div>
+              )}
               {folder.is_favorite && (
                 <Star className="absolute top-1 right-1 size-3.5 fill-yellow-400 text-yellow-400 drop-shadow" />
               )}
@@ -677,6 +756,8 @@ function FolderCard({ folder, onOpen, onDelete, onMove, onRename, onToggleFavori
 function FolderRow({ folder, onOpen, onDelete, onMove, onRename, onToggleFavorite }: FolderItemActionsProps) {
   const date = folder.updated_at ? new Date(folder.updated_at).toLocaleDateString('ja-JP') : ''
   const dragEnabled = useContext(DragEnabledContext)
+  const selection = useContext(SelectionContext)
+  const selected = selection?.isFolderSelected(folder.id) ?? false
 
   const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({
     id: `folder-${folder.id}`,
@@ -700,15 +781,26 @@ function FolderRow({ folder, onOpen, onDelete, onMove, onRename, onToggleFavorit
           {...listeners}
           role="button"
           tabIndex={0}
-          className={`flex items-center gap-3 px-3 py-2 hover:bg-muted/50 cursor-pointer transition-colors border-b border-border/50 last:border-0 ${isOver ? 'bg-primary/5 ring-1 ring-inset ring-primary' : ''} ${isDragging ? 'opacity-40' : ''}`}
-          onClick={() => onOpen(folder)}
+          className={`group flex items-center gap-3 px-3 py-2 cursor-pointer transition-colors border-b border-border/50 last:border-0 ${isOver ? 'bg-primary/5 ring-1 ring-inset ring-primary' : selected ? 'bg-primary/10' : 'hover:bg-muted/50'} ${isDragging ? 'opacity-40' : ''}`}
+          onClick={() => {
+            if (selection?.active) selection.toggleFolder(folder.id)
+            else onOpen(folder)
+          }}
           onKeyDown={(event) => {
             if (event.key === 'Enter' || event.key === ' ') {
               event.preventDefault()
-              onOpen(folder)
+              if (selection?.active) selection.toggleFolder(folder.id)
+              else onOpen(folder)
             }
           }}
         >
+          {selection
+            ? (
+              <div className={`shrink-0 transition-opacity ${selected || selection.active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                <SelectCircle selected={selected} onToggle={() => selection.toggleFolder(folder.id)} />
+              </div>
+            )
+            : null}
           <Folder className="size-5 shrink-0 text-muted-foreground" />
           <p className="flex-1 text-sm truncate min-w-0 font-medium" title={folder.name}>{folder.name}</p>
           {folder.is_favorite && <Star className="size-3.5 fill-yellow-400 text-yellow-400 shrink-0" />}
@@ -769,6 +861,12 @@ interface MainContentsProps {
   onFolderMove?: (id: string) => void
   onFolderRename?: (id: string, currentName: string) => void
   onFolderToggleFavorite?: (id: string, current: boolean) => void
+  // 複数選択（通常モードのみ。未指定なら選択 UI を出さない）
+  selectionActive?: boolean
+  selectedFileIds?: Set<string>
+  selectedFolderIds?: Set<string>
+  onToggleFileSelect?: (id: string) => void
+  onToggleFolderSelect?: (id: string) => void
 }
 
 export default function MainContentsDefault({
@@ -792,6 +890,11 @@ export default function MainContentsDefault({
   onFolderMove,
   onFolderRename,
   onFolderToggleFavorite,
+  selectionActive = false,
+  selectedFileIds,
+  selectedFolderIds,
+  onToggleFileSelect,
+  onToggleFolderSelect,
 }: MainContentsProps) {
   const noop = () => {}
   const handlePreview = onPreview ?? noop
@@ -808,6 +911,18 @@ export default function MainContentsDefault({
   const handleFolderMove = onFolderMove ?? noop
   const handleFolderRename = onFolderRename ?? noop
   const handleFolderToggleFavorite = onFolderToggleFavorite ?? noop
+
+  const selectionEnabled = Boolean(onToggleFileSelect && onToggleFolderSelect)
+  const selectionCtx = useMemo<SelectionCtx | null>(() => {
+    if (!selectionEnabled) return null
+    return {
+      active: selectionActive,
+      isFileSelected: (id: string) => selectedFileIds?.has(id) ?? false,
+      isFolderSelected: (id: string) => selectedFolderIds?.has(id) ?? false,
+      toggleFile: (id: string) => onToggleFileSelect?.(id),
+      toggleFolder: (id: string) => onToggleFolderSelect?.(id),
+    }
+  }, [selectionEnabled, selectionActive, selectedFileIds, selectedFolderIds, onToggleFileSelect, onToggleFolderSelect])
 
   if (loading) {
     if (view === 'list') {
@@ -898,8 +1013,10 @@ export default function MainContentsDefault({
   if (view === 'list') {
     return (
       <DragEnabledContext.Provider value={mode === 'normal'}>
+        <SelectionContext.Provider value={selectionCtx}>
         <div className="p-2">
           <div className="flex items-center gap-3 px-3 py-1.5 border-b border-border text-xs text-muted-foreground font-medium">
+            {selectionCtx && <span className="size-5 shrink-0" />}
             <span className="size-5 shrink-0" />
             <span className="flex-1">名前</span>
             <span className="w-20 text-right shrink-0">サイズ</span>
@@ -929,12 +1046,14 @@ export default function MainContentsDefault({
             />
           ))}
         </div>
+        </SelectionContext.Provider>
       </DragEnabledContext.Provider>
     )
   }
 
   return (
     <DragEnabledContext.Provider value={mode === 'normal'}>
+      <SelectionContext.Provider value={selectionCtx}>
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 p-3">
         {folders.map((folder) => (
           <FolderCard
@@ -959,6 +1078,7 @@ export default function MainContentsDefault({
           />
         ))}
       </div>
+      </SelectionContext.Provider>
     </DragEnabledContext.Provider>
   )
 }
