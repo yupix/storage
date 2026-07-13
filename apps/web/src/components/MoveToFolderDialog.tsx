@@ -122,6 +122,9 @@ export default function MoveToFolderDialog({ open, fileId, folderId, fileIds, fo
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'エラーが発生しました')
+      // 一部だけ移動が成功している可能性があるため、親のリストも更新する
+      // （ダイアログは開いたままにしてエラーを見せる）
+      onMoved()
     } finally {
       setMoving(false)
     }

@@ -23,7 +23,7 @@ export default function SelectionToolbar({
 }: SelectionToolbarProps) {
   return (
     <div className="bg-card text-card-foreground h-12 mx-1.5 my-2 px-3 rounded-lg flex items-center gap-1 ring-1 ring-primary/40 overflow-x-auto">
-      <Button variant="ghost" size="icon-sm" title="選択を解除" onClick={onClear}>
+      <Button variant="ghost" size="icon-sm" aria-label="選択を解除" title="選択を解除" onClick={onClear}>
         <X className="size-4" />
       </Button>
       <span className="text-sm font-medium whitespace-nowrap px-1">
@@ -31,17 +31,18 @@ export default function SelectionToolbar({
       </span>
 
       <div className="ml-auto flex items-center gap-0.5 shrink-0">
-        <Button variant="ghost" size="sm" onClick={onFavorite}>
+        <Button variant="ghost" size="sm" aria-label="お気に入り" onClick={onFavorite}>
           <Star className="size-4" />
           <span className="hidden sm:inline">お気に入り</span>
         </Button>
-        <Button variant="ghost" size="sm" onClick={onMove}>
+        <Button variant="ghost" size="sm" aria-label="移動" onClick={onMove}>
           <MoveRight className="size-4" />
           <span className="hidden sm:inline">移動</span>
         </Button>
         <Button
           variant="ghost"
           size="sm"
+          aria-label="ダウンロード"
           onClick={onDownload}
           disabled={fileCount === 0}
           title={fileCount === 0 ? 'ダウンロードできるファイルがありません' : undefined}
@@ -52,6 +53,7 @@ export default function SelectionToolbar({
         <Button
           variant="ghost"
           size="sm"
+          aria-label="削除"
           onClick={onDelete}
           className="text-destructive hover:text-destructive"
         >

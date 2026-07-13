@@ -309,17 +309,14 @@ export default function WorkspacePage({
   const handleBatchDelete = useCallback(async () => {
     setBatchDeleting(true)
     try {
-      for (const id of selectedFolderIds) {
-        await deleteFolder(id)
-      }
-      for (const id of selectedFileIds) {
-        await deleteFile(id)
-      }
+      await Promise.all([
+        ...[...selectedFolderIds].map((id) => deleteFolder(id)),
+        ...[...selectedFileIds].map((id) => deleteFile(id)),
+      ])
       clearSelection()
-      await refreshFiles()
-    } catch {
-      // エラー時は何もしない
     } finally {
+      // 一部だけ成功して失敗したケースでもサーバー状態に合わせて再取得する
+      await refreshFiles()
       setBatchDeleting(false)
       setBatchDeleteOpen(false)
     }
@@ -333,16 +330,16 @@ export default function WorkspacePage({
     const next = !allFavorite
     setFavoriteError(null)
     try {
-      for (const folder of selFolders) {
-        await toggleFolderFavorite(folder.id, next)
-      }
-      for (const file of selFiles) {
-        await toggleFavorite(file.id, next)
-      }
+      await Promise.all([
+        ...selFolders.map((folder) => toggleFolderFavorite(folder.id, next)),
+        ...selFiles.map((file) => toggleFavorite(file.id, next)),
+      ])
       clearSelection()
-      await refreshFiles()
     } catch {
       setFavoriteError('お気に入りを更新できませんでした')
+    } finally {
+      // 一部だけ成功して失敗したケースでもサーバー状態に合わせて再取得する
+      await refreshFiles()
     }
   }, [files, folders, selectedFileIds, selectedFolderIds, clearSelection, refreshFiles])
 
