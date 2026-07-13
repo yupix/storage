@@ -445,6 +445,7 @@ export default function WorkspacePage({
 
       <DeleteFolderDialog
         folderId={deleteFolderTargetId}
+        isEmpty={(folders.find((f) => f.id === deleteFolderTargetId)?.total_size ?? 0) === 0}
         onClose={() => setDeleteFolderTargetId(null)}
         onDeleted={() => refreshFiles()}
       />

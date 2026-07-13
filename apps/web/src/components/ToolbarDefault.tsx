@@ -89,9 +89,8 @@ export default function ToolbarDefault({
         </Button>
       ) : (
         <>
-          <Button variant="ghost" size="sm" onClick={onCreateFolder}>
+          <Button variant="ghost" size="icon-sm" title="新しいフォルダー" onClick={onCreateFolder}>
             <FolderPlus className="size-4" />
-            新しいフォルダー
           </Button>
           <Button asChild variant="ghost" size="icon-sm" title="アップロード" disabled={uploading}>
             <label className={uploading ? 'pointer-events-none' : 'cursor-pointer'}>
