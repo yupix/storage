@@ -106,14 +106,13 @@ export default function ReceivePanel() {
   const verifyReceivedFile = async (file: ReceivedFile) => {
     setStep('verifying')
     setHashVerification('verifying')
-    setProgress((current) => ({
+    setProgress({
       phase: 'complete',
       receivedChunks: file.meta.total_chunks,
       totalChunks: file.meta.total_chunks,
       message: '照合中…',
       meta: file.meta,
-      ...(current?.meta ? {} : {}),
-    }))
+    })
 
     const { match, actualHash: computed } = await verifyBlobHash(
       file.blob,

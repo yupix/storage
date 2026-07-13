@@ -34,11 +34,16 @@ function WatchwordPage() {
         </div>
       </div>
 
-      <div className="inline-flex rounded-lg border border-border bg-muted/40 p-1">
+      <div
+        role="group"
+        aria-label="合言葉の操作を切り替え"
+        className="inline-flex rounded-lg border border-border bg-muted/40 p-1"
+      >
         {tabs.map(({ key, label }) => (
           <button
             key={key}
             type="button"
+            aria-pressed={tab === key}
             onClick={() => navigate({ search: { tab: key } })}
             className={`px-4 py-1.5 text-sm rounded-md transition-colors ${
               tab === key
