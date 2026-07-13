@@ -88,8 +88,14 @@ fn build_s3(settings: &Settings) -> Result<Storage> {
         .s3_bucket
         .as_deref()
         .ok_or_else(|| anyhow::anyhow!("S3_BUCKET が未設定です"))?;
+    // 空文字は未設定と同義（docker compose 等で S3_PUBLIC_ENDPOINT= が渡るケース）
+    let public_endpoint = settings
+        .s3_public_endpoint
+        .as_deref()
+        .filter(|s| !s.is_empty());
     Ok(Storage::S3(S3Driver::new(
         endpoint,
+        public_endpoint,
         access_key,
         secret_key,
         bucket,

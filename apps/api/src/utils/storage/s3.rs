@@ -14,26 +14,40 @@ use super::driver::StorageDriver;
 #[derive(Clone)]
 pub struct S3Driver {
     inner: Client,
+    /// 署名付き URL 生成専用クライアント。公開エンドポイント
+    /// (S3_PUBLIC_ENDPOINT) で署名することで、Docker 内部ホスト名などの
+    /// ブラウザから到達できない URL が返るのを防ぐ
+    presigner: Client,
     pub bucket: String,
 }
 
 impl S3Driver {
     pub fn new(
         endpoint: &str,
+        public_endpoint: Option<&str>,
         access_key: &str,
         secret_key: &str,
         bucket: &str,
         force_path_style: bool,
     ) -> Self {
         let credentials = Credentials::new(access_key, secret_key, None, None, "s3");
-        let config = Builder::new()
-            .endpoint_url(endpoint)
-            .credentials_provider(credentials)
-            .region(Region::new("us-east-1"))
-            .force_path_style(force_path_style)
-            .build();
+        let build_client = |endpoint: &str| {
+            let config = Builder::new()
+                .endpoint_url(endpoint)
+                .credentials_provider(credentials.clone())
+                .region(Region::new("us-east-1"))
+                .force_path_style(force_path_style)
+                .build();
+            Client::from_conf(config)
+        };
+        let inner = build_client(endpoint);
+        let presigner = match public_endpoint {
+            Some(public) if public != endpoint => build_client(public),
+            _ => inner.clone(),
+        };
         Self {
-            inner: Client::from_conf(config),
+            inner,
+            presigner,
             bucket: bucket.to_string(),
         }
     }
@@ -84,7 +98,7 @@ impl StorageDriver for S3Driver {
     async fn get_download_url(&self, key: &str, _content_type: &str, expires_in: Duration) -> Result<String> {
         let config = PresigningConfig::expires_in(expires_in)
             .map_err(|e| anyhow::anyhow!("presigning config: {e}"))?;
-        let presigned = self.inner
+        let presigned = self.presigner
             .get_object()
             .bucket(&self.bucket)
             .key(key)
