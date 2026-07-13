@@ -5,7 +5,7 @@ use axum_valid::Valid;
 use chrono::Utc;
 use sea_orm::prelude::Uuid;
 use sea_orm::{ActiveValue::Set, EntityTrait};
-use sea_orm::{ColumnTrait, QueryFilter};
+use sea_orm::{ColumnTrait, Condition, QueryFilter};
 
 use crate::extractors::{AuthUser, CurrentUser};
 use crate::models::UserResponse;
@@ -31,8 +31,13 @@ pub async fn login(
 ) -> Result<Json<String>, AuthError> {
     let LoginRequest { email, password } = payload;
 
+    // email フィールドはユーザー名／メールアドレスのどちらでも受け付ける
     let user = users::Entity::find()
-        .filter(users::Column::Email.eq(email))
+        .filter(
+            Condition::any()
+                .add(users::Column::Email.eq(email.clone()))
+                .add(users::Column::Username.eq(email)),
+        )
         .one(&state.db)
         .await?
         .ok_or(AuthError::Forbidden)?;

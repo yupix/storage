@@ -8,11 +8,13 @@ import { deleteFolder } from '../lib/files'
 
 interface Props {
   folderId: string | null
+  /** 中身が空のフォルダーは削除方法の選択を出さず単純確認にする */
+  isEmpty?: boolean
   onClose: () => void
   onDeleted: () => void
 }
 
-export default function DeleteFolderDialog({ folderId, onClose, onDeleted }: Props) {
+export default function DeleteFolderDialog({ folderId, isEmpty = false, onClose, onDeleted }: Props) {
   const [toHome, setToHome] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -46,36 +48,40 @@ export default function DeleteFolderDialog({ folderId, onClose, onDeleted }: Pro
         <AlertDialogHeader>
           <AlertDialogTitle>フォルダーを削除しますか？</AlertDialogTitle>
           <AlertDialogDescription>
-            フォルダーの削除方法を選択してください。
+            {isEmpty
+              ? 'このフォルダーをゴミ箱に移動します。ゴミ箱から復元できます。'
+              : 'フォルダーの削除方法を選択してください。'}
           </AlertDialogDescription>
         </AlertDialogHeader>
 
-        <div className="flex flex-col gap-2">
-          <button
-            type="button"
-            className={`flex flex-col items-start gap-0.5 rounded-lg border px-3 py-2.5 text-left transition-colors ${
-              !toHome ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
-            }`}
-            onClick={() => setToHome(false)}
-          >
-            <span className="text-sm font-medium">フォルダーごと削除</span>
-            <span className="text-xs text-muted-foreground">
-              フォルダー内のファイル・サブフォルダーをすべてゴミ箱へ移動します
-            </span>
-          </button>
-          <button
-            type="button"
-            className={`flex flex-col items-start gap-0.5 rounded-lg border px-3 py-2.5 text-left transition-colors ${
-              toHome ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
-            }`}
-            onClick={() => setToHome(true)}
-          >
-            <span className="text-sm font-medium">中身をマイドライブへ移動して削除</span>
-            <span className="text-xs text-muted-foreground">
-              直下のファイル・サブフォルダーをマイドライブのルートへ移動してからフォルダーを削除します
-            </span>
-          </button>
-        </div>
+        {!isEmpty && (
+          <div className="flex flex-col gap-2">
+            <button
+              type="button"
+              className={`flex flex-col items-start gap-0.5 rounded-lg border px-3 py-2.5 text-left transition-colors ${
+                !toHome ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
+              }`}
+              onClick={() => setToHome(false)}
+            >
+              <span className="text-sm font-medium">フォルダーごと削除</span>
+              <span className="text-xs text-muted-foreground">
+                フォルダー内のファイル・サブフォルダーをすべてゴミ箱へ移動します
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`flex flex-col items-start gap-0.5 rounded-lg border px-3 py-2.5 text-left transition-colors ${
+                toHome ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
+              }`}
+              onClick={() => setToHome(true)}
+            >
+              <span className="text-sm font-medium">中身をマイドライブへ移動して削除</span>
+              <span className="text-xs text-muted-foreground">
+                直下のファイル・サブフォルダーをマイドライブのルートへ移動してからフォルダーを削除します
+              </span>
+            </button>
+          </div>
+        )}
 
         {error && <p className="text-sm text-destructive">{error}</p>}
 

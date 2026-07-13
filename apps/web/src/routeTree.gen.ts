@@ -13,6 +13,7 @@ import { Route as RegisterRouteImport } from './routes/register'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AppWatchwordRouteImport } from './routes/_app.watchword'
 import { Route as AppTrashRouteImport } from './routes/_app.trash'
 import { Route as AppShareRouteImport } from './routes/_app.share'
 import { Route as AppSearchRouteImport } from './routes/_app.search'
@@ -44,6 +45,11 @@ const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AppWatchwordRoute = AppWatchwordRouteImport.update({
+  id: '/watchword',
+  path: '/watchword',
+  getParentRoute: () => AppRoute,
 } as any)
 const AppTrashRoute = AppTrashRouteImport.update({
   id: '/trash',
@@ -119,6 +125,7 @@ export interface FileRoutesByFullPath {
   '/search': typeof AppSearchRoute
   '/share': typeof AppShareRoute
   '/trash': typeof AppTrashRoute
+  '/watchword': typeof AppWatchwordRoute
   '/drive/$folderId': typeof AppDriveFolderIdRoute
   '/demo/sentry/testing': typeof DemoSentryTestingRoute
   '/drive/': typeof AppDriveIndexRoute
@@ -135,6 +142,7 @@ export interface FileRoutesByTo {
   '/search': typeof AppSearchRoute
   '/share': typeof AppShareRoute
   '/trash': typeof AppTrashRoute
+  '/watchword': typeof AppWatchwordRoute
   '/drive/$folderId': typeof AppDriveFolderIdRoute
   '/demo/sentry/testing': typeof DemoSentryTestingRoute
   '/drive': typeof AppDriveIndexRoute
@@ -154,6 +162,7 @@ export interface FileRoutesById {
   '/_app/search': typeof AppSearchRoute
   '/_app/share': typeof AppShareRoute
   '/_app/trash': typeof AppTrashRoute
+  '/_app/watchword': typeof AppWatchwordRoute
   '/_app/drive/$folderId': typeof AppDriveFolderIdRoute
   '/demo/sentry/testing': typeof DemoSentryTestingRoute
   '/_app/drive/': typeof AppDriveIndexRoute
@@ -173,6 +182,7 @@ export interface FileRouteTypes {
     | '/search'
     | '/share'
     | '/trash'
+    | '/watchword'
     | '/drive/$folderId'
     | '/demo/sentry/testing'
     | '/drive/'
@@ -189,6 +199,7 @@ export interface FileRouteTypes {
     | '/search'
     | '/share'
     | '/trash'
+    | '/watchword'
     | '/drive/$folderId'
     | '/demo/sentry/testing'
     | '/drive'
@@ -207,6 +218,7 @@ export interface FileRouteTypes {
     | '/_app/search'
     | '/_app/share'
     | '/_app/trash'
+    | '/_app/watchword'
     | '/_app/drive/$folderId'
     | '/demo/sentry/testing'
     | '/_app/drive/'
@@ -249,6 +261,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_app/watchword': {
+      id: '/_app/watchword'
+      path: '/watchword'
+      fullPath: '/watchword'
+      preLoaderRoute: typeof AppWatchwordRouteImport
+      parentRoute: typeof AppRoute
     }
     '/_app/trash': {
       id: '/_app/trash'
@@ -361,6 +380,7 @@ interface AppRouteChildren {
   AppSearchRoute: typeof AppSearchRoute
   AppShareRoute: typeof AppShareRoute
   AppTrashRoute: typeof AppTrashRoute
+  AppWatchwordRoute: typeof AppWatchwordRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -373,6 +393,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppSearchRoute: AppSearchRoute,
   AppShareRoute: AppShareRoute,
   AppTrashRoute: AppTrashRoute,
+  AppWatchwordRoute: AppWatchwordRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)

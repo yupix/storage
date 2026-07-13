@@ -3,8 +3,9 @@ use validator::Validate;
 
 #[derive(Validate, Debug, Deserialize, utoipa::ToSchema)]
 pub struct LoginRequest {
-    #[schema(value_type = String, format="email")]
-    #[validate(email)]
+    /// ユーザー名またはメールアドレス（どちらでもログインできる）
+    #[schema(value_type = String)]
+    #[validate(length(min = 1))]
     pub email: String,
     #[schema(value_type = String, format="password")]
     #[validate(length(min = 8))]

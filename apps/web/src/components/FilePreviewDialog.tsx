@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import { Download, FileText, File, Loader2 } from 'lucide-react'
 import { Dialog, DialogContent, DialogTitle } from './ui/dialog'
 import { Button } from './ui/button'
@@ -63,6 +64,42 @@ function TextPreview({ url }: { url: string }) {
   )
 }
 
+function formatDateTime(value?: string): string {
+  if (!value) return '—'
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return '—'
+  return d.toLocaleString('ja-JP', {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+  })
+}
+
+function DetailRow({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="flex items-start justify-between gap-4 py-1.5 text-sm">
+      <span className="text-muted-foreground shrink-0">{label}</span>
+      <span className="text-right break-all font-medium">{value}</span>
+    </div>
+  )
+}
+
+function FileDetails({ detail }: { detail: FileDetail }) {
+  return (
+    <div className="mt-4 border-t border-border pt-3">
+      <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        詳細
+      </h3>
+      <dl className="divide-y divide-border/50">
+        <DetailRow label="名前" value={detail.name} />
+        <DetailRow label="種類" value={detail.file_type || '不明'} />
+        <DetailRow label="サイズ" value={formatFileSize(detail.size)} />
+        <DetailRow label="更新日時" value={formatDateTime(detail.updated_at)} />
+        <DetailRow label="お気に入り" value={detail.is_favorite ? 'はい' : 'いいえ'} />
+      </dl>
+    </div>
+  )
+}
+
 interface FilePreviewDialogProps {
   fileId: string | null
   onClose: () => void
@@ -114,12 +151,7 @@ export default function FilePreviewDialog({ fileId, onClose }: FilePreviewDialog
         )}
         {detail && !loading && <PreviewContent detail={detail} />}
 
-        {detail && (
-          <p className="text-xs text-muted-foreground mt-3">
-            {formatFileSize(detail.size)}
-            {detail.updated_at ? ` · ${new Date(detail.updated_at).toLocaleDateString('ja-JP')}` : ''}
-          </p>
-        )}
+        {detail && <FileDetails detail={detail} />}
       </DialogContent>
     </Dialog>
   )

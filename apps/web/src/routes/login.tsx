@@ -11,7 +11,7 @@ export const Route = createFileRoute('/login')({ component: LoginPage })
 
 function LoginPage() {
   const router = useRouter()
-  const [email, setEmail] = useState('')
+  const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -22,13 +22,14 @@ function LoginPage() {
     setLoading(true)
 
     try {
+      // API の email フィールドはユーザー名／メールアドレスのどちらも受け付ける
       const { error: apiError } = await apiClient.POST('/v1/auth/login', {
-        body: { email, password },
+        body: { email: identifier, password },
       })
 
       if (apiError) {
         const msg = (apiError as { message?: string }).message
-        setError(msg ?? 'メールアドレスまたはパスワードが正しくありません')
+        setError(msg ?? 'ユーザー名／メールアドレスまたはパスワードが正しくありません')
         return
       }
 
@@ -62,17 +63,17 @@ function LoginPage() {
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="email" className="text-sm font-medium">
-                メールアドレス
+              <label htmlFor="identifier" className="text-sm font-medium">
+                ユーザー名またはメールアドレス
               </label>
               <Input
-                id="email"
-                type="email"
-                autoComplete="email"
+                id="identifier"
+                type="text"
+                autoComplete="username"
                 required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
+                placeholder="username / you@example.com"
                 className="h-10"
               />
             </div>
