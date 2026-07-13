@@ -1,5 +1,5 @@
 import { useRouter } from '@tanstack/react-router'
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -10,7 +10,7 @@ import {
   type DragStartEvent,
 } from '@dnd-kit/core'
 import { snapCenterToCursor } from '@dnd-kit/modifiers'
-import { Folder } from 'lucide-react'
+import { Folder, CloudUpload } from 'lucide-react'
 import ToolbarDefault from '../../components/ToolbarDefault'
 import SelectionToolbar from '../../components/SelectionToolbar'
 import MainContentsDefault from '#/components/MainContents'
@@ -170,9 +170,7 @@ export default function WorkspacePage({
     [],
   )
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = Array.from(e.target.files ?? [])
-    e.currentTarget.value = ''
+  const uploadFiles = useCallback((selected: File[]) => {
     if (selected.length === 0) return
 
     const newItems = selected.map(createUploadItem)
@@ -190,6 +188,43 @@ export default function WorkspacePage({
           }),
         )
     }
+  }, [currentFolderId, updateItem])
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(e.target.files ?? [])
+    e.currentTarget.value = ''
+    uploadFiles(selected)
+  }
+
+  // OS からのファイル D&D アップロード（内部のカードドラッグとは dataTransfer で区別する）
+  const [fileDragOver, setFileDragOver] = useState(false)
+  const fileDragDepth = useRef(0)
+  const hasFiles = (e: React.DragEvent) => e.dataTransfer.types.includes('Files')
+  const handleFileDragEnter = (e: React.DragEvent) => {
+    if (mode !== 'normal' || !hasFiles(e)) return
+    e.preventDefault()
+    fileDragDepth.current += 1
+    setFileDragOver(true)
+  }
+  const handleFileDragOver = (e: React.DragEvent) => {
+    if (mode !== 'normal' || !hasFiles(e)) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'copy'
+  }
+  const handleFileDragLeave = (e: React.DragEvent) => {
+    if (mode !== 'normal' || !hasFiles(e)) return
+    fileDragDepth.current -= 1
+    if (fileDragDepth.current <= 0) {
+      fileDragDepth.current = 0
+      setFileDragOver(false)
+    }
+  }
+  const handleFileDrop = (e: React.DragEvent) => {
+    if (mode !== 'normal' || !hasFiles(e)) return
+    e.preventDefault()
+    fileDragDepth.current = 0
+    setFileDragOver(false)
+    uploadFiles(Array.from(e.dataTransfer.files))
   }
 
   const handleConfirmDelete = useCallback(async () => {
@@ -464,7 +499,21 @@ export default function WorkspacePage({
         </div>
       )}
 
-      <div className="bg-card text-card-foreground rounded-xl ring-1 ring-foreground/10 mx-1.5 min-h-96">
+      <div
+        className="relative bg-card text-card-foreground rounded-xl ring-1 ring-foreground/10 mx-1.5 min-h-96"
+        onDragEnter={handleFileDragEnter}
+        onDragOver={handleFileDragOver}
+        onDragLeave={handleFileDragLeave}
+        onDrop={handleFileDrop}
+      >
+            {fileDragOver && (
+              <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-xl border-2 border-dashed border-primary bg-primary/10 backdrop-blur-[1px]">
+                <div className="flex flex-col items-center gap-2 text-primary">
+                  <CloudUpload className="size-10" />
+                  <p className="text-sm font-medium">ここにドロップしてアップロード</p>
+                </div>
+              </div>
+            )}
             <MainContentsDefault
               files={sortedFiles}
               folders={sortedFolders}
