@@ -405,28 +405,32 @@ export default function WorkspacePage({
       selectionAnchorRef.current = { type: 'file', id }
       return
     }
+    const willSelect = !selectedFileIds.has(id)
     setSelectedFileIds((prev) => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
       else next.add(id)
       return next
     })
-    selectionAnchorRef.current = { type: 'file', id }
-  }, [selectRangeTo])
+    // 選択解除ではアンカーを動かさない（次の範囲選択で解除が巻き戻らないように）
+    if (willSelect) selectionAnchorRef.current = { type: 'file', id }
+  }, [selectRangeTo, selectedFileIds])
 
   const toggleFolderSelect = useCallback((id: string, shiftKey?: boolean) => {
     if (shiftKey && selectRangeTo('folder', id)) {
       selectionAnchorRef.current = { type: 'folder', id }
       return
     }
+    const willSelect = !selectedFolderIds.has(id)
     setSelectedFolderIds((prev) => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
       else next.add(id)
       return next
     })
-    selectionAnchorRef.current = { type: 'folder', id }
-  }, [selectRangeTo])
+    // 選択解除ではアンカーを動かさない（次の範囲選択で解除が巻き戻らないように）
+    if (willSelect) selectionAnchorRef.current = { type: 'folder', id }
+  }, [selectRangeTo, selectedFolderIds])
 
   const handleDragStart = useCallback(({ active }: DragStartEvent) => {
     setActiveDragItem({
