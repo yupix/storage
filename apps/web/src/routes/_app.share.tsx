@@ -320,7 +320,7 @@ function SharePage() {
           )}
 
           <Button type="button" variant="ghost" asChild>
-            <Link to="/home">ホームへ戻る</Link>
+            <Link to="/drive">マイドライブへ戻る</Link>
           </Button>
         </CardFooter>
       </Card>
