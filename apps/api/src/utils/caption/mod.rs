@@ -45,7 +45,8 @@ pub fn build_captioner(settings: &Settings) -> Result<Captioner> {
                 .unwrap_or("http://localhost:8500");
             Ok(Captioner::LocalHttp(LocalHttpCaptioner::new(url)))
         }
+        // 空文字は未設定と同義（docker compose 等で CAPTION_DRIVER= が渡るケース）
+        Some("") | None => Ok(Captioner::None),
         Some(other) => Err(anyhow::anyhow!("不明なキャプションドライバー: {other}")),
-        None => Ok(Captioner::None),
     }
 }
