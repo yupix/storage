@@ -54,16 +54,16 @@ export default function Header({ navigationTrigger }: HeaderProps) {
 
       {/* ロゴ */}
       <Link to="/home" className="shrink-0 text-base font-bold tracking-tight hover:opacity-80 transition-opacity">
-        <img 
+      <img 
         className="header-logo dark:hidden h-13" 
         src={logoLight} 
         alt="HyperDrive Logo" 
-    />
-    <img 
-        className="header-logo hidden dark:block h-13" 
-        src={logoDark} 
-        alt="HyperDrive Logo" 
-    />
+      />
+      <img 
+          className="header-logo hidden dark:block h-13" 
+          src={logoDark} 
+          alt="HyperDrive Logo" 
+      />
       </Link>
 
       {/* 検索 */}

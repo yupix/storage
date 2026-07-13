@@ -3,7 +3,9 @@ import { useState } from 'react'
 import { apiClient } from '../api/client'
 import { Input } from '../components/ui/input'
 import { Button } from '../components/ui/button'
-import hyperdriveLogo from '../components/img/hyperdrivelogo.png';
+import logoLight from '../components/img/hyperdrivelogo.png';
+import logoDark from '../components/img/hyperdrivelogo-dark.png';
+
 
 export const Route = createFileRoute('/login')({ component: LoginPage })
 
@@ -43,7 +45,16 @@ function LoginPage() {
       <div className="w-full max-w-sm">
         <div className="bg-card text-card-foreground rounded-xl shadow-sm ring-1 ring-foreground/10 p-8">
           <div className="mb-8 text-center">
-            <img className="header-logo" src={hyperdriveLogo} alt="HyperDrive Logo" />
+            <img 
+              className="header-logo dark:hidden" 
+              src={logoLight} 
+              alt="HyperDrive Logo" 
+            />
+            <img 
+                className="header-logo hidden dark:block" 
+                src={logoDark} 
+                alt="HyperDrive Logo" 
+            />
             {/* <p className="mt-2 text-sm text-muted-foreground">
               アカウントにログイン
             </p> */}
