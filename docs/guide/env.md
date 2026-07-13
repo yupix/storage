@@ -11,6 +11,7 @@
 | `REDIS_URL` | Yes | RedisまたはValkeyの接続文字列 |
 | `STORAGE_DRIVER` | No | ストレージバックエンドを明示指定。`s3` または `local`。省略時は自動検出 |
 | `S3_ENDPOINT` | No* | S3互換エンドポイントURL |
+| `S3_PUBLIC_ENDPOINT` | No | 署名付きURLの生成に使う公開エンドポイント。未設定時は`S3_ENDPOINT`と同じ。Docker等で内部エンドポイントがブラウザから到達できない場合に設定する |
 | `S3_ACCESS_KEY` | No* | S3アクセスキー |
 | `S3_SECRET_KEY` | No* | S3シークレットキー |
 | `S3_BUCKET` | No* | 使用するバケット名 |

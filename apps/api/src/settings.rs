@@ -22,6 +22,9 @@ pub struct Settings {
     pub storage_driver: Option<String>,
 
     pub s3_endpoint: Option<String>,
+    /// 署名付き URL に使う公開エンドポイント。未設定時は s3_endpoint と同じ。
+    /// Docker 等で内部エンドポイントがブラウザから到達できない場合に設定する
+    pub s3_public_endpoint: Option<String>,
     pub s3_access_key: Option<String>,
     pub s3_secret_key: Option<String>,
     pub s3_bucket: Option<String>,

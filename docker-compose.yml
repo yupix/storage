@@ -105,6 +105,8 @@ services:
       S3_SECRET_KEY: hyperdrive-secret
       S3_BUCKET: hyperdrive
       S3_FORCE_PATH_STYLE: "true"
+      # 署名付き URL はブラウザから見えるオリジン（gateway）で署名する
+      S3_PUBLIC_ENDPOINT: ${HYPERDRIVE_ORIGIN:-http://localhost:8080}
       ALLOW_ORIGIN: ${HYPERDRIVE_ORIGIN:-http://localhost:8080}
       API_LISTEN_ADDR: 0.0.0.0:3400
       API_BOARD_ADDR: 0.0.0.0:3401
