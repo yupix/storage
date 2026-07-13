@@ -5,6 +5,8 @@ import ThemeToggle from './ThemeToggle'
 import { useUser } from '../lib/user-context'
 import { apiClient } from '../api/client'
 import { Button } from './ui/button'
+import logoLight from './img/hyperdrivelogo.png';
+import logoDark from './img/hyperdrivelogo-dark.png';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
@@ -52,7 +54,16 @@ export default function Header({ navigationTrigger }: HeaderProps) {
 
       {/* ロゴ */}
       <Link to="/home" className="shrink-0 text-base font-bold tracking-tight hover:opacity-80 transition-opacity">
-        HyperDrive
+        <img 
+        className="header-logo dark:hidden h-13" 
+        src={logoLight} 
+        alt="HyperDrive Logo" 
+    />
+    <img 
+        className="header-logo hidden dark:block h-13" 
+        src={logoDark} 
+        alt="HyperDrive Logo" 
+    />
       </Link>
 
       {/* 検索 */}
