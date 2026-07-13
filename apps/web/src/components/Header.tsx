@@ -1,5 +1,5 @@
 import { Link, useRouter } from '@tanstack/react-router'
-import { LogOut, Search, Settings } from 'lucide-react'
+import { LogOut, Search, Settings, Share2 } from 'lucide-react'
 import { useRef } from 'react'
 import ThemeToggle from './ThemeToggle'
 import { useUser } from '../lib/user-context'
@@ -80,6 +80,11 @@ export default function Header({ navigationTrigger }: HeaderProps) {
 
       {/* 右側アクション */}
       <div className="flex items-center gap-1 ml-auto">
+        <Button asChild variant="ghost" size="icon-sm" title="合言葉で共有・受信">
+          <Link to="/watchword" search={{ tab: 'share' }}>
+            <Share2 />
+          </Link>
+        </Button>
         <ThemeToggle />
 
         {user ? (
