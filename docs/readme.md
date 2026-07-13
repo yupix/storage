@@ -7,7 +7,21 @@
 
 ---
 
-## クイックスタート
+## クイックスタート（Docker Compose・全部入り）
+
+PostgreSQL / Valkey / Qdrant / RustFS / API / Web / ゲートウェイをまとめて起動できます。
+
+```bash
+docker compose up -d --build
+# → http://localhost:8080 （UI・API・WebSocket すべて同一オリジン）
+```
+
+- 初回は API 起動時に埋め込みモデル（~100MB）のダウンロードが走ります
+- apalis ジョブダッシュボード → http://localhost:3401
+- ローカル画像キャプションも使う場合（モデル ~1.7GB）:
+  `CAPTION_DRIVER=local_http docker compose --profile caption up -d --build`
+
+## クイックスタート（手動セットアップ）
 
 ```bash
 # 1. バックエンドの環境変数を設定

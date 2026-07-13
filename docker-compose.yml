@@ -1,0 +1,169 @@
+# HyperDrive 全部入り compose
+#
+#   docker compose up -d --build
+#   → http://localhost:8080 （gateway 経由で UI / API / WS すべて同一オリジン）
+#
+# ローカルキャプション生成も動かす場合（初回 ~1.7GB のモデル DL が走る）:
+#   CAPTION_DRIVER=local_http docker compose --profile caption up -d --build
+#
+# 注意:
+# - API は初回起動時に埋め込みモデル（MultilingualE5Small, ~100MB）を DL する。
+#   fastembed-cache volume にキャッシュされるので2回目以降は速い
+# - Grafana / Prometheus / Loki は API 側に metrics エンドポイントが未実装のため未収録
+
+services:
+  postgres:
+    restart: unless-stopped
+    image: postgres:17
+    environment:
+      POSTGRES_USER: hyperdrive
+      POSTGRES_PASSWORD: hyperdrive
+      POSTGRES_DB: hyperdrive
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hyperdrive"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  valkey:
+    restart: unless-stopped
+    image: valkey/valkey:8.1
+    volumes:
+      - valkey-data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  qdrant:
+    restart: unless-stopped
+    image: qdrant/qdrant:v1.15.5
+    volumes:
+      - qdrant-data:/qdrant/storage
+    healthcheck:
+      # qdrant イメージには curl が無いため TCP 疎通で代用
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  rustfs:
+    restart: unless-stopped
+    image: rustfs/rustfs:latest
+    environment:
+      RUSTFS_ACCESS_KEY: hyperdrive
+      RUSTFS_SECRET_KEY: hyperdrive-secret
+    volumes:
+      - rustfs-data:/data
+
+  # RustFS にバケットを冪等に作成する one-shot
+  rustfs-init:
+    image: amazon/aws-cli:2.17.65
+    depends_on:
+      - rustfs
+    environment:
+      AWS_ACCESS_KEY_ID: hyperdrive
+      AWS_SECRET_ACCESS_KEY: hyperdrive-secret
+      AWS_DEFAULT_REGION: us-east-1
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        for i in $(seq 1 30); do
+          if aws --endpoint-url http://rustfs:9000 s3api head-bucket --bucket hyperdrive 2>/dev/null; then
+            echo "bucket already exists"; exit 0
+          fi
+          if aws --endpoint-url http://rustfs:9000 s3api create-bucket --bucket hyperdrive 2>/dev/null; then
+            echo "bucket created"; exit 0
+          fi
+          echo "waiting for rustfs... ($$i)"; sleep 2
+        done
+        echo "rustfs did not become ready" >&2; exit 1
+
+  # DB マイグレーション one-shot（api と同じイメージ）
+  migration:
+    build: ./apps/api
+    command: ["migration", "up"]
+    environment:
+      DATABASE_URL: postgres://hyperdrive:hyperdrive@postgres:5432/hyperdrive
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    restart: unless-stopped
+    build: ./apps/api
+    environment:
+      DATABASE_URL: postgres://hyperdrive:hyperdrive@postgres:5432/hyperdrive
+      REDIS_URL: redis://valkey:6379
+      QDRANT_URL: http://qdrant:6333
+      STORAGE_DRIVER: s3
+      S3_ENDPOINT: http://rustfs:9000
+      S3_ACCESS_KEY: hyperdrive
+      S3_SECRET_KEY: hyperdrive-secret
+      S3_BUCKET: hyperdrive
+      S3_FORCE_PATH_STYLE: "true"
+      ALLOW_ORIGIN: ${HYPERDRIVE_ORIGIN:-http://localhost:8080}
+      API_LISTEN_ADDR: 0.0.0.0:3400
+      API_BOARD_ADDR: 0.0.0.0:3401
+      # 画像キャプション（--profile caption 時に CAPTION_DRIVER=local_http を指定）
+      CAPTION_DRIVER: ${CAPTION_DRIVER:-}
+      CAPTION_LOCAL_URL: http://caption:8500
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      # WebRTC ICE（必要なら .env で上書き。既定は Google STUN のみ）
+      TURN_URLS: ${TURN_URLS:-}
+      TURN_USERNAME: ${TURN_USERNAME:-}
+      TURN_CREDENTIAL: ${TURN_CREDENTIAL:-}
+    volumes:
+      - fastembed-cache:/app/.fastembed_cache
+    ports:
+      - "3401:3401" # apalis-board ダッシュボード
+    depends_on:
+      migration:
+        condition: service_completed_successfully
+      valkey:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      rustfs-init:
+        condition: service_completed_successfully
+
+  web:
+    restart: unless-stopped
+    build:
+      context: ./apps/web
+      args:
+        API_BASE_URL: http://api:3400
+    environment:
+      SERVER_URL: http://api:3400
+      PORT: "3000"
+    depends_on:
+      - api
+
+  gateway:
+    restart: unless-stopped
+    image: nginx:1.27-alpine
+    volumes:
+      - ./infrastructure/gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "8080:8080"
+    depends_on:
+      - web
+      - api
+
+  # ローカル画像キャプション（重いので opt-in）
+  caption:
+    build: ./apps/caption-service
+    profiles: ["caption"]
+    volumes:
+      - hf-cache:/app/.hf-cache
+
+volumes:
+  pg-data:
+  valkey-data:
+  qdrant-data:
+  rustfs-data:
+  fastembed-cache:
+  hf-cache:

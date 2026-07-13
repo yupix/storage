@@ -1,0 +1,6 @@
+target/
+data/
+.env
+.fastembed_cache/
+# 開発機用ツールチェーン設定（sccache / mold はイメージに無い）
+.cargo/
