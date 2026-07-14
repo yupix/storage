@@ -50,6 +50,9 @@ interface WorkspacePageProps {
 
 const emptyFolders: FolderItem[] = []
 
+// OS からのファイルドラッグかどうかを判定する（dnd-kit の内部ドラッグと区別する）
+const hasFiles = (e: React.DragEvent) => e.dataTransfer.types.includes('Files')
+
 export default function WorkspacePage({
   initialFiles,
   initialFolders = emptyFolders,
@@ -199,20 +202,21 @@ export default function WorkspacePage({
   // OS からのファイル D&D アップロード（内部のカードドラッグとは dataTransfer で区別する）
   const [fileDragOver, setFileDragOver] = useState(false)
   const fileDragDepth = useRef(0)
-  const hasFiles = (e: React.DragEvent) => e.dataTransfer.types.includes('Files')
+  // お気に入りビューはルート送りになるうえ即時反映されないため D&D を無効化する
+  const fileDndActive = mode === 'normal' && !favoritesOnly
   const handleFileDragEnter = (e: React.DragEvent) => {
-    if (mode !== 'normal' || !hasFiles(e)) return
+    if (!fileDndActive || !hasFiles(e)) return
     e.preventDefault()
     fileDragDepth.current += 1
     setFileDragOver(true)
   }
   const handleFileDragOver = (e: React.DragEvent) => {
-    if (mode !== 'normal' || !hasFiles(e)) return
+    if (!fileDndActive || !hasFiles(e)) return
     e.preventDefault()
     e.dataTransfer.dropEffect = 'copy'
   }
   const handleFileDragLeave = (e: React.DragEvent) => {
-    if (mode !== 'normal' || !hasFiles(e)) return
+    if (!fileDndActive || !hasFiles(e)) return
     fileDragDepth.current -= 1
     if (fileDragDepth.current <= 0) {
       fileDragDepth.current = 0
@@ -220,7 +224,7 @@ export default function WorkspacePage({
     }
   }
   const handleFileDrop = (e: React.DragEvent) => {
-    if (mode !== 'normal' || !hasFiles(e)) return
+    if (!fileDndActive || !hasFiles(e)) return
     e.preventDefault()
     fileDragDepth.current = 0
     setFileDragOver(false)
@@ -499,7 +503,8 @@ export default function WorkspacePage({
         </div>
       )}
 
-      <div
+      <section
+        aria-label="ファイルをドロップしてアップロード"
         className="relative bg-card text-card-foreground rounded-xl ring-1 ring-foreground/10 mx-1.5 min-h-96"
         onDragEnter={handleFileDragEnter}
         onDragOver={handleFileDragOver}
@@ -540,7 +545,7 @@ export default function WorkspacePage({
               onToggleFileSelect={mode === 'trash' ? undefined : toggleFileSelect}
               onToggleFolderSelect={mode === 'trash' ? undefined : toggleFolderSelect}
             />
-      </div>
+      </section>
 
       <DragOverlay dropAnimation={null} modifiers={[snapCenterToCursor]}>
         {activeDragItem ? (
