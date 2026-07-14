@@ -479,7 +479,7 @@ function TrashFileCard({ file, onRestore, onPurge }: TrashFileItemActionsProps) 
   const isImage = file.file_type.startsWith('image/')
   return (
     <ContextMenu>
-      <ContextMenuTrigger onContextMenu={(e) => e.stopPropagation()}>
+      <ContextMenuTrigger>
         <Card size="sm" className="opacity-75">
           <div className="relative flex items-center justify-center h-24 bg-muted/50 rounded-t-xl overflow-hidden">
             {isImage
@@ -514,7 +514,7 @@ function TrashFileRow({ file, onRestore, onPurge }: TrashFileItemActionsProps) {
   const date = file.updated_at ? new Date(file.updated_at).toLocaleDateString('ja-JP') : ''
   return (
     <ContextMenu>
-      <ContextMenuTrigger onContextMenu={(e) => e.stopPropagation()}>
+      <ContextMenuTrigger>
         <div className="flex items-center gap-3 px-3 py-2 hover:bg-muted/50 cursor-default transition-colors border-b border-border/50 last:border-0 opacity-75">
           <FileTypeIcon name={file.name} size={20} />
           <p className="flex-1 text-sm truncate min-w-0" title={file.name}>{file.name}</p>
@@ -577,7 +577,7 @@ function TrashFolderCard({ folder, onRestore, onPurge }: TrashFolderItemActionsP
   const date = folder.updated_at ? new Date(folder.updated_at).toLocaleDateString('ja-JP') : ''
   return (
     <ContextMenu>
-      <ContextMenuTrigger onContextMenu={(e) => e.stopPropagation()}>
+      <ContextMenuTrigger>
         <Card size="sm" className="opacity-75">
           <div className="flex items-center justify-center h-24 bg-muted/50 rounded-t-xl">
             <Folder className="size-12 text-muted-foreground" />
@@ -609,7 +609,7 @@ function TrashFolderRow({ folder, onRestore, onPurge }: TrashFolderItemActionsPr
   const date = folder.updated_at ? new Date(folder.updated_at).toLocaleDateString('ja-JP') : ''
   return (
     <ContextMenu>
-      <ContextMenuTrigger onContextMenu={(e) => e.stopPropagation()}>
+      <ContextMenuTrigger>
         <div className="flex items-center gap-3 px-3 py-2 hover:bg-muted/50 cursor-default transition-colors border-b border-border/50 last:border-0 opacity-75">
           <Folder className="size-5 shrink-0 text-muted-foreground" />
           <p className="flex-1 text-sm truncate min-w-0 font-medium" title={folder.name}>{folder.name}</p>
@@ -988,6 +988,7 @@ export default function MainContentsDefault({
 
   if (files.length === 0 && folders.length === 0) {
     return (
+      <EmptyAreaContextMenu onCreateFolder={onCreateFolder} onFileSelect={onFileSelect}>
       <div className="flex items-center justify-center min-h-64 p-6">
         <Empty>
           <EmptyHeader>
@@ -1018,6 +1019,7 @@ export default function MainContentsDefault({
           )}
         </Empty>
       </div>
+      </EmptyAreaContextMenu>
     )
   }
 
