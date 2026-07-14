@@ -539,6 +539,7 @@ export default function WorkspacePage({
               onFolderMove={mode === 'trash' ? undefined : setMoveFolderTargetId}
               onFolderRename={mode === 'trash' ? undefined : (id, name) => setRenameTarget({ id, name, kind: 'folder' })}
               onFolderToggleFavorite={mode === 'trash' ? undefined : handleToggleFolderFavorite}
+              onCreateFolder={mode === 'trash' ? undefined : () => setCreateFolderOpen(true)}
               selectionActive={mode === 'trash' ? undefined : selectionActive}
               selectedFileIds={mode === 'trash' ? undefined : selectedFileIds}
               selectedFolderIds={mode === 'trash' ? undefined : selectedFolderIds}
