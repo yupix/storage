@@ -31,8 +31,9 @@ interface SelectionCtx {
   active: boolean
   isFileSelected: (id: string) => boolean
   isFolderSelected: (id: string) => boolean
-  toggleFile: (id: string) => void
-  toggleFolder: (id: string) => void
+  // shiftKey が true のときは直前に選んだ項目からの範囲選択にする
+  toggleFile: (id: string, shiftKey?: boolean) => void
+  toggleFolder: (id: string, shiftKey?: boolean) => void
 }
 const SelectionContext = createContext<SelectionCtx | null>(null)
 
@@ -43,7 +44,7 @@ function SelectCircle({
   className = '',
 }: {
   selected: boolean
-  onToggle: () => void
+  onToggle: (shiftKey: boolean) => void
   className?: string
 }) {
   return (
@@ -54,7 +55,7 @@ function SelectCircle({
       className={`flex items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground ${className}`}
       onClick={(e) => {
         e.stopPropagation()
-        onToggle()
+        onToggle(e.shiftKey)
       }}
       onPointerDown={(e) => e.stopPropagation()}
     >
@@ -281,8 +282,8 @@ function FileCard({
         <Card
           size="sm"
           className={`group cursor-pointer transition-shadow ${selected ? 'ring-2 ring-primary' : 'hover:ring-primary/40'}`}
-          onClick={() => {
-            if (selection?.active) selection.toggleFile(file.id)
+          onClick={(e) => {
+            if (selection?.active) selection.toggleFile(file.id, e.shiftKey)
             else onPreview(file.id)
           }}
         >
@@ -293,7 +294,7 @@ function FileCard({
             }
             {selection && (
               <div className={`absolute top-1 left-1 z-10 transition-opacity ${selected || selection.active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-                <SelectCircle selected={selected} onToggle={() => selection.toggleFile(file.id)} />
+                <SelectCircle selected={selected} onToggle={(shift) => selection.toggleFile(file.id, shift)} />
               </div>
             )}
             {file.is_favorite && (
@@ -370,14 +371,14 @@ function FileRow({
           role="button"
           tabIndex={0}
           className={`group flex items-center gap-3 px-3 py-2 cursor-pointer transition-colors border-b border-border/50 last:border-0 ${selected ? 'bg-primary/10' : 'hover:bg-muted/50'} ${isDragging ? 'opacity-40' : ''}`}
-          onClick={() => {
-            if (selection?.active) selection.toggleFile(file.id)
+          onClick={(e) => {
+            if (selection?.active) selection.toggleFile(file.id, e.shiftKey)
             else onPreview(file.id)
           }}
           onKeyDown={(event) => {
             if (event.key === 'Enter' || event.key === ' ') {
               event.preventDefault()
-              if (selection?.active) selection.toggleFile(file.id)
+              if (selection?.active) selection.toggleFile(file.id, event.shiftKey)
               else onPreview(file.id)
             }
           }}
@@ -385,7 +386,7 @@ function FileRow({
           {selection
             ? (
               <div className={`shrink-0 transition-opacity ${selected || selection.active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-                <SelectCircle selected={selected} onToggle={() => selection.toggleFile(file.id)} />
+                <SelectCircle selected={selected} onToggle={(shift) => selection.toggleFile(file.id, shift)} />
               </div>
             )
             : null}
@@ -733,8 +734,8 @@ function FolderCard({ folder, onOpen, onDelete, onMove, onRename, onToggleFavori
               : selected ? 'ring-2 ring-primary'
               : 'hover:ring-primary/40'
             }`}
-            onClick={() => {
-              if (selection?.active) selection.toggleFolder(folder.id)
+            onClick={(e) => {
+              if (selection?.active) selection.toggleFolder(folder.id, e.shiftKey)
               else onOpen(folder)
             }}
           >
@@ -742,7 +743,7 @@ function FolderCard({ folder, onOpen, onDelete, onMove, onRename, onToggleFavori
               <Folder className="size-12 text-muted-foreground" />
               {selection && (
                 <div className={`absolute top-1 left-1 z-10 transition-opacity ${selected || selection.active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-                  <SelectCircle selected={selected} onToggle={() => selection.toggleFolder(folder.id)} />
+                  <SelectCircle selected={selected} onToggle={(shift) => selection.toggleFolder(folder.id, shift)} />
                 </div>
               )}
               {folder.is_favorite && (
@@ -822,14 +823,14 @@ function FolderRow({ folder, onOpen, onDelete, onMove, onRename, onToggleFavorit
           role="button"
           tabIndex={0}
           className={`group flex items-center gap-3 px-3 py-2 cursor-pointer transition-colors border-b border-border/50 last:border-0 ${isOver ? 'bg-primary/5 ring-1 ring-inset ring-primary' : selected ? 'bg-primary/10' : 'hover:bg-muted/50'} ${isDragging ? 'opacity-40' : ''}`}
-          onClick={() => {
-            if (selection?.active) selection.toggleFolder(folder.id)
+          onClick={(e) => {
+            if (selection?.active) selection.toggleFolder(folder.id, e.shiftKey)
             else onOpen(folder)
           }}
           onKeyDown={(event) => {
             if (event.key === 'Enter' || event.key === ' ') {
               event.preventDefault()
-              if (selection?.active) selection.toggleFolder(folder.id)
+              if (selection?.active) selection.toggleFolder(folder.id, event.shiftKey)
               else onOpen(folder)
             }
           }}
@@ -837,7 +838,7 @@ function FolderRow({ folder, onOpen, onDelete, onMove, onRename, onToggleFavorit
           {selection
             ? (
               <div className={`shrink-0 transition-opacity ${selected || selection.active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-                <SelectCircle selected={selected} onToggle={() => selection.toggleFolder(folder.id)} />
+                <SelectCircle selected={selected} onToggle={(shift) => selection.toggleFolder(folder.id, shift)} />
               </div>
             )
             : null}
@@ -907,8 +908,8 @@ interface MainContentsProps {
   selectionActive?: boolean
   selectedFileIds?: Set<string>
   selectedFolderIds?: Set<string>
-  onToggleFileSelect?: (id: string) => void
-  onToggleFolderSelect?: (id: string) => void
+  onToggleFileSelect?: (id: string, shiftKey?: boolean) => void
+  onToggleFolderSelect?: (id: string, shiftKey?: boolean) => void
 }
 
 export default function MainContentsDefault({
@@ -962,8 +963,8 @@ export default function MainContentsDefault({
       active: selectionActive,
       isFileSelected: (id: string) => selectedFileIds?.has(id) ?? false,
       isFolderSelected: (id: string) => selectedFolderIds?.has(id) ?? false,
-      toggleFile: (id: string) => onToggleFileSelect?.(id),
-      toggleFolder: (id: string) => onToggleFolderSelect?.(id),
+      toggleFile: (id: string, shiftKey?: boolean) => onToggleFileSelect?.(id, shiftKey),
+      toggleFolder: (id: string, shiftKey?: boolean) => onToggleFolderSelect?.(id, shiftKey),
     }
   }, [selectionEnabled, selectionActive, selectedFileIds, selectedFolderIds, onToggleFileSelect, onToggleFolderSelect])
 

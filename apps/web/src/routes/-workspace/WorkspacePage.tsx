@@ -101,25 +101,12 @@ export default function WorkspacePage({
   const selectionCount = selectedFileIds.size + selectedFolderIds.size
   const selectionActive = selectionCount > 0
 
-  const toggleFileSelect = useCallback((id: string) => {
-    setSelectedFileIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }, [])
-  const toggleFolderSelect = useCallback((id: string) => {
-    setSelectedFolderIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }, [])
+  // 範囲選択(Shift+クリック)の起点。直前に選択操作した項目を覚えておく
+  const selectionAnchorRef = useRef<{ type: 'file' | 'folder'; id: string } | null>(null)
   const clearSelection = useCallback(() => {
     setSelectedFileIds(new Set())
     setSelectedFolderIds(new Set())
+    selectionAnchorRef.current = null
   }, [])
 
   useEffect(() => {
@@ -128,6 +115,7 @@ export default function WorkspacePage({
     // ナビゲーションやローダー再取得のたびに選択を解除する
     setSelectedFileIds(new Set())
     setSelectedFolderIds(new Set())
+    selectionAnchorRef.current = null
   }, [initialFiles, initialFolders])
 
   useEffect(() => {
@@ -422,6 +410,66 @@ export default function WorkspacePage({
       return order === 'desc' ? -cmp : cmp
     })
   }, [files, preserveOrder, sort])
+
+  // 画面表示順（フォルダー → ファイル）に並べた選択可能項目。範囲選択で使う
+  const orderedSelectable = useMemo(
+    () => [
+      ...sortedFolders.map((f) => ({ type: 'folder' as const, id: f.id })),
+      ...sortedFiles.map((f) => ({ type: 'file' as const, id: f.id })),
+    ],
+    [sortedFolders, sortedFiles],
+  )
+
+  // Shift+クリック: アンカーからクリック項目までを範囲選択（表示順の連続範囲を追加）
+  const selectRangeTo = useCallback(
+    (type: 'file' | 'folder', id: string): boolean => {
+      const anchor = selectionAnchorRef.current
+      if (!anchor) return false
+      const ai = orderedSelectable.findIndex((x) => x.type === anchor.type && x.id === anchor.id)
+      const ti = orderedSelectable.findIndex((x) => x.type === type && x.id === id)
+      if (ai < 0 || ti < 0) return false
+      const [lo, hi] = ai <= ti ? [ai, ti] : [ti, ai]
+      const range = orderedSelectable.slice(lo, hi + 1)
+      const fileIds = range.filter((x) => x.type === 'file').map((x) => x.id)
+      const folderIds = range.filter((x) => x.type === 'folder').map((x) => x.id)
+      setSelectedFileIds((prev) => new Set([...prev, ...fileIds]))
+      setSelectedFolderIds((prev) => new Set([...prev, ...folderIds]))
+      return true
+    },
+    [orderedSelectable],
+  )
+
+  const toggleFileSelect = useCallback((id: string, shiftKey?: boolean) => {
+    if (shiftKey && selectRangeTo('file', id)) {
+      selectionAnchorRef.current = { type: 'file', id }
+      return
+    }
+    const willSelect = !selectedFileIds.has(id)
+    setSelectedFileIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+    // 選択解除ではアンカーを動かさない（次の範囲選択で解除が巻き戻らないように）
+    if (willSelect) selectionAnchorRef.current = { type: 'file', id }
+  }, [selectRangeTo, selectedFileIds])
+
+  const toggleFolderSelect = useCallback((id: string, shiftKey?: boolean) => {
+    if (shiftKey && selectRangeTo('folder', id)) {
+      selectionAnchorRef.current = { type: 'folder', id }
+      return
+    }
+    const willSelect = !selectedFolderIds.has(id)
+    setSelectedFolderIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+    // 選択解除ではアンカーを動かさない（次の範囲選択で解除が巻き戻らないように）
+    if (willSelect) selectionAnchorRef.current = { type: 'folder', id }
+  }, [selectRangeTo, selectedFolderIds])
 
   const handleDragStart = useCallback(({ active }: DragStartEvent) => {
     setActiveDragItem({
