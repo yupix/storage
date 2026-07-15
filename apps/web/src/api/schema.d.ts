@@ -1916,15 +1916,13 @@ export interface operations {
         };
         responses: {
             /** @description パスワード変更成功 */
-            200: {
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "text/plain": string;
-                };
+                content?: never;
             };
-            /** @description 現在のパスワードが正しくない */
+            /** @description 現在のパスワードが正しくない / バリデーションエラー */
             400: {
                 headers: {
                     [name: string]: unknown;

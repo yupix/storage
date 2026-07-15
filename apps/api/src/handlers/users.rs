@@ -1,4 +1,4 @@
-use axum::{Json, extract::State};
+use axum::{Json, extract::State, http::StatusCode};
 use axum_valid::Valid;
 use chrono::Utc;
 use sea_orm::{
@@ -30,6 +30,25 @@ pub async fn update_me(
     Valid(Json(payload)): Valid<Json<UpdateUserRequest>>,
 ) -> Result<Json<UserResponse>, AuthError> {
     let UpdateUserRequest { username, email } = payload;
+
+    // クライアント側 trim を迂回した直接呼び出しに備え、サーバー側でも trim する。
+    // trim 後に不正になった値（空白のみのユーザー名など）はここで弾く。
+    let username = username.map(|s| s.trim().to_string());
+    let email = email.map(|s| s.trim().to_string());
+    if let Some(u) = &username {
+        if u.chars().count() < 3 {
+            return Err(AuthError::InvalidInput(
+                "ユーザー名は3文字以上で入力してください".into(),
+            ));
+        }
+    }
+    if let Some(e) = &email {
+        if e.is_empty() {
+            return Err(AuthError::InvalidInput(
+                "メールアドレスを入力してください".into(),
+            ));
+        }
+    }
 
     let mut active = user.0.clone().into_active_model();
     let mut changed = false;
@@ -98,8 +117,8 @@ pub async fn update_me(
     path = "/me/password",
     request_body = ChangePasswordRequest,
     responses(
-        (status = 200, description = "パスワード変更成功", body = String),
-        (status = 400, description = "現在のパスワードが正しくない", body = ServerError),
+        (status = 204, description = "パスワード変更成功"),
+        (status = 400, description = "現在のパスワードが正しくない / バリデーションエラー", body = ServerError),
         SessionAuthErrors,
     )
 )]
@@ -107,19 +126,36 @@ pub async fn change_password(
     State(state): State<AppState>,
     user: CurrentUser,
     Valid(Json(payload)): Valid<Json<ChangePasswordRequest>>,
-) -> Result<Json<String>, AuthError> {
+) -> Result<StatusCode, AuthError> {
     let ChangePasswordRequest {
         current_password,
         new_password,
     } = payload;
 
-    if !verify_password(&current_password, &user.password_hash)? {
+    // 現在と同じパスワードへの変更は拒否する
+    if new_password == current_password {
+        return Err(AuthError::InvalidInput(
+            "新しいパスワードが現在のパスワードと同じです".into(),
+        ));
+    }
+
+    // argon2 は CPU バウンドなので、非同期ワーカーをブロックしないよう spawn_blocking で回す
+    let password_hash = user.password_hash.clone();
+    let verified = tokio::task::spawn_blocking(move || {
+        verify_password(&current_password, &password_hash)
+    })
+    .await
+    .map_err(|e| AuthError::Internal(anyhow::anyhow!("join verify: {e}")))??;
+    if !verified {
         return Err(AuthError::InvalidInput(
             "現在のパスワードが正しくありません".into(),
         ));
     }
 
-    let new_hash = create_password_hash(&new_password)?;
+    let new_hash = tokio::task::spawn_blocking(move || create_password_hash(&new_password))
+        .await
+        .map_err(|e| AuthError::Internal(anyhow::anyhow!("join hash: {e}")))??;
+
     let mut active = user.0.clone().into_active_model();
     active.password_hash = Set(new_hash);
     active.updated_at = Set(Utc::now().fixed_offset());
@@ -128,5 +164,5 @@ pub async fn change_password(
         .await
         .map_err(|e| AuthError::Internal(anyhow::anyhow!("update password: {e}")))?;
 
-    Ok(Json("Password changed".to_string()))
+    Ok(StatusCode::NO_CONTENT)
 }

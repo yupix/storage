@@ -320,7 +320,12 @@ function SettingsPage() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => setChangingPassword(false)}
+                      onClick={() => {
+                        setChangingPassword(false)
+                        setCurrentPassword('')
+                        setNewPassword('')
+                        setPasswordError(null)
+                      }}
                       disabled={passwordSaving}
                     >
                       キャンセル

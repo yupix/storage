@@ -21,10 +21,10 @@ pub struct UpdateUserRequest {
 pub struct ChangePasswordRequest {
     /// 現在のパスワード（本人確認用）
     #[schema(value_type = String, format = "password")]
-    #[validate(length(min = 8))]
+    #[validate(length(min = 8, max = 128))]
     pub current_password: String,
     /// 新しいパスワード
     #[schema(value_type = String, format = "password")]
-    #[validate(length(min = 8))]
+    #[validate(length(min = 8, max = 128))]
     pub new_password: String,
 }
