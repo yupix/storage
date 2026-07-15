@@ -14,7 +14,7 @@ pub struct Settings {
     /// 意味検索（ベクトル検索）で結果を除外する最小スコアしきい値。
     /// MultilingualE5Small のコサイン類似度がこの値未満の結果は Qdrant 側で切り捨てる。
     #[serde(default = "default_search_score_threshold")]
-    pub search_score_threshold: f32,
+    pub search_score_threshold: Option<f32>,
 
     /// キャプションドライバー: "gemini" / "local_http" / 未設定(無効)
     pub caption_driver: Option<String>,
@@ -53,8 +53,8 @@ fn default_qdrant_url() -> String {
     "http://qdrant.catarks.org:6333".to_string()
 }
 
-fn default_search_score_threshold() -> f32 {
-    0.8
+fn default_search_score_threshold() -> Option<f32> {
+    Some(0.8)
 }
 
 fn default_true() -> bool {

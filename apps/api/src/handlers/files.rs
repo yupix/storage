@@ -920,7 +920,7 @@ async fn search_vector(
             query_vec,
             fetch_limit,
             Some(filter),
-            Some(state.settings.search_score_threshold),
+            state.settings.search_score_threshold,
         )
         .await
         .map_err(|e| AuthError::Internal(anyhow::anyhow!("qdrant search: {e}")))?;
