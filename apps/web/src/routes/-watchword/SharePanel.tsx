@@ -25,7 +25,7 @@ import {
 } from '../../lib/watchword'
 import { cn } from '../../lib/utils'
 
-type ShareStep = 'select' | 'registering' | 'sharing' | 'done' | 'error'
+type ShareStep = 'select' | 'compressing' | 'registering' | 'sharing' | 'done' | 'error'
 
 export default function SharePanel() {
   const user = useUser()
@@ -41,6 +41,7 @@ export default function SharePanel() {
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [progress, setProgress] = useState<SenderProgress | null>(null)
+  const [compressPercent, setCompressPercent] = useState(0)
 
   useEffect(() => {
     return () => {
@@ -85,7 +86,10 @@ export default function SharePanel() {
   }
 
   // 複数選択時は1つの zip にまとめて送る（転送プロトコルは単一ファイルのまま）
-  const buildFileToSend = async (files: File[]): Promise<File> => {
+  const buildFileToSend = async (
+    files: File[],
+    onProgress?: (percent: number) => void,
+  ): Promise<File> => {
     if (files.length === 1) return files[0]
     const zip = new JSZip()
     const usedNames = new Set<string>()
@@ -103,7 +107,9 @@ export default function SharePanel() {
       usedNames.add(name)
       zip.file(name, f)
     }
-    const blob = await zip.generateAsync({ type: 'blob' })
+    const blob = await zip.generateAsync({ type: 'blob' }, (metadata) => {
+      onProgress?.(Math.round(metadata.percent))
+    })
     return new File([blob], `共有ファイル_${files.length}点.zip`, { type: 'application/zip' })
   }
 
@@ -111,13 +117,20 @@ export default function SharePanel() {
     if (selectedFiles.length === 0 || !user) return
 
     setError(null)
-    setStep('registering')
     setProgress(null)
+    // 複数ファイルは zip 圧縮フェーズを挟むので、その間は専用の進捗表示に切り替える
+    const needsZip = selectedFiles.length > 1
+    setCompressPercent(0)
+    setStep(needsZip ? 'compressing' : 'registering')
     abortRef.current?.abort()
     abortRef.current = new AbortController()
 
     try {
-      const fileToSend = await buildFileToSend(selectedFiles)
+      const fileToSend = await buildFileToSend(
+        selectedFiles,
+        needsZip ? setCompressPercent : undefined,
+      )
+      if (needsZip) setStep('registering')
 
       const [filehash, iceServers] = await Promise.all([
         computeFileHash(fileToSend),
@@ -174,6 +187,7 @@ export default function SharePanel() {
     setSelectedFiles([])
     setPassphrase(null)
     setProgress(null)
+    setCompressPercent(0)
     setError(null)
     setStep('select')
     if (fileInputRef.current) fileInputRef.current.value = ''
@@ -184,7 +198,7 @@ export default function SharePanel() {
       ? Math.round((progress.sentChunks / progress.totalChunks) * 100)
       : 0
 
-  const isBusy = step === 'registering' || step === 'sharing'
+  const isBusy = step === 'compressing' || step === 'registering' || step === 'sharing'
 
   return (
     <Card>
@@ -296,6 +310,21 @@ export default function SharePanel() {
           </div>
         )}
 
+        {step === 'compressing' && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <span>圧縮中…</span>
+              <span className="text-muted-foreground tabular-nums">{compressPercent}%</span>
+            </div>
+            <div className="h-2 rounded-full bg-muted overflow-hidden">
+              <div
+                className="h-full bg-primary transition-all duration-300"
+                style={{ width: `${compressPercent}%` }}
+              />
+            </div>
+          </div>
+        )}
+
         {(step === 'sharing' || step === 'done') && progress && (
           <div className="space-y-2">
             <div className="flex items-center justify-between text-sm">
@@ -329,6 +358,11 @@ export default function SharePanel() {
             onClick={handleStartShare}
           >
             送信を開始
+          </Button>
+        ) : step === 'compressing' ? (
+          <Button type="button" disabled>
+            <Loader2 className="size-4 animate-spin" />
+            圧縮中…
           </Button>
         ) : step === 'registering' ? (
           <Button type="button" disabled>
