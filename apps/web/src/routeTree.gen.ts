@@ -16,6 +16,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppWatchwordRouteImport } from './routes/_app.watchword'
 import { Route as AppTrashRouteImport } from './routes/_app.trash'
 import { Route as AppShareRouteImport } from './routes/_app.share'
+import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppSearchRouteImport } from './routes/_app.search'
 import { Route as AppRecentRouteImport } from './routes/_app.recent'
 import { Route as AppReceiveRouteImport } from './routes/_app.receive'
@@ -59,6 +60,11 @@ const AppTrashRoute = AppTrashRouteImport.update({
 const AppShareRoute = AppShareRouteImport.update({
   id: '/share',
   path: '/share',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSettingsRoute = AppSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => AppRoute,
 } as any)
 const AppSearchRoute = AppSearchRouteImport.update({
@@ -123,6 +129,7 @@ export interface FileRoutesByFullPath {
   '/receive': typeof AppReceiveRoute
   '/recent': typeof AppRecentRoute
   '/search': typeof AppSearchRoute
+  '/settings': typeof AppSettingsRoute
   '/share': typeof AppShareRoute
   '/trash': typeof AppTrashRoute
   '/watchword': typeof AppWatchwordRoute
@@ -140,6 +147,7 @@ export interface FileRoutesByTo {
   '/receive': typeof AppReceiveRoute
   '/recent': typeof AppRecentRoute
   '/search': typeof AppSearchRoute
+  '/settings': typeof AppSettingsRoute
   '/share': typeof AppShareRoute
   '/trash': typeof AppTrashRoute
   '/watchword': typeof AppWatchwordRoute
@@ -160,6 +168,7 @@ export interface FileRoutesById {
   '/_app/receive': typeof AppReceiveRoute
   '/_app/recent': typeof AppRecentRoute
   '/_app/search': typeof AppSearchRoute
+  '/_app/settings': typeof AppSettingsRoute
   '/_app/share': typeof AppShareRoute
   '/_app/trash': typeof AppTrashRoute
   '/_app/watchword': typeof AppWatchwordRoute
@@ -180,6 +189,7 @@ export interface FileRouteTypes {
     | '/receive'
     | '/recent'
     | '/search'
+    | '/settings'
     | '/share'
     | '/trash'
     | '/watchword'
@@ -197,6 +207,7 @@ export interface FileRouteTypes {
     | '/receive'
     | '/recent'
     | '/search'
+    | '/settings'
     | '/share'
     | '/trash'
     | '/watchword'
@@ -216,6 +227,7 @@ export interface FileRouteTypes {
     | '/_app/receive'
     | '/_app/recent'
     | '/_app/search'
+    | '/_app/settings'
     | '/_app/share'
     | '/_app/trash'
     | '/_app/watchword'
@@ -281,6 +293,13 @@ declare module '@tanstack/react-router' {
       path: '/share'
       fullPath: '/share'
       preLoaderRoute: typeof AppShareRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/settings': {
+      id: '/_app/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof AppSettingsRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/search': {
@@ -378,6 +397,7 @@ interface AppRouteChildren {
   AppReceiveRoute: typeof AppReceiveRoute
   AppRecentRoute: typeof AppRecentRoute
   AppSearchRoute: typeof AppSearchRoute
+  AppSettingsRoute: typeof AppSettingsRoute
   AppShareRoute: typeof AppShareRoute
   AppTrashRoute: typeof AppTrashRoute
   AppWatchwordRoute: typeof AppWatchwordRoute
@@ -391,6 +411,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppReceiveRoute: AppReceiveRoute,
   AppRecentRoute: AppRecentRoute,
   AppSearchRoute: AppSearchRoute,
+  AppSettingsRoute: AppSettingsRoute,
   AppShareRoute: AppShareRoute,
   AppTrashRoute: AppTrashRoute,
   AppWatchwordRoute: AppWatchwordRoute,
