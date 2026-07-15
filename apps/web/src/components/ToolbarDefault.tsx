@@ -111,7 +111,7 @@ export default function ToolbarDefault({
                 <Share2 />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-44">
+            <DropdownMenuContent align="start" className="w-48">
               {/* リンク共有はバックエンド未実装のため準備中 */}
               <DropdownMenuItem disabled>
                 <Link2 className="mr-2 size-4" />
