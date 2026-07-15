@@ -72,6 +72,7 @@ mod tests {
             allow_origin: "http://localhost:3000".to_string(),
             qdrant_url: "http://localhost:6333".to_string(),
             qdrant_api_key: None,
+            search_score_threshold: 0.8,
             caption_driver: None,
             gemini_api_key: None,
             caption_local_url: None,

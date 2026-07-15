@@ -79,6 +79,7 @@ impl QdrantRest {
         vector: Vec<f32>,
         limit: u64,
         filter: Option<Value>,
+        score_threshold: Option<f32>,
     ) -> anyhow::Result<Vec<ScoredPoint>> {
         let mut body = json!({
             "vector": vector,
@@ -87,6 +88,10 @@ impl QdrantRest {
         });
         if let Some(f) = filter {
             body["filter"] = f;
+        }
+        // Qdrant 側でスコアがしきい値未満の点を除外する（関連度の低い結果を返さない）
+        if let Some(threshold) = score_threshold {
+            body["score_threshold"] = json!(threshold);
         }
 
         #[derive(Deserialize)]
