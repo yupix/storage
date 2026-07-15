@@ -915,7 +915,13 @@ async fn search_vector(
 
     let results = state
         .qdrant
-        .search(crate::QDRANT_COLLECTION, query_vec, fetch_limit, Some(filter))
+        .search(
+            crate::QDRANT_COLLECTION,
+            query_vec,
+            fetch_limit,
+            Some(filter),
+            state.settings.search_score_threshold,
+        )
         .await
         .map_err(|e| AuthError::Internal(anyhow::anyhow!("qdrant search: {e}")))?;
 
