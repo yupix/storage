@@ -1,6 +1,7 @@
 import { Link } from '@tanstack/react-router'
-import { Check, Copy, FileUp, Loader2, Upload } from 'lucide-react'
+import { Check, Copy, FileUp, Loader2, Upload, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import JSZip from 'jszip'
 import WatchwordQrCode from '../../components/WatchwordQrCode'
 import { Button } from '../../components/ui/button'
 import {
@@ -32,7 +33,7 @@ export default function SharePanel() {
   const senderRef = useRef<WatchwordSender | null>(null)
   const abortRef = useRef<AbortController | null>(null)
 
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [receiverId, setReceiverId] = useState(OPEN_RECEIVER_ID)
   const [dragOver, setDragOver] = useState(false)
   const [step, setStep] = useState<ShareStep>('select')
@@ -48,18 +49,23 @@ export default function SharePanel() {
     }
   }, [])
 
-  const applyFile = useCallback((file: File | null) => {
-    setSelectedFile(file)
+  // 選択したファイルを（既存の選択に追記して）取り込む
+  const addFiles = useCallback((incoming: File[]) => {
+    if (incoming.length === 0) return
+    setSelectedFiles((prev) => [...prev, ...incoming])
     setError(null)
     setPassphrase(null)
     setProgress(null)
     if (step !== 'select') setStep('select')
   }, [step])
 
+  const removeFile = useCallback((index: number) => {
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index))
+  }, [])
+
   const handleFiles = useCallback((files: FileList | null) => {
-    const file = files?.[0]
-    if (file) applyFile(file)
-  }, [applyFile])
+    if (files) addFiles(Array.from(files))
+  }, [addFiles])
 
   const handleDrop = useCallback((event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault()
@@ -78,8 +84,31 @@ export default function SharePanel() {
     }
   }
 
+  // 複数選択時は1つの zip にまとめて送る（転送プロトコルは単一ファイルのまま）
+  const buildFileToSend = async (files: File[]): Promise<File> => {
+    if (files.length === 1) return files[0]
+    const zip = new JSZip()
+    const usedNames = new Set<string>()
+    for (const f of files) {
+      // 同名ファイルは連番を付けて衝突を避ける
+      let name = f.name
+      let n = 1
+      const dot = f.name.lastIndexOf('.')
+      while (usedNames.has(name)) {
+        name = dot > 0
+          ? `${f.name.slice(0, dot)} (${n})${f.name.slice(dot)}`
+          : `${f.name} (${n})`
+        n += 1
+      }
+      usedNames.add(name)
+      zip.file(name, f)
+    }
+    const blob = await zip.generateAsync({ type: 'blob' })
+    return new File([blob], `共有ファイル_${files.length}点.zip`, { type: 'application/zip' })
+  }
+
   const handleStartShare = async () => {
-    if (!selectedFile || !user) return
+    if (selectedFiles.length === 0 || !user) return
 
     setError(null)
     setStep('registering')
@@ -88,8 +117,10 @@ export default function SharePanel() {
     abortRef.current = new AbortController()
 
     try {
+      const fileToSend = await buildFileToSend(selectedFiles)
+
       const [filehash, iceServers] = await Promise.all([
-        computeFileHash(selectedFile),
+        computeFileHash(fileToSend),
         getIceServers(),
       ])
 
@@ -97,10 +128,10 @@ export default function SharePanel() {
         receiverId.trim() || OPEN_RECEIVER_ID
 
       const createdPassphrase = await createWatchwordRoom({
-        filename: selectedFile.name,
-        file_type: selectedFile.type || 'application/octet-stream',
-        filesize: selectedFile.size,
-        mime_type: selectedFile.type || 'application/octet-stream',
+        filename: fileToSend.name,
+        file_type: fileToSend.type || 'application/octet-stream',
+        filesize: fileToSend.size,
+        mime_type: fileToSend.type || 'application/octet-stream',
         sender_id: user.id,
         receiver_id: resolvedReceiverId,
         filehash,
@@ -115,7 +146,7 @@ export default function SharePanel() {
       senderRef.current = sender
 
       await sender.start({
-        file: selectedFile,
+        file: fileToSend,
         passphrase: createdPassphrase,
         filehash,
         iceServers,
@@ -140,7 +171,7 @@ export default function SharePanel() {
     senderRef.current?.stop()
     abortRef.current?.abort()
     senderRef.current = null
-    setSelectedFile(null)
+    setSelectedFiles([])
     setPassphrase(null)
     setProgress(null)
     setError(null)
@@ -161,6 +192,7 @@ export default function SharePanel() {
         <CardTitle>送信ファイル</CardTitle>
         <CardDescription>
           ドラッグ＆ドロップ、またはファイル選択で指定してください。
+          複数選択した場合は 1 つの zip にまとめて送信します。
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -186,29 +218,46 @@ export default function SharePanel() {
           <Upload className="size-8 text-muted-foreground" />
           <div>
             <p className="text-sm font-medium">ここにファイルをドロップ</p>
-            <p className="text-xs text-muted-foreground mt-1">またはクリックして選択</p>
+            <p className="text-xs text-muted-foreground mt-1">またはクリックして選択（複数可）</p>
           </div>
           <input
             ref={fileInputRef}
             type="file"
+            multiple
             className="hidden"
             disabled={isBusy}
-            onChange={(event) => handleFiles(event.target.files)}
+            onChange={(event) => {
+              handleFiles(event.target.files)
+              event.currentTarget.value = ''
+            }}
           />
         </div>
 
-        {selectedFile && (
-          <div className="rounded-lg border bg-muted/30 p-3 text-sm space-y-1">
-            <div className="flex items-start gap-2">
-              <FileUp className="size-4 mt-0.5 text-muted-foreground shrink-0" />
-              <div className="min-w-0">
-                <p className="font-medium truncate">{selectedFile.name}</p>
-                <p className="text-muted-foreground">
-                  {formatFileSize(selectedFile.size)}
-                  {selectedFile.type ? ` · ${selectedFile.type}` : ''}
-                </p>
-              </div>
+        {selectedFiles.length > 0 && (
+          <div className="rounded-lg border bg-muted/30 p-3 text-sm space-y-2">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>{selectedFiles.length} 個のファイル{selectedFiles.length > 1 ? '（zip でまとめて送信）' : ''}</span>
+              <span>{formatFileSize(selectedFiles.reduce((sum, f) => sum + f.size, 0))}</span>
             </div>
+            <ul className="space-y-1">
+              {selectedFiles.map((file, index) => (
+                <li key={`${file.name}-${index}`} className="flex items-center gap-2">
+                  <FileUp className="size-4 text-muted-foreground shrink-0" />
+                  <span className="flex-1 truncate">{file.name}</span>
+                  <span className="text-muted-foreground shrink-0">{formatFileSize(file.size)}</span>
+                  {!isBusy && (
+                    <button
+                      type="button"
+                      className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-destructive"
+                      title="このファイルを外す"
+                      onClick={() => removeFile(index)}
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 
@@ -276,7 +325,7 @@ export default function SharePanel() {
         {step === 'select' || step === 'error' ? (
           <Button
             type="button"
-            disabled={!selectedFile || !user}
+            disabled={selectedFiles.length === 0 || !user}
             onClick={handleStartShare}
           >
             送信を開始
