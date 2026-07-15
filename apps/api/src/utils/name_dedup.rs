@@ -9,7 +9,7 @@
 use std::collections::HashSet;
 
 use sea_orm::prelude::Uuid;
-use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QuerySelect};
+use sea_orm::{ColumnTrait, ConnectionTrait, DbErr, EntityTrait, QueryFilter, QuerySelect, SqlErr};
 
 use crate::entities::{files, folders};
 use crate::utils::auth::AuthError;
@@ -116,6 +116,18 @@ pub async fn dedup_folder_name<C: ConnectionTrait>(
         .into_iter()
         .collect();
     resolve_unique_name(desired, &existing)
+}
+
+/// insert/update 実行時、事前採番と実行の間の競合（TOCTOU）で
+/// 部分 UNIQUE インデックスに触れた場合を 409（Conflict）に整形する。
+/// それ以外の DB エラーは内部エラー扱いのまま返す。
+pub fn map_unique_conflict(e: DbErr) -> AuthError {
+    match e.sql_err() {
+        Some(SqlErr::UniqueConstraintViolation(_)) => {
+            AuthError::Conflict("同じ名前のファイルまたはフォルダーが既に存在します".into())
+        }
+        _ => AuthError::Internal(anyhow::anyhow!("db error: {e}")),
+    }
 }
 
 #[cfg(test)]

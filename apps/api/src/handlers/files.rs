@@ -284,7 +284,7 @@ pub async fn upload_file(
         }
         .insert(&txn)
         .await
-        .map_err(AuthError::from)?;
+        .map_err(name_dedup::map_unique_conflict)?;
         adjust_folder_chain(&txn, folder_id, filesize, now).await?;
         Ok(model)
     }
@@ -525,7 +525,10 @@ pub async fn update_file(
         );
     }
     let updated = match async {
-        let m = active.update(&txn).await?;
+        let m = active
+            .update(&txn)
+            .await
+            .map_err(name_dedup::map_unique_conflict)?;
         if moving {
             adjust_folder_chain(&txn, old_folder_id, -filesize, now).await?;
             adjust_folder_chain(&txn, new_folder_id, filesize, now).await?;
