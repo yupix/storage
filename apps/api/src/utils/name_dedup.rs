@@ -14,28 +14,44 @@ use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QuerySelec
 use crate::entities::{files, folders};
 use crate::utils::auth::AuthError;
 
+/// DB のカラム上限（`VARCHAR(255)`）に合わせた名前の最大文字数。
+const MAX_NAME_LEN: usize = 255;
+/// 採番の試行回数の上限。無限ループと過剰なループ負荷（DoS）を防ぐバックストップ。
+const MAX_DEDUP_ATTEMPTS: u32 = 100_000;
+
 /// 既存の名前集合と衝突しない名前を返す。
 ///
 /// `desired` が未使用ならそのまま返す。衝突する場合は `stem (N)ext` の形式で
 /// 使われていない最小の N（1 以上）を付ける。拡張子は「最後の `.` が先頭より
 /// 後ろにあるとき」だけ分離するため、`.bashrc` のようなドット始まりは
 /// 拡張子なし扱いになる。
-fn resolve_unique_name(desired: &str, existing: &HashSet<String>) -> String {
+///
+/// ` (N)` と拡張子を付けても全体が [`MAX_NAME_LEN`] 文字を超えないよう、stem を
+/// 文字単位で切り詰める。試行が [`MAX_DEDUP_ATTEMPTS`] を超えた場合は
+/// [`AuthError::Conflict`] を返す。
+fn resolve_unique_name(desired: &str, existing: &HashSet<String>) -> Result<String, AuthError> {
     if !existing.contains(desired) {
-        return desired.to_string();
+        return Ok(desired.to_string());
     }
     let (stem, ext) = match desired.rfind('.') {
         Some(idx) if idx > 0 => (&desired[..idx], &desired[idx..]),
         _ => (desired, ""),
     };
-    let mut n: u32 = 1;
-    loop {
-        let candidate = format!("{stem} ({n}){ext}");
+    for n in 1..=MAX_DEDUP_ATTEMPTS {
+        let suffix = format!(" ({n})");
+        // 拡張子とサフィックスを付けても 255 文字に収まるよう stem を切り詰める。
+        // バイトではなく文字単位で切るため UTF-8 の途中で割れない。
+        let reserved = suffix.chars().count() + ext.chars().count();
+        let stem_budget = MAX_NAME_LEN.saturating_sub(reserved);
+        let stem_trunc: String = stem.chars().take(stem_budget).collect();
+        let candidate = format!("{stem_trunc}{suffix}{ext}");
         if !existing.contains(&candidate) {
-            return candidate;
+            return Ok(candidate);
         }
-        n += 1;
     }
+    Err(AuthError::Conflict(
+        "同名が多すぎて自動採番できませんでした".into(),
+    ))
 }
 
 /// 同一所有者・同一フォルダー・未削除の範囲でファイル名を採番する。
@@ -67,7 +83,7 @@ pub async fn dedup_filename<C: ConnectionTrait>(
         .await?
         .into_iter()
         .collect();
-    Ok(resolve_unique_name(desired, &existing))
+    resolve_unique_name(desired, &existing)
 }
 
 /// 同一所有者・同一親フォルダー・未削除の範囲でフォルダー名を採番する。
@@ -99,7 +115,7 @@ pub async fn dedup_folder_name<C: ConnectionTrait>(
         .await?
         .into_iter()
         .collect();
-    Ok(resolve_unique_name(desired, &existing))
+    resolve_unique_name(desired, &existing)
 }
 
 #[cfg(test)]
@@ -112,9 +128,9 @@ mod tests {
 
     #[test]
     fn returns_desired_when_no_conflict() {
-        assert_eq!(resolve_unique_name("Image.jpg", &set(&[])), "Image.jpg");
+        assert_eq!(resolve_unique_name("Image.jpg", &set(&[])).unwrap(), "Image.jpg");
         assert_eq!(
-            resolve_unique_name("Image.jpg", &set(&["Other.jpg"])),
+            resolve_unique_name("Image.jpg", &set(&["Other.jpg"])).unwrap(),
             "Image.jpg"
         );
     }
@@ -122,7 +138,7 @@ mod tests {
     #[test]
     fn appends_number_keeping_extension() {
         assert_eq!(
-            resolve_unique_name("Image.jpg", &set(&["Image.jpg"])),
+            resolve_unique_name("Image.jpg", &set(&["Image.jpg"])).unwrap(),
             "Image (1).jpg"
         );
     }
@@ -133,7 +149,8 @@ mod tests {
             resolve_unique_name(
                 "Image.jpg",
                 &set(&["Image.jpg", "Image (1).jpg", "Image (3).jpg"])
-            ),
+            )
+            .unwrap(),
             "Image (2).jpg"
         );
     }
@@ -141,7 +158,7 @@ mod tests {
     #[test]
     fn folder_without_extension() {
         assert_eq!(
-            resolve_unique_name("Documents", &set(&["Documents"])),
+            resolve_unique_name("Documents", &set(&["Documents"])).unwrap(),
             "Documents (1)"
         );
     }
@@ -149,7 +166,7 @@ mod tests {
     #[test]
     fn dotfile_treated_as_no_extension() {
         assert_eq!(
-            resolve_unique_name(".bashrc", &set(&[".bashrc"])),
+            resolve_unique_name(".bashrc", &set(&[".bashrc"])).unwrap(),
             ".bashrc (1)"
         );
     }
@@ -157,7 +174,7 @@ mod tests {
     #[test]
     fn multi_dot_splits_at_last_dot() {
         assert_eq!(
-            resolve_unique_name("archive.tar.gz", &set(&["archive.tar.gz"])),
+            resolve_unique_name("archive.tar.gz", &set(&["archive.tar.gz"])).unwrap(),
             "archive.tar (1).gz"
         );
     }
@@ -165,8 +182,18 @@ mod tests {
     #[test]
     fn trailing_dot_keeps_dot() {
         assert_eq!(
-            resolve_unique_name("name.", &set(&["name."])),
+            resolve_unique_name("name.", &set(&["name."])).unwrap(),
             "name (1)."
         );
+    }
+
+    #[test]
+    fn truncates_to_stay_within_length_limit() {
+        // 255 文字ちょうどの名前が衝突すると ` (1)` 付与で超過する。stem 側が
+        // 切り詰められ、全体が 255 文字以内に収まること。
+        let long = "あ".repeat(255);
+        let result = resolve_unique_name(&long, &set(&[long.as_str()])).unwrap();
+        assert!(result.chars().count() <= MAX_NAME_LEN);
+        assert!(result.ends_with(" (1)"));
     }
 }
