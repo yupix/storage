@@ -24,6 +24,7 @@ use crate::payloads::files::{
 };
 use crate::utils::auth::AuthError;
 use crate::utils::folder_size::adjust_folder_chain;
+use crate::utils::name_dedup;
 use crate::utils::ocr;
 use crate::jobs::caption::CaptionJob;
 use crate::jobs::embed::EmbedJob;
@@ -261,6 +262,9 @@ pub async fn upload_file(
                 .await?
                 .ok_or(AuthError::NotFound)?;
         }
+        // 同一フォルダー内の同名ファイルを避けるため、未使用の名前へ採番する
+        let filename =
+            name_dedup::dedup_filename(&txn, current_user.id, folder_id, &filename, None).await?;
         let model = files::ActiveModel {
             id: Set(file_id),
             filename: Set(filename),
@@ -475,16 +479,20 @@ pub async fn update_file(
     let author_id = file.author_id;
     let old_folder_id = file.folder_id;
     let filesize = file.filesize;
+    let old_filename = file.filename.clone();
     let now = Utc::now().fixed_offset();
     let mut active: files::ActiveModel = file.into();
 
-    if let Some(name) = payload.filename {
+    // 採番はフォルダーロック取得後（トランザクション内）に行うため、ここでは希望名の検証のみ行う
+    let renamed_to = if let Some(name) = payload.filename {
         let trimmed = name.trim().to_string();
         if trimmed.is_empty() || trimmed.chars().count() > 255 {
             return Err(AuthError::InvalidInput("invalid filename".into()));
         }
-        active.filename = Set(trimmed);
-    }
+        Some(trimmed)
+    } else {
+        None
+    };
     if let Some(fid) = payload.folder_id {
         active.folder_id = Set(fid);
     }
@@ -508,6 +516,14 @@ pub async fn update_file(
     }
     let moving = payload.folder_id.is_some();
     let new_folder_id = if moving { active.folder_id.clone().unwrap() } else { old_folder_id };
+    // リネーム/移動時は、移動先フォルダー内で自分以外の同名を避けて採番する
+    if renamed_to.is_some() || moving {
+        let desired = renamed_to.unwrap_or(old_filename);
+        active.filename = Set(
+            name_dedup::dedup_filename(&txn, author_id, new_folder_id, &desired, Some(file_id))
+                .await?,
+        );
+    }
     let updated = match async {
         let m = active.update(&txn).await?;
         if moving {

@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod caption;
 pub mod folder_size;
+pub mod name_dedup;
 pub mod ocr;
 pub mod qdrant;
 pub mod redis;
