@@ -100,9 +100,11 @@ export default function Header({ navigationTrigger }: HeaderProps) {
                 <p className="text-xs text-muted-foreground truncate">{user.email ?? ''}</p>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>
-                <Settings className="mr-2 size-4" />
-                設定
+              <DropdownMenuItem asChild>
+                <Link to="/settings">
+                  <Settings className="mr-2 size-4" />
+                  設定
+                </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onSelect={handleLogout}>
