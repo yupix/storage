@@ -124,12 +124,15 @@ export default function SharePanel() {
     setStep(needsZip ? 'compressing' : 'registering')
     abortRef.current?.abort()
     abortRef.current = new AbortController()
+    const signal = abortRef.current.signal
 
     try {
       const fileToSend = await buildFileToSend(
         selectedFiles,
         needsZip ? setCompressPercent : undefined,
       )
+      // zip 圧縮中にリセット/アンマウントでキャンセルされていたら後続へ進まない
+      if (signal.aborted) return
       if (needsZip) setStep('registering')
 
       const [filehash, iceServers] = await Promise.all([
