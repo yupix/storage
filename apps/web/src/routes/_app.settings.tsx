@@ -19,7 +19,8 @@ export const Route = createFileRoute('/_app/settings')({
 function formatDate(value: string): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat('ja-JP', { dateStyle: 'long' }).format(date)
+  // SSR とクライアントでタイムゾーンが食い違うとハイドレーション不一致になるため固定する
+  return new Intl.DateTimeFormat('ja-JP', { dateStyle: 'long', timeZone: 'Asia/Tokyo' }).format(date)
 }
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
