@@ -12,7 +12,7 @@ pub struct UpdateUserRequest {
     pub username: Option<String>,
     /// 新しいメールアドレス（省略時は変更しない）
     #[schema(value_type = Option<String>, format = "email")]
-    #[validate(email)]
+    #[validate(email, length(max = 255))]
     pub email: Option<String>,
 }
 

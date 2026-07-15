@@ -78,9 +78,19 @@ function SettingsPage() {
 
   const handleSaveProfile = async () => {
     setProfileError(null)
+    const trimmedUsername = username.trim()
+    const trimmedEmail = email.trim()
+    if (trimmedUsername.length < 3) {
+      setProfileError('ユーザー名は3文字以上で入力してください')
+      return
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      setProfileError('メールアドレスの形式が正しくありません')
+      return
+    }
     const body: { username?: string; email?: string } = {}
-    if (username !== user.username) body.username = username
-    if (email !== user.email) body.email = email
+    if (trimmedUsername !== user.username) body.username = trimmedUsername
+    if (trimmedEmail !== user.email) body.email = trimmedEmail
     if (Object.keys(body).length === 0) {
       setEditingProfile(false)
       return

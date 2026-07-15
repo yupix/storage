@@ -1849,6 +1849,15 @@ export interface operations {
                     "application/json": components["schemas"]["UserResponse"];
                 };
             };
+            /** @description バリデーションエラー */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerError"];
+                };
+            };
             /** @description Unauthorized */
             401: {
                 headers: {
