@@ -1,10 +1,11 @@
 import type React from 'react'
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useDraggable, useDroppable } from '@dnd-kit/core'
+import { Link } from '@tanstack/react-router'
 import {
   EllipsisVertical, Download, SquarePen, Trash2, Share2,
   Star, MoveRight, Lock, Info, CloudUpload, Folder, RotateCcw,
-  Circle, CircleCheck, FolderPlus,
+  Circle, CircleCheck, FolderPlus, Link2, KeyRound,
 } from 'lucide-react'
 import { FileIcon, defaultStyles } from 'react-file-icon'
 import type { FileIconProps } from 'react-file-icon'
@@ -12,10 +13,12 @@ import { Card, CardContent } from './ui/card'
 import {
   ContextMenu, ContextMenuContent, ContextMenuItem,
   ContextMenuSeparator, ContextMenuTrigger,
+  ContextMenuSub, ContextMenuSubTrigger, ContextMenuSubContent,
 } from './ui/context-menu'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger,
+  DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent,
 } from './ui/dropdown-menu'
 import { Button } from './ui/button'
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from './ui/empty'
@@ -193,10 +196,25 @@ function FileDropdownMenuContent({
         <SquarePen className="mr-2 size-4" />
         名前変更
       </DropdownMenuItem>
-      <DropdownMenuItem>
-        <Share2 className="mr-2 size-4" />
-        共有
-      </DropdownMenuItem>
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger>
+          <Share2 className="mr-2 size-4" />
+          共有
+        </DropdownMenuSubTrigger>
+        <DropdownMenuSubContent>
+          {/* リンク共有はバックエンド未実装のため準備中 */}
+          <DropdownMenuItem disabled>
+            <Link2 className="mr-2 size-4" />
+            リンク共有（準備中）
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link to="/watchword" search={{ tab: 'share' }}>
+              <KeyRound className="mr-2 size-4" />
+              合言葉共有
+            </Link>
+          </DropdownMenuItem>
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
       <DropdownMenuItem onSelect={() => onMove(file.id)}>
         <MoveRight className="mr-2 size-4" />
         移動
@@ -235,10 +253,25 @@ function FileContextMenuContent({
         <SquarePen className="mr-2 size-4" />
         名前変更
       </ContextMenuItem>
-      <ContextMenuItem>
-        <Share2 className="mr-2 size-4" />
-        共有
-      </ContextMenuItem>
+      <ContextMenuSub>
+        <ContextMenuSubTrigger>
+          <Share2 className="mr-2 size-4" />
+          共有
+        </ContextMenuSubTrigger>
+        <ContextMenuSubContent>
+          {/* リンク共有はバックエンド未実装のため準備中 */}
+          <ContextMenuItem disabled>
+            <Link2 className="mr-2 size-4" />
+            リンク共有（準備中）
+          </ContextMenuItem>
+          <ContextMenuItem asChild>
+            <Link to="/watchword" search={{ tab: 'share' }}>
+              <KeyRound className="mr-2 size-4" />
+              合言葉共有
+            </Link>
+          </ContextMenuItem>
+        </ContextMenuSubContent>
+      </ContextMenuSub>
       <ContextMenuItem onSelect={() => onMove(file.id)}>
         <MoveRight className="mr-2 size-4" />
         移動

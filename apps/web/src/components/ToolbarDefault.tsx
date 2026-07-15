@@ -1,5 +1,6 @@
 import type React from 'react'
-import { ChevronRight, FolderPlus, CloudUpload, Share2, Trash2, LayoutGrid, List, ArrowUpDown, Check } from 'lucide-react'
+import { ChevronRight, FolderPlus, CloudUpload, Share2, Trash2, LayoutGrid, List, ArrowUpDown, Check, Link2, KeyRound } from 'lucide-react'
+import { Link } from '@tanstack/react-router'
 import { Button } from './ui/button'
 import {
   DropdownMenu,
@@ -104,9 +105,26 @@ export default function ToolbarDefault({
               />
             </label>
           </Button>
-          <Button variant="ghost" size="icon-sm" title="共有">
-            <Share2 />
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon-sm" title="共有">
+                <Share2 />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-48">
+              {/* リンク共有はバックエンド未実装のため準備中 */}
+              <DropdownMenuItem disabled>
+                <Link2 className="mr-2 size-4" />
+                リンク共有（準備中）
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link to="/watchword" search={{ tab: 'share' }}>
+                  <KeyRound className="mr-2 size-4" />
+                  合言葉共有
+                </Link>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           {breadcrumb.length > 1 && (
             <nav className="flex items-center gap-0.5 ml-2 overflow-x-auto shrink-0">
