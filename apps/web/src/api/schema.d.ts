@@ -308,10 +308,55 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/users/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["update_me"];
+        trace?: never;
+    };
+    "/v1/users/me/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["change_password"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description パスワード変更リクエスト。現在のパスワードで本人確認してから変更する。 */
+        ChangePasswordRequest: {
+            /**
+             * Format: password
+             * @description 現在のパスワード（本人確認用）
+             */
+            current_password: string;
+            /**
+             * Format: password
+             * @description 新しいパスワード
+             */
+            new_password: string;
+        };
         CreateFolderRequest: {
             /** Format: uuid */
             folder_id?: string | null;
@@ -408,7 +453,7 @@ export interface components {
             total: number;
         };
         LoginRequest: {
-            /** Format: email */
+            /** @description ユーザー名またはメールアドレス（どちらでもログインできる） */
             email: string;
             /** Format: password */
             password: string;
@@ -453,6 +498,23 @@ export interface components {
             folder_id?: string | null;
             is_favorite?: boolean | null;
             name?: string | null;
+        };
+        /**
+         * @description ログイン中ユーザーのプロフィール更新リクエスト。
+         *
+         *     各フィールドは省略可能で、`Some` のものだけ更新する（部分更新）。
+         */
+        UpdateUserRequest: {
+            /**
+             * Format: email
+             * @description 新しいメールアドレス（省略時は変更しない）
+             */
+            email?: string | null;
+            /**
+             * Format: username
+             * @description 新しいユーザー名（省略時は変更しない）
+             */
+            username?: string | null;
         };
         /** @description multipart/form-data アップロード用リクエスト（OpenAPI スキーマ定義用） */
         UploadFileRequest: {
@@ -1762,6 +1824,138 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    update_me: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateUserRequest"];
+            };
+        };
+        responses: {
+            /** @description 更新後のユーザー情報 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        message: string;
+                    };
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        message: string;
+                    };
+                };
+            };
+            /** @description ユーザー名またはメールアドレスが既に使用されている */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerError"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        message: string;
+                    };
+                };
+            };
+        };
+    };
+    change_password: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description パスワード変更成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            /** @description 現在のパスワードが正しくない */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerError"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        message: string;
+                    };
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        message: string;
+                    };
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        message: string;
+                    };
+                };
             };
         };
     };
