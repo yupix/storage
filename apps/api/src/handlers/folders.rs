@@ -20,6 +20,7 @@ use crate::openapi::SessionAuthErrors;
 use crate::payloads::folders::{CreateFolderRequest, DeleteFolderQuery, ListFoldersQuery, UpdateFolderRequest};
 use crate::utils::auth::AuthError;
 use crate::utils::folder_size::adjust_folder_chain;
+use crate::utils::name_dedup;
 use crate::AppState;
 
 fn trim_name(name: &str) -> Result<String, AuthError> {
@@ -242,6 +243,9 @@ pub async fn create_folder(
             .ok_or(AuthError::NotFound)?;
     }
 
+    // 同一親フォルダー内の同名フォルダーを避けるため、未使用の名前へ採番する
+    let name = name_dedup::dedup_folder_name(&txn, auth.user_id, payload.folder_id, &name, None).await?;
+
     let folder = folders::ActiveModel {
         id: Set(folder_id),
         name: Set(name),
@@ -358,8 +362,21 @@ pub async fn update_folder(
     }
 
     let mut am: folders::ActiveModel = folder.clone().into();
-    if let Some(name) = new_name {
-        am.name = Set(name);
+    // リネーム/移動時は、移動先の親フォルダー内で自分以外の同名を避けて採番する
+    if new_name.is_some() || payload.folder_id.is_some() {
+        let effective_parent = match new_parent {
+            Some(parent) => parent,
+            None => folder.folder_id,
+        };
+        let desired = new_name.unwrap_or_else(|| folder.name.clone());
+        am.name = Set(name_dedup::dedup_folder_name(
+            &txn,
+            auth.user_id,
+            effective_parent,
+            &desired,
+            Some(folder.id),
+        )
+        .await?);
     }
     if let Some(parent) = new_parent {
         am.folder_id = Set(parent);
