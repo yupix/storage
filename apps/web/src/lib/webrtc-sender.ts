@@ -49,6 +49,8 @@ export class WatchwordSender {
   private dc: RTCDataChannel | null = null
   private offerRetryTimer: ReturnType<typeof setTimeout> | null = null
   private aborted = false
+  // remoteDescription 設定前に届いた ICE candidate を貯めておくバッファ
+  private pendingCandidates: RTCIceCandidateInit[] = []
 
   async start(options: WatchwordSenderOptions): Promise<void> {
     const {
@@ -129,11 +131,12 @@ export class WatchwordSender {
             type: 'answer',
             sdp: payload.data.sdp,
           })
+          await this.flushPendingCandidates()
           return
         }
 
         if (payload.action === 'ice' && payload.data?.candidate && this.pc) {
-          await this.pc.addIceCandidate({
+          await this.addOrQueueCandidate({
             candidate: payload.data.candidate,
             sdpMid: payload.data.sdpMid ?? undefined,
             sdpMLineIndex: payload.data.sdpMLineIndex ?? undefined,
@@ -154,6 +157,26 @@ export class WatchwordSender {
     this.dc = null
     this.pc = null
     this.ws = null
+  }
+
+  // remoteDescription が設定済みなら即追加、未設定ならバッファに貯める。
+  // これにより SDP より先に ICE candidate が届いても addIceCandidate が
+  // "remote description was null" で失敗しない。
+  private async addOrQueueCandidate(candidate: RTCIceCandidateInit): Promise<void> {
+    if (!this.pc) return
+    if (this.pc.remoteDescription) {
+      await this.pc.addIceCandidate(candidate).catch(() => {})
+    } else {
+      this.pendingCandidates.push(candidate)
+    }
+  }
+
+  // setRemoteDescription 後に、貯めておいた candidate をまとめて追加する。
+  private async flushPendingCandidates(): Promise<void> {
+    if (!this.pc) return
+    for (const candidate of this.pendingCandidates.splice(0)) {
+      await this.pc.addIceCandidate(candidate).catch(() => {})
+    }
   }
 
   private mapWsError(code: string): string {

@@ -65,6 +65,8 @@ export class WatchwordReceiver {
   private meta: FileTransferMeta | null = null
   private chunks = new Map<number, Uint8Array>()
   private completeReceived = false
+  // remoteDescription 設定前に届いた ICE candidate を貯めておくバッファ
+  private pendingCandidates: RTCIceCandidateInit[] = []
 
   async start(options: WatchwordReceiverOptions): Promise<ReceivedFile> {
     const { passphrase, iceServers, onProgress, signal } = options
@@ -159,6 +161,7 @@ export class WatchwordReceiver {
               type: 'offer',
               sdp: payload.data.sdp,
             })
+            await this.flushPendingCandidates()
             const answer = await this.pc.createAnswer()
             await this.pc.setLocalDescription(answer)
             ws.send(
@@ -175,15 +178,11 @@ export class WatchwordReceiver {
         }
 
         if (payload.action === 'ice' && payload.data?.candidate && this.pc) {
-          try {
-            await this.pc.addIceCandidate({
-              candidate: payload.data.candidate,
-              sdpMid: payload.data.sdpMid ?? undefined,
-              sdpMLineIndex: payload.data.sdpMLineIndex ?? undefined,
-            })
-          } catch (err) {
-            fail(err)
-          }
+          await this.addOrQueueCandidate({
+            candidate: payload.data.candidate,
+            sdpMid: payload.data.sdpMid ?? undefined,
+            sdpMLineIndex: payload.data.sdpMLineIndex ?? undefined,
+          })
         }
       }
     })
@@ -197,6 +196,26 @@ export class WatchwordReceiver {
     this.dc = null
     this.pc = null
     this.ws = null
+  }
+
+  // remoteDescription が設定済みなら即追加、未設定ならバッファに貯める。
+  // これにより SDP より先に ICE candidate が届いても addIceCandidate が
+  // "remote description was null" で失敗しない。
+  private async addOrQueueCandidate(candidate: RTCIceCandidateInit): Promise<void> {
+    if (!this.pc) return
+    if (this.pc.remoteDescription) {
+      await this.pc.addIceCandidate(candidate).catch(() => {})
+    } else {
+      this.pendingCandidates.push(candidate)
+    }
+  }
+
+  // setRemoteDescription 後に、貯めておいた candidate をまとめて追加する。
+  private async flushPendingCandidates(): Promise<void> {
+    if (!this.pc) return
+    for (const candidate of this.pendingCandidates.splice(0)) {
+      await this.pc.addIceCandidate(candidate).catch(() => {})
+    }
   }
 
   private mapWsError(code: string): string {
