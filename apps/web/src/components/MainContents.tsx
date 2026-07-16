@@ -208,7 +208,7 @@ function FileDropdownMenuContent({
             リンク共有（準備中）
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
-            <Link to="/watchword" search={{ tab: 'share' }}>
+            <Link to="/watchword" search={{ tab: 'share', fileId: file.id, fileName: file.name }}>
               <KeyRound className="mr-2 size-4" />
               合言葉共有
             </Link>
@@ -265,7 +265,7 @@ function FileContextMenuContent({
             リンク共有（準備中）
           </ContextMenuItem>
           <ContextMenuItem asChild>
-            <Link to="/watchword" search={{ tab: 'share' }}>
+            <Link to="/watchword" search={{ tab: 'share', fileId: file.id, fileName: file.name }}>
               <KeyRound className="mr-2 size-4" />
               合言葉共有
             </Link>
