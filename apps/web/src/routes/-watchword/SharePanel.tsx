@@ -60,11 +60,16 @@ export default function SharePanel({ initialFileId, initialFileName }: SharePane
   // 共有メニューから渡されたドライブファイルを取得して初期選択に加える。
   // 離脱時は転送を中断する（AbortController により大容量ファイルの取得も打ち切る）。
   useEffect(() => {
-    if (!initialFileId) return
+    if (!initialFileId) {
+      // 取得対象が無くなった場合はローディング表示を確実に解除する
+      // （直前の fetch が中断済みだと finally の解除がスキップされるため）
+      setLoadingInitial(false)
+      return
+    }
     const controller = new AbortController()
     setLoadingInitial(true)
     setError(null)
-    fetchFileAsFile(initialFileId, initialFileName ?? 'file', controller.signal)
+    fetchFileAsFile(initialFileId, initialFileName || 'file', controller.signal)
       .then((file) => {
         if (!controller.signal.aborted) setSelectedFiles((prev) => [...prev, file])
       })
