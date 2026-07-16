@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -22,18 +22,29 @@ export default function ShareLinkDialog({ file, onClose }: ShareLinkDialogProps)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  // 発行済みリンクの URL をファイル ID ごとに保持し、開くたびに新規発行するのを防ぐ。
+  const cacheRef = useRef<Map<string, string>>(new Map())
 
   // ダイアログを開いた（file が設定された）タイミングでリンクを発行する。
+  // 同じファイルで既に発行済みならキャッシュした URL を再利用する。
   useEffect(() => {
     if (!file) return
-    let cancelled = false
-    setUrl(null)
     setError(null)
     setCopied(false)
+    const cached = cacheRef.current.get(file.id)
+    if (cached) {
+      setUrl(cached)
+      setLoading(false)
+      return
+    }
+    let cancelled = false
+    setUrl(null)
     setLoading(true)
     createShareLink(file.id)
       .then((link) => {
-        if (!cancelled) setUrl(link.url)
+        if (cancelled) return
+        cacheRef.current.set(file.id, link.url)
+        setUrl(link.url)
       })
       .catch((err) => {
         if (!cancelled) setError(err instanceof Error ? err.message : '共有リンクの発行に失敗しました')
@@ -46,12 +57,18 @@ export default function ShareLinkDialog({ file, onClose }: ShareLinkDialogProps)
     }
   }, [file])
 
+  // コピー完了表示を一定時間後に戻す。アンマウント時にタイマーを破棄する。
+  useEffect(() => {
+    if (!copied) return
+    const timer = window.setTimeout(() => setCopied(false), 2000)
+    return () => window.clearTimeout(timer)
+  }, [copied])
+
   const handleCopy = async () => {
     if (!url) return
     try {
       await navigator.clipboard.writeText(url)
       setCopied(true)
-      window.setTimeout(() => setCopied(false), 2000)
     } catch {
       setError('クリップボードへのコピーに失敗しました')
     }

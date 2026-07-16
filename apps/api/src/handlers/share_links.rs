@@ -112,8 +112,13 @@ pub async fn create_share_link(
             let seconds = i64::try_from(seconds).map_err(|_| {
                 AuthError::InvalidInput("expires_in_seconds が大きすぎます".into())
             })?;
+            // Duration::seconds は内部のミリ秒表現の範囲を超えるとパニックするため、
+            // try_seconds でオーバーフローを検知して 400 として返す。
+            let duration = chrono::Duration::try_seconds(seconds).ok_or_else(|| {
+                AuthError::InvalidInput("expires_in_seconds が大きすぎます".into())
+            })?;
             let expires_at = Utc::now()
-                .checked_add_signed(chrono::Duration::seconds(seconds))
+                .checked_add_signed(duration)
                 .ok_or_else(|| {
                     AuthError::InvalidInput("expires_in_seconds が大きすぎます".into())
                 })?;
