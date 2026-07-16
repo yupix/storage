@@ -259,7 +259,10 @@ pub async fn create_folder(
         updated_at: Set(Some(now)),
     };
 
-    let model = folder.insert(&txn).await?;
+    let model = folder
+        .insert(&txn)
+        .await
+        .map_err(name_dedup::map_unique_conflict)?;
     txn.commit().await?;
 
     Ok((
@@ -385,7 +388,10 @@ pub async fn update_folder(
         am.is_favorite = Set(is_favorite);
     }
     am.updated_at = Set(Some(now));
-    let folder = am.update(&txn).await?;
+    let folder = am
+        .update(&txn)
+        .await
+        .map_err(name_dedup::map_unique_conflict)?;
     txn.commit().await?;
 
     Ok(Json(FolderResponse::from_models(&folder, &owner)))

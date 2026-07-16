@@ -11,6 +11,7 @@ mod m20260611_000001_add_is_favorite_to_files;
 mod m20260611_000002_add_total_size_to_folders;
 mod m20260613_000001_add_is_favorite_to_folders;
 mod m20260613_000002_add_caption_to_files;
+mod m20260716_000001_add_active_name_unique_indexes;
 
 pub struct Migrator;
 
@@ -28,6 +29,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260611_000002_add_total_size_to_folders::Migration),
             Box::new(m20260613_000001_add_is_favorite_to_folders::Migration),
             Box::new(m20260613_000002_add_caption_to_files::Migration),
+            Box::new(m20260716_000001_add_active_name_unique_indexes::Migration),
         ]
     }
 }
