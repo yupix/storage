@@ -3,6 +3,7 @@ pub mod config;
 pub mod files;
 pub mod folders;
 pub mod internal;
+pub mod share_links;
 pub mod users;
 pub mod watchword;
 pub mod watchword_ws;
