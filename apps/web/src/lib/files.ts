@@ -262,6 +262,20 @@ export async function downloadFile(id: string, name: string): Promise<void> {
   URL.revokeObjectURL(url)
 }
 
+// ドライブ上のファイル実体を取得してブラウザの File として返す。
+// 合言葉共有など、id 管理のファイルを File ベースの処理へ引き渡す用途で使う。
+// signal を渡すと転送を中断できる（大容量ファイルの取得を離脱時に打ち切る用途）。
+export async function fetchFileAsFile(
+  id: string,
+  name: string,
+  signal?: AbortSignal,
+): Promise<File> {
+  const res = await fetch(`/v1/files/${id}/view`, { signal })
+  if (!res.ok) throw new Error('ファイルの取得に失敗しました')
+  const blob = await res.blob()
+  return new File([blob], name, { type: blob.type || 'application/octet-stream' })
+}
+
 export function uploadFileWithProgress(
   file: File,
   onProgress: (percent: number) => void,

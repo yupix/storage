@@ -5,10 +5,19 @@ import ReceivePanel from './-watchword/ReceivePanel'
 
 type WatchwordTab = 'share' | 'receive'
 
+interface WatchwordSearch {
+  tab: WatchwordTab
+  // 共有メニューから引き継いだドライブファイル（SharePanel が実体を取得して初期選択にする）
+  fileId?: string
+  fileName?: string
+}
+
 export const Route = createFileRoute('/_app/watchword')({
   ssr: false,
-  validateSearch: (search: Record<string, unknown>): { tab: WatchwordTab } => ({
+  validateSearch: (search: Record<string, unknown>): WatchwordSearch => ({
     tab: search.tab === 'receive' ? 'receive' : 'share',
+    fileId: typeof search.fileId === 'string' ? search.fileId : undefined,
+    fileName: typeof search.fileName === 'string' ? search.fileName : undefined,
   }),
   component: WatchwordPage,
 })
@@ -19,7 +28,7 @@ const tabs: { key: WatchwordTab; label: string }[] = [
 ]
 
 function WatchwordPage() {
-  const { tab } = Route.useSearch()
+  const { tab, fileId, fileName } = Route.useSearch()
   const navigate = Route.useNavigate()
 
   return (
@@ -57,7 +66,11 @@ function WatchwordPage() {
       </div>
 
       {/* 選んだタブのパネルだけをマウントする（切り替え時に前の転送は停止する） */}
-      {tab === 'share' ? <SharePanel /> : <ReceivePanel />}
+      {tab === 'share' ? (
+        <SharePanel initialFileId={fileId} initialFileName={fileName} />
+      ) : (
+        <ReceivePanel />
+      )}
     </div>
   )
 }

@@ -13,7 +13,7 @@ import {
   CardTitle,
 } from '../../components/ui/card'
 import { Input } from '../../components/ui/input'
-import { formatFileSize } from '../../lib/files'
+import { fetchFileAsFile, formatFileSize } from '../../lib/files'
 import { useUser } from '../../lib/user-context'
 import { WatchwordSender, type SenderProgress } from '../../lib/webrtc-sender'
 import {
@@ -27,7 +27,13 @@ import { cn } from '../../lib/utils'
 
 type ShareStep = 'select' | 'compressing' | 'registering' | 'sharing' | 'done' | 'error'
 
-export default function SharePanel() {
+interface SharePanelProps {
+  // 共有メニューから引き継いだドライブファイル。指定時は実体を取得して初期選択にする。
+  initialFileId?: string
+  initialFileName?: string
+}
+
+export default function SharePanel({ initialFileId, initialFileName }: SharePanelProps) {
   const user = useUser()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const senderRef = useRef<WatchwordSender | null>(null)
@@ -42,6 +48,7 @@ export default function SharePanel() {
   const [copied, setCopied] = useState(false)
   const [progress, setProgress] = useState<SenderProgress | null>(null)
   const [compressPercent, setCompressPercent] = useState(0)
+  const [loadingInitial, setLoadingInitial] = useState(false)
 
   useEffect(() => {
     return () => {
@@ -49,6 +56,28 @@ export default function SharePanel() {
       abortRef.current?.abort()
     }
   }, [])
+
+  // 共有メニューから渡されたドライブファイルを取得して初期選択に加える。
+  // 離脱時は転送を中断する（AbortController により大容量ファイルの取得も打ち切る）。
+  useEffect(() => {
+    if (!initialFileId) return
+    const controller = new AbortController()
+    setLoadingInitial(true)
+    setError(null)
+    fetchFileAsFile(initialFileId, initialFileName ?? 'file', controller.signal)
+      .then((file) => {
+        if (!controller.signal.aborted) setSelectedFiles((prev) => [...prev, file])
+      })
+      .catch((err) => {
+        if (!controller.signal.aborted) {
+          setError(err instanceof Error ? err.message : 'ファイルの取得に失敗しました')
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoadingInitial(false)
+      })
+    return () => controller.abort()
+  }, [initialFileId, initialFileName])
 
   // 選択したファイルを（既存の選択に追記して）取り込む
   const addFiles = useCallback((incoming: File[]) => {
@@ -249,6 +278,13 @@ export default function SharePanel() {
             }}
           />
         </div>
+
+        {loadingInitial && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" />
+            <span>ドライブからファイルを読み込み中…</span>
+          </div>
+        )}
 
         {selectedFiles.length > 0 && (
           <div className="rounded-lg border bg-muted/30 p-3 text-sm space-y-2">
