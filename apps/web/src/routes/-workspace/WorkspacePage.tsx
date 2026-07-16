@@ -20,6 +20,7 @@ import CreateFolderDialog from '../../components/CreateFolderDialog'
 import MoveToFolderDialog from '../../components/MoveToFolderDialog'
 import RenameDialog from '../../components/RenameDialog'
 import DeleteFolderDialog from '../../components/DeleteFolderDialog'
+import ShareLinkDialog from '../../components/ShareLinkDialog'
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -80,6 +81,7 @@ export default function WorkspacePage({
   const [deleting, setDeleting] = useState(false)
   const [createFolderOpen, setCreateFolderOpen] = useState(false)
   const [moveTargetFileId, setMoveTargetFileId] = useState<string | null>(null)
+  const [shareTarget, setShareTarget] = useState<FileItem | null>(null)
 
   const [renameTarget, setRenameTarget] = useState<{ id: string; name: string; kind: 'file' | 'folder' } | null>(null)
   const [deleteFolderTargetId, setDeleteFolderTargetId] = useState<string | null>(null)
@@ -578,6 +580,7 @@ export default function WorkspacePage({
               onMove={mode === 'trash' ? undefined : setMoveTargetFileId}
               onRename={mode === 'trash' ? undefined : (id, name) => setRenameTarget({ id, name, kind: 'file' })}
               onToggleFavorite={mode === 'trash' ? undefined : handleToggleFavorite}
+              onShare={mode === 'trash' ? undefined : setShareTarget}
               onRestore={mode === 'trash' ? handleRestore : undefined}
               onPurge={mode === 'trash' ? setPurgeTargetId : undefined}
               onFolderRestore={mode === 'trash' ? handleRestoreFolder : undefined}
@@ -659,6 +662,8 @@ export default function WorkspacePage({
         onClose={() => setDeleteFolderTargetId(null)}
         onDeleted={() => refreshFiles()}
       />
+
+      <ShareLinkDialog file={shareTarget} onClose={() => setShareTarget(null)} />
 
       <AlertDialog open={deleteTargetId !== null} onOpenChange={(open) => { if (!open) setDeleteTargetId(null) }}>
         <AlertDialogContent>

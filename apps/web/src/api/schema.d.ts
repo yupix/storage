@@ -308,6 +308,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/share": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["create_share_link"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/share/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_public_share"];
+        put?: never;
+        post?: never;
+        delete: operations["revoke_share_link"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/share/{token}/view": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["view_public_share"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/users/me": {
         parameters: {
             query?: never;
@@ -361,6 +409,21 @@ export interface components {
             /** Format: uuid */
             folder_id?: string | null;
             name: string;
+        };
+        /** @description リンク共有の発行リクエスト。 */
+        CreateShareLinkRequest: {
+            /** @description ダウンロードを許可するか（既定: true）。 */
+            download_allowed?: boolean | null;
+            /**
+             * Format: int64
+             * @description リンクの有効期限（秒）。省略時は無期限。
+             */
+            expires_in_seconds?: number | null;
+            /**
+             * Format: uuid
+             * @description 共有するファイルの ID（発行者が所有するファイルのみ）。
+             */
+            file_id: string;
         };
         CreateWatchwordRequest: {
             /** Format: int64 */
@@ -473,6 +536,19 @@ export interface components {
             /** Format: int64 */
             total: number;
         };
+        /**
+         * @description 未認証の公開アクセスで返すメタデータ。
+         *     所有者情報やファイル ID など、共有に不要な情報は一切含めない。
+         */
+        PublicShareResponse: {
+            download_allowed: boolean;
+            /** @description 有効期限（ISO8601）。無期限の場合は null。 */
+            expires_at?: string | null;
+            file_name: string;
+            file_type: string;
+            /** Format: int64 */
+            size: number;
+        };
         RegisterRequest: {
             /** Format: email */
             email: string;
@@ -483,6 +559,16 @@ export interface components {
         };
         ServerError: {
             message: string;
+        };
+        /** @description 発行したリンクの情報。共有 URL はトークンからフロント側で組み立てる。 */
+        ShareLinkResponse: {
+            /** @description 発行日時（ISO8601）。 */
+            created_at: string;
+            download_allowed: boolean;
+            /** @description 有効期限（ISO8601）。無期限の場合は null。 */
+            expires_at?: string | null;
+            /** @description 推測不可能な共有トークン。 */
+            token: string;
         };
         UpdateFileRequest: {
             filename?: string | null;
@@ -1820,6 +1906,210 @@ export interface operations {
             };
             /** @description 未認証 */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    create_share_link: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateShareLinkRequest"];
+            };
+        };
+        responses: {
+            /** @description 共有リンクを発行 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareLinkResponse"];
+                };
+            };
+            /** @description 不正なリクエスト */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        message: string;
+                    };
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        message: string;
+                    };
+                };
+            };
+            /** @description ファイルが見つかりません */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        message: string;
+                    };
+                };
+            };
+        };
+    };
+    get_public_share: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 共有トークン */
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 共有ファイルのメタデータ */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicShareResponse"];
+                };
+            };
+            /** @description リンクが存在しないか期限切れ */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 内部エラー */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    revoke_share_link: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 共有トークン */
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description リンクを失効 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        message: string;
+                    };
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        message: string;
+                    };
+                };
+            };
+            /** @description リンクが見つかりません */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        message: string;
+                    };
+                };
+            };
+        };
+    };
+    view_public_share: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 共有トークン */
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 署名付きURLへリダイレクト */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description リンクが存在しないか期限切れ */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 内部エラー */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

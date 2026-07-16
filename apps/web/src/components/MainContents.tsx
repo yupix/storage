@@ -177,10 +177,11 @@ interface FileItemActionsProps {
   onMove: (id: string) => void
   onRename: (id: string, currentName: string) => void
   onToggleFavorite: (id: string, current: boolean) => void
+  onShare: (file: FileItem) => void
 }
 
 function FileDropdownMenuContent({
-  file, onPreview, onDelete, onMove, onRename, onToggleFavorite,
+  file, onPreview, onDelete, onMove, onRename, onToggleFavorite, onShare,
 }: FileItemActionsProps) {
   return (
     <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
@@ -202,10 +203,9 @@ function FileDropdownMenuContent({
           共有
         </DropdownMenuSubTrigger>
         <DropdownMenuSubContent>
-          {/* リンク共有はバックエンド未実装のため準備中 */}
-          <DropdownMenuItem disabled>
+          <DropdownMenuItem onSelect={() => onShare(file)}>
             <Link2 className="mr-2 size-4" />
-            リンク共有（準備中）
+            リンク共有
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
             <Link to="/watchword" search={{ tab: 'share' }}>
@@ -237,7 +237,7 @@ function FileDropdownMenuContent({
 }
 
 function FileContextMenuContent({
-  file, onPreview, onDelete, onMove, onRename, onToggleFavorite,
+  file, onPreview, onDelete, onMove, onRename, onToggleFavorite, onShare,
 }: FileItemActionsProps) {
   return (
     <ContextMenuContent onClick={(e) => e.stopPropagation()}>
@@ -259,10 +259,9 @@ function FileContextMenuContent({
           共有
         </ContextMenuSubTrigger>
         <ContextMenuSubContent>
-          {/* リンク共有はバックエンド未実装のため準備中 */}
-          <ContextMenuItem disabled>
+          <ContextMenuItem onSelect={() => onShare(file)}>
             <Link2 className="mr-2 size-4" />
-            リンク共有（準備中）
+            リンク共有
           </ContextMenuItem>
           <ContextMenuItem asChild>
             <Link to="/watchword" search={{ tab: 'share' }}>
@@ -294,7 +293,7 @@ function FileContextMenuContent({
 }
 
 function FileCard({
-  file, onPreview, onDelete, onMove, onRename, onToggleFavorite,
+  file, onPreview, onDelete, onMove, onRename, onToggleFavorite, onShare,
 }: FileItemActionsProps) {
   const date = file.updated_at ? new Date(file.updated_at).toLocaleDateString('ja-JP') : ''
   const isImage = file.file_type.startsWith('image/')
@@ -357,6 +356,7 @@ function FileCard({
                   onMove={onMove}
                   onRename={onRename}
                   onToggleFavorite={onToggleFavorite}
+                  onShare={onShare}
                 />
               </DropdownMenu>
             </div>
@@ -374,13 +374,14 @@ function FileCard({
         onMove={onMove}
         onRename={onRename}
         onToggleFavorite={onToggleFavorite}
+        onShare={onShare}
       />
     </ContextMenu>
   )
 }
 
 function FileRow({
-  file, onPreview, onDelete, onMove, onRename, onToggleFavorite,
+  file, onPreview, onDelete, onMove, onRename, onToggleFavorite, onShare,
 }: FileItemActionsProps) {
   const date = file.updated_at ? new Date(file.updated_at).toLocaleDateString('ja-JP') : ''
   const dragEnabled = useContext(DragEnabledContext)
@@ -446,6 +447,7 @@ function FileRow({
               onMove={onMove}
               onRename={onRename}
               onToggleFavorite={onToggleFavorite}
+              onShare={onShare}
             />
           </DropdownMenu>
         </div>
@@ -457,6 +459,7 @@ function FileRow({
         onMove={onMove}
         onRename={onRename}
         onToggleFavorite={onToggleFavorite}
+        onShare={onShare}
       />
     </ContextMenu>
   )
@@ -926,6 +929,7 @@ interface MainContentsProps {
   onMove?: (id: string) => void
   onRename?: (id: string, currentName: string) => void
   onToggleFavorite?: (id: string, current: boolean) => void
+  onShare?: (file: FileItem) => void
   onRestore?: (id: string) => void
   onPurge?: (id: string) => void
   onFolderRestore?: (id: string) => void
@@ -957,6 +961,7 @@ export default function MainContentsDefault({
   onMove,
   onRename,
   onToggleFavorite,
+  onShare,
   onRestore,
   onPurge,
   onFolderRestore,
@@ -979,6 +984,7 @@ export default function MainContentsDefault({
   const handleMove = onMove ?? noop
   const handleRename = onRename ?? noop
   const handleToggleFavorite = onToggleFavorite ?? noop
+  const handleShare = onShare ?? noop
   const handleRestore = onRestore ?? noop
   const handlePurge = onPurge ?? noop
   const handleFolderRestore = onFolderRestore ?? noop
@@ -1123,6 +1129,7 @@ export default function MainContentsDefault({
               onMove={handleMove}
               onRename={handleRename}
               onToggleFavorite={handleToggleFavorite}
+              onShare={handleShare}
             />
           ))}
         </div>
@@ -1157,6 +1164,7 @@ export default function MainContentsDefault({
             onMove={handleMove}
             onRename={handleRename}
             onToggleFavorite={handleToggleFavorite}
+            onShare={handleShare}
           />
         ))}
       </div>

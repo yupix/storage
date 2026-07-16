@@ -8,6 +8,7 @@ pub mod config;
 pub mod files;
 pub mod folders;
 pub mod search;
+pub mod share_links;
 pub mod users;
 pub mod ws;
 
@@ -19,6 +20,7 @@ pub fn create_routes() -> OpenApiRouter<AppState> {
             .nest("/config", crate::routes::config::routes())
             .nest("/files", crate::routes::files::routes())
             .nest("/folders", crate::routes::folders::routes())
+            .nest("/share", crate::routes::share_links::routes())
             .nest("/users", crate::routes::users::routes())
             .nest("/ws", crate::routes::ws::routes())
             .merge(crate::routes::search::routes())
