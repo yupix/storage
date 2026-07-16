@@ -122,7 +122,7 @@ export default function FilePreviewDialog({ fileId, onClose }: FilePreviewDialog
 
   return (
     <Dialog open={fileId !== null} onOpenChange={(open) => { if (!open) onClose() }}>
-      <DialogContent className="max-w-3xl w-full">
+      <DialogContent className="sm:max-w-3xl">
         <div className="flex items-start justify-between gap-2 mb-4 pr-8">
           <div className="flex items-center gap-2 min-w-0">
             <FileText className="size-5 shrink-0 text-muted-foreground" />
